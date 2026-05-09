@@ -1,7 +1,7 @@
 services:
   qwen-proxy:
     build: .
-    image: qwen-api-proxy:latest
+    image: endykaufman/qwen-api-proxy:0.0.1
     container_name: qwen-proxy
     environment:
       - NODE_ENV=production

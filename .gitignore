@@ -1,10 +1,7 @@
 # Зависимости Node.js
 node_modules/
-package-lock.json
-yarn.lock
 
 # Данные сессии и кэш
-session/
 .cache/
 
 
@@ -39,3 +36,5 @@ venv/
 *.swo 
 
 src/Authorization.txt
+.restart_flag
+temp

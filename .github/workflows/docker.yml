@@ -3,9 +3,9 @@ name: Docker Build and Push
 on:
   push:
     branches: [ main, master ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main, master ]
+#    tags: [ 'v*' ]
+#  pull_request:
+#    branches: [ main, master ]
 
 env:
   DOCKER_USERNAME: endykaufman
@@ -34,12 +34,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Extract version from package.json
+        id: package-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=${{ steps.package-version.outputs.version }}
+            type=raw,value=${{ steps.package-version.outputs.major }}.${{ steps.package-version.outputs.minor }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch

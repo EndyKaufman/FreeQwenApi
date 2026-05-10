@@ -70,20 +70,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  update-readme:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Update Docker Hub Description
-        uses: peter-evans/dockerhub-description@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
-          readme-filepath: ./README_DOCKER.md
-          short-description: "Free Qwen AI API Proxy with OpenAI compatibility and Telegram bot"
+#  update-readme:
+#    needs: build-and-push
+#    runs-on: ubuntu-latest
+#    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+#    
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Update Docker Hub Description
+#        uses: peter-evans/dockerhub-description@v3
+#        with:
+#          username: ${{ secrets.DOCKERHUB_USERNAME }}
+#          password: ${{ secrets.DOCKERHUB_TOKEN }}
+#          repository: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
+#          readme-filepath: ./README_DOCKER.md
+#          short-description: "Free Qwen AI API Proxy with OpenAI compatibility and Telegram bot"

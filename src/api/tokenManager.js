@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { logError } from '../logger/index.js';
-import { SESSION_DIR, ACCOUNTS_DIR } from '../config.js';
+import { logError, logWarn, logInfo } from '../logger/index.js';
+import { SESSION_DIR, ACCOUNTS_DIR, TOKEN_EXPIRY_WARNING_MS } from '../config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -87,4 +87,125 @@ export function markValid(id, newToken) {
 
 export function listTokens() {
     return loadTokens();
+}
+
+/**
+ * Проверяет, истекает ли токен в ближайшее время
+ * @param {string} tokenId - ID токена
+ * @param {number} warningMs - Время предупреждения в мс (по умолчанию 1 час)
+ * @returns {object} - {willExpireSoon: boolean, expiresAt: Date|null, timeLeft: number|null}
+ */
+export function checkTokenExpiry(tokenId, warningMs = TOKEN_EXPIRY_WARNING_MS) {
+    const tokens = loadTokens();
+    const token = tokens.find(t => t.id === tokenId);
+    
+    if (!token) {
+        return { willExpireSoon: false, expiresAt: null, timeLeft: null, tokenFound: false };
+    }
+
+    const now = Date.now();
+    
+    // Если токен помечен как недействительный
+    if (token.invalid) {
+        return { willExpireSoon: true, expiresAt: null, timeLeft: null, tokenFound: true, isInvalid: true };
+    }
+
+    // Если есть время сброса лимита
+    if (token.resetAt) {
+        const resetTime = new Date(token.resetAt).getTime();
+        const timeLeft = resetTime - now;
+        
+        // Если уже истёк или истекает в ближайшее время
+        if (timeLeft <= 0) {
+            return { 
+                willExpireSoon: true, 
+                expiresAt: new Date(token.resetAt), 
+                timeLeft: 0, 
+                tokenFound: true, 
+                isExpired: true 
+            };
+        }
+        
+        if (timeLeft <= warningMs) {
+            return { 
+                willExpireSoon: true, 
+                expiresAt: new Date(token.resetAt), 
+                timeLeft, 
+                tokenFound: true,
+                isExpiringSoon: true
+            };
+        }
+        
+        return { 
+            willExpireSoon: false, 
+            expiresAt: new Date(token.resetAt), 
+            timeLeft, 
+            tokenFound: true 
+        };
+    }
+
+    // Если нет времени сброса, токен активен
+    return { willExpireSoon: false, expiresAt: null, timeLeft: null, tokenFound: true };
+}
+
+/**
+ * Проверяет все токены и возвращает информацию об истекающих
+ * @param {number} warningMs - Время предупреждения в мс
+ * @returns {object} - {expiringTokens: Array, allTokensExpired: boolean, totalTokens: number}
+ */
+export function checkAllTokensExpiry(warningMs = TOKEN_EXPIRY_WARNING_MS) {
+    const tokens = loadTokens();
+    const now = Date.now();
+    
+    const expiringTokens = [];
+    let activeTokens = 0;
+
+    tokens.forEach(token => {
+        const expiryInfo = checkTokenExpiry(token.id, warningMs);
+        
+        if (expiryInfo.willExpireSoon) {
+            expiringTokens.push({
+                ...token,
+                expiryInfo
+            });
+        } else {
+            activeTokens++;
+        }
+    });
+
+    return {
+        expiringTokens,
+        allTokensExpired: activeTokens === 0,
+        totalTokens: tokens.length,
+        activeTokens
+    };
+}
+
+/**
+ * Получает токен, который не истекает в ближайшее время
+ * @param {number} warningMs - Время предупреждения в мс
+ * @returns {object|null} - Токен или null
+ */
+export async function getSafeToken(warningMs = TOKEN_EXPIRY_WARNING_MS) {
+    const tokens = loadTokens();
+    const now = Date.now();
+    
+    // Фильтруем токены, которые не истекают в ближайшее время
+    const safeTokens = tokens.filter(t => {
+        if (t.invalid) return false;
+        if (!t.resetAt) return true;
+        
+        const resetTime = new Date(t.resetAt).getTime();
+        return resetTime <= now || (resetTime - now) > warningMs;
+    });
+
+    if (safeTokens.length === 0) {
+        return null;
+    }
+
+    const token = safeTokens[pointer % safeTokens.length];
+    pointer = (pointer + 1) % safeTokens.length;
+    
+    logInfo(`Использован безопасный токен: ${token.id}`);
+    return token;
 }

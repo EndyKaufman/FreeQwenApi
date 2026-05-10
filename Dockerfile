@@ -1,12 +1,16 @@
 # syntax=docker/dockerfile:1.6
-FROM node:20-slim AS base
+FROM node:23-alpine AS base
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      chromium fonts-liberation libatk-bridge2.0-0 libatk1.0-0 \
-      libcups2 libdrm2 libgbm1 libnss3 libxcomposite1 \
-      libxdamage1 libxrandr2 xdg-utils ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    dumb-init \
+    p7zip \
+    dos2unix
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     CHROME_PATH=/usr/bin/chromium \
@@ -15,16 +19,21 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY . .
 
-RUN mkdir -p /app/session /app/logs /app/uploads \
- && useradd -m appuser \
- && chown -R appuser:appuser /app
+# fix CRLF + permissions
+RUN dos2unix /app/start-with-restart.sh \
+ && chmod +x /app/start-with-restart.sh \
+ && mkdir -p /app/session /app/logs /app/uploads \
+ && addgroup -S appgroup \
+ && adduser -S appuser -G appgroup \
+ && chown -R appuser:appgroup /app
 
 USER appuser
 
 EXPOSE 3264
 
-CMD ["node", "index.js"]
+CMD ["dumb-init", "/app/start-with-restart.sh"]

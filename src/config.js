@@ -1,3 +1,13 @@
+import dotenv from 'dotenv';
+
+// Загружаем .env файл перед использованием переменных окружения
+const dotenvResult = dotenv.config();
+if (dotenvResult.error) {
+    console.warn('⚠️  .env файл не найден, используем переменные окружения');
+} else {
+    console.log('✅ .env файл загружен');
+}
+
 // config.js — Единый источник конфигурации проекта.
 // Все значения читаются из env-переменных с фоллбэками на дефолты.
 
@@ -55,3 +65,14 @@ export const ALLOW_UNSCOPED_SESSION_CHAT_RESTORE = toBoolean(process.env.ALLOW_U
 export const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 export const LOG_MAX_SIZE = Number(process.env.LOG_MAX_SIZE) || 5_242_880; // 5 MB
 export const LOG_MAX_FILES = Number(process.env.LOG_MAX_FILES) || 5;
+
+// ─── Telegram уведомления ───────────────────────────────────────────────────
+export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || null;
+export const TELEGRAM_USER_IDS = process.env.TELEGRAM_USER_IDS
+    ? process.env.TELEGRAM_USER_IDS.split(',').map(id => id.trim()).filter(id => id)
+    : [];
+export const TOKEN_EXPIRY_WARNING_MS = Number(process.env.TOKEN_EXPIRY_WARNING_MS) || 3600000; // 1 hour
+
+// ─── Telegram прокси ────────────────────────────────────────────────────────
+export const TELEGRAM_PROXY = process.env.TELEGRAM_PROXY || null;
+export const TELEGRAM_PROXY_URL = process.env.TELEGRAM_PROXY_URL || null;

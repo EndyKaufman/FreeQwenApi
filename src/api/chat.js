@@ -2,7 +2,8 @@ import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus } f
 import { checkAuthentication, checkVerification } from '../browser/auth.js';
 import { shutdownBrowser, initBrowser } from '../browser/browser.js';
 import { saveAuthToken } from '../browser/session.js';
-import { getAvailableToken, markRateLimited, removeInvalidToken } from './tokenManager.js';
+import { getAvailableToken, markRateLimited, removeInvalidToken, checkTokenExpiry, checkAllTokensExpiry, getSafeToken } from './tokenManager.js';
+import { sendTelegramNotification, formatTokenExpiryMessage } from '../utils/telegramNotifier.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,7 +13,7 @@ import {
     CHAT_API_URL, CREATE_CHAT_URL, CHAT_PAGE_URL, TASK_STATUS_URL,
     PAGE_TIMEOUT, RETRY_DELAY, PAGE_POOL_SIZE,
     DEFAULT_MODEL, MAX_RETRY_COUNT,
-    TASK_POLL_MAX_ATTEMPTS, TASK_POLL_INTERVAL
+    TASK_POLL_MAX_ATTEMPTS, TASK_POLL_INTERVAL, TOKEN_EXPIRY_WARNING_MS
 } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -312,8 +313,55 @@ function validateAndPrepareMessage(message) {
 }
 
 async function resolveAuthToken(browserContext) {
-    const tokenObj = await getAvailableToken();
+    // Сначала пытаемся получить безопасный токен (не истекающий в ближайшее время)
+    let tokenObj = await getSafeToken(TOKEN_EXPIRY_WARNING_MS);
+    
+    // Если безопасных токенов нет, проверяем все токены
+    if (!tokenObj) {
+        const expiryStatus = checkAllTokensExpiry(TOKEN_EXPIRY_WARNING_MS);
+        
+        if (expiryStatus.allTokensExpired) {
+            logWarn('⚠️ Все токены истекают или уже истекли!');
+            
+            // Отправляем уведомление в Telegram
+            const telegramMessage = formatTokenExpiryMessage(expiryStatus.expiringTokens);
+            await sendTelegramNotification(telegramMessage);
+            
+            // Пытаемся использовать любой доступный токен (даже истекающий)
+            tokenObj = await getAvailableToken();
+            
+            if (!tokenObj) {
+                logError('Нет доступных токенов для использования');
+                return null;
+            }
+            
+            logWarn(`Используем истекающий токен: ${tokenObj.id}`);
+        } else {
+            // Есть активные токены, но они не попали в безопасную выборку
+            tokenObj = await getAvailableToken();
+        }
+    }
+    
     if (tokenObj && tokenObj.token) {
+        // Проверяем, не истекает ли токен в ближайшее время
+        const expiryInfo = checkTokenExpiry(tokenObj.id, TOKEN_EXPIRY_WARNING_MS);
+        
+        if (expiryInfo.willExpireSoon) {
+            const timeLeftMs = expiryInfo.timeLeft;
+            const timeLeftMin = timeLeftMs ? Math.floor(timeLeftMs / 60000) : 0;
+            
+            if (expiryInfo.isExpired || expiryInfo.isInvalid) {
+                logWarn(`Токен ${tokenObj.id} недействителен или истёк, пытаемся использовать следующий`);
+                // Помечаем как rate limited и пробуем другой
+                if (tokenObj.id !== 'browser') {
+                    markRateLimited(tokenObj.id, 1); // 1 час
+                }
+                return resolveAuthToken(browserContext); // Рекурсивно пробуем другой
+            } else if (timeLeftMin <= 60) {
+                logWarn(`⚠️ Токен ${tokenObj.id} истекает через ${timeLeftMin} мин. Используем с осторожностью.`);
+            }
+        }
+        
         authToken = tokenObj.token;
         logInfo(`Используется аккаунт: ${tokenObj.id}`);
         return tokenObj;
@@ -945,10 +993,21 @@ export async function createChatV2(model = DEFAULT_MODEL, title = 'Новый ч
     const browserContext = getBrowserContext();
     if (!browserContext) return { error: 'Браузер не инициализирован' };
 
-    const tokenObj = await getAvailableToken();
+    // Используем безопасный токен
+    const tokenObj = await getSafeToken(TOKEN_EXPIRY_WARNING_MS);
     if (tokenObj?.token) {
         authToken = tokenObj.token;
         logInfo(`Используется аккаунт для создания чата: ${tokenObj.id}`);
+        
+        // Проверяем, не истекает ли токен
+        const expiryInfo = checkTokenExpiry(tokenObj.id, TOKEN_EXPIRY_WARNING_MS);
+        if (expiryInfo.willExpireSoon && (expiryInfo.isExpired || expiryInfo.isInvalid)) {
+            logWarn(`Токен ${tokenObj.id} недействителен для создания чата, пробуем другой`);
+            if (tokenObj.id !== 'browser') {
+                markRateLimited(tokenObj.id, 1);
+            }
+            return createChatV2(model, title, retryCount);
+        }
     }
 
     if (!authToken) {

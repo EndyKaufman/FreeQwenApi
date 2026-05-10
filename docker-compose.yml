@@ -1,17 +1,28 @@
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:0.0.1
+    image: endykaufman/qwen-api-proxy:0.0.2
     container_name: qwen-proxy
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=${PORT:-3264}
       - HOST=0.0.0.0
       - SKIP_ACCOUNT_MENU=true
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_USER_IDS=${TELEGRAM_USER_IDS:-}
+      - TELEGRAM_PROXY=${TELEGRAM_PROXY:-}
+      - TELEGRAM_PROXY_URL=${TELEGRAM_PROXY_URL:-}
+      - TOKEN_EXPIRY_WARNING_MS=${TOKEN_EXPIRY_WARNING_MS:-3600000}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-qwen-max-latest}
+      - QWEN_BASE_URL=${QWEN_BASE_URL:-https://chat.qwen.ai}
     ports:
       - "${PORT:-3264}:3264"
     volumes:
+      - ./session_backup:/app/session_backup
       - ./session:/app/session
       - ./logs:/app/logs
       - ./uploads:/app/uploads
+      - ./temp:/app/temp
     restart: unless-stopped

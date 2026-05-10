@@ -9,6 +9,9 @@ import { addAccountInteractive } from './src/utils/accountSetup.js';
 import { logHttpRequest, logInfo, logError, logWarn } from './src/logger/index.js';
 import { prompt } from './src/utils/prompt.js';
 import { PORT, HOST } from './src/config.js';
+import { startTelegramBot, stopTelegramBot, notifyAllUsers, configureProxy, processPendingArchive, checkAllSubsystems } from './src/utils/telegramBot.js';
+import fs from 'fs';
+import path from 'path';
 
 const app = express();
 
@@ -29,16 +32,21 @@ const skipAccountMenu = toBoolean(process.env.SKIP_ACCOUNT_MENU) || toBoolean(pr
 function ensureNonInteractiveTokens() {
     const tokens = loadTokens();
     if (!tokens.length) {
-        logError('Не найдено ни одного аккаунта. Запустите скрипт авторизации перед запуском сервера.');
-        process.exit(1);
+        logWarn('⚠️ Не найдено ни одного аккаунта. Сервер работает в режиме Telegram бота.');
+        logWarn('📦 Отправьте архив с сессиями через Telegram бот для добавления аккаунтов.');
+        // Не выходим - позволяем работать как бот для получения архивов
+        return false;
     }
     const now = Date.now();
     const validTokens = tokens.filter(t => (!t.resetAt || new Date(t.resetAt).getTime() <= now) && !t.invalid);
     if (!validTokens.length) {
-        logError('Все аккаунты недоступны. Перезапустите авторизацию перед запуском сервера.');
-        process.exit(1);
+        logWarn('⚠️ Все аккаунты недоступны. Сервер работает в режиме Telegram бота.');
+        logWarn('📦 Отправьте архив с сессиями через Telegram бот для обновления аккаунтов.');
+        // Не выходим - позволяем работать как бот
+        return false;
     }
     logInfo(`Автоматический запуск: обнаружено ${tokens.length} аккаунтов, из них ${validTokens.length} активны.`);
+    return true;
 }
 
 app.use(logHttpRequest);
@@ -89,6 +97,7 @@ process.on('uncaughtException', async (error) => {
 
 async function handleShutdown() {
     logInfo('\nПолучен сигнал завершения. Закрываем браузер...');
+    stopTelegramBot();
     await shutdownBrowser();
     logInfo('Завершение работы.');
     process.exit(0);
@@ -106,6 +115,27 @@ async function startServer() {
 `);
 
     logInfo('Запуск сервера...');
+
+    await configureProxy();
+
+
+    // ПЕРВЫМ ДЕЛОМ: Проверяем и обрабатываем ожидающий архив
+    const archiveProcessed = await processPendingArchive();
+    if (archiveProcessed) {
+        logInfo('✅ Ожидющий архив успешно распакован при запуске');
+    }
+
+    // Проверяем флаг перезапуска
+    const restartFlagPath = path.join(process.cwd(), '.restart_flag');
+    if (fs.existsSync(restartFlagPath)) {
+        try {
+            const restartInfo = JSON.parse(fs.readFileSync(restartFlagPath, 'utf8'));
+            logInfo(`🔄 Обнаружен флаг перезапуска: ${restartInfo.reason}`);
+            fs.unlinkSync(restartFlagPath);
+        } catch (e) {
+            logWarn('Ошибка чтения флага перезапуска', e);
+        }
+    }
 
     if (!skipAccountMenu) {
         while (true) {
@@ -154,14 +184,32 @@ async function startServer() {
             }
         }
     } else {
-        ensureNonInteractiveTokens();
+        const hasValidTokens = ensureNonInteractiveTokens();
+        // Если нет токенов, браузер не нужен - работаем только как бот
+        if (!hasValidTokens) {
+            logInfo('🤖 Режим Telegram бота: ожидание архива с сессиями...');
+        }
     }
 
     const browserInitialized = await initBrowser(false);
     if (!browserInitialized) {
-        logError('Не удалось инициализировать браузер. Завершение работы.');
-        process.exit(1);
+        const tokens = loadTokens();
+        if (tokens.length > 0) {
+            logError('Не удалось инициализировать браузер. Завершение работы.');
+            process.exit(1);
+        } else {
+            logWarn('⚠️ Браузер не инициализирован, но бот продолжит работу для получения сессий');
+        }
     }
+
+    // Запускаем Telegram бота
+    const telegramBotStarted = await startTelegramBot();
+    if (telegramBotStarted) {
+        logInfo('🤖 Telegram бот запущен и готов принимать команды');
+    }
+
+    // Проверяем все подсистемы
+    await checkAllSubsystems(telegramBotStarted);
 
     try {
         app.listen(port, host, () => {

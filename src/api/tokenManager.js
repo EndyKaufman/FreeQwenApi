@@ -17,11 +17,55 @@ function ensureSessionDir() {
     if (!fs.existsSync(ACCOUNTS_PATH)) fs.mkdirSync(ACCOUNTS_PATH, { recursive: true });
 }
 
+/**
+ * Декодирует JWT токен и извлекает время истечения
+ * @param {string} token - JWT токен
+ * @returns {number|null} - Время истечения в миллисекундах или null
+ */
+function decodeJwtExpiry(token) {
+    try {
+        if (!token || typeof token !== 'string') return null;
+        
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        
+        // Декодируем payload (вторая часть JWT)
+        // JWT использует URL-safe base64, нужно заменить - на + и _ на /
+        let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        
+        // Добавляем padding если нужно
+        while (base64.length % 4) {
+            base64 += '=';
+        }
+        
+        const payload = Buffer.from(base64, 'base64').toString('utf8');
+        const decoded = JSON.parse(payload);
+        
+        // JWT использует поле 'exp' для времени истечения (в секундах)
+        if (decoded.exp) {
+            return decoded.exp * 1000; // Конвертируем в миллисекунды
+        }
+        
+        return null;
+    } catch (error) {
+        // Если не удалось декодировать, возвращаем null
+        return null;
+    }
+}
+
 export function loadTokens() {
     ensureSessionDir();
     if (!fs.existsSync(TOKENS_FILE)) return [];
     try {
-        return JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8'));
+        const tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8'));
+        
+        // Добавляем expiryTime для каждого токена, если его нет
+        return tokens.map(token => {
+            if (!token.expiryTime && token.token) {
+                token.expiryTime = decodeJwtExpiry(token.token);
+            }
+            return token;
+        });
     } catch (e) {
         logError('TokenManager: ошибка чтения tokens.json', e);
         return [];

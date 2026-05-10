@@ -174,13 +174,73 @@ export async function checkAllSubsystems(botStarted) {
     const tokens = loadTokens();
     const validTokens = tokens.filter(t => !t.invalid && (!t.resetAt || new Date(t.resetAt).getTime() <= Date.now()));
 
-    checks.push({
-        name: '🎫 Токены',
-        status: tokens.length > 0,
-        details: tokens.length > 0 
-            ? `✅ Всего: ${tokens.length}, Доступно: ${validTokens.length}`
-            : '❌ Нет токенов'
-    });
+    // Проверка оставшегося времени для токенов
+    if (tokens.length > 0) {
+        const expirySummary = validTokens.reduce((acc, token) => {
+            const now = Date.now();
+            
+            // Если expiryTime не установлен
+            if (!token.expiryTime) {
+                acc.tokens.push({ timeStr: 'Неизвестно', id: token.id, hasExpiry: false });
+                return acc;
+            }
+            
+            const timeLeft = token.expiryTime - now;
+            
+            // Форматируем время в удобочитаемый вид
+            let timeStr;
+            if (timeLeft <= 0) {
+                acc.expired++;
+                timeStr = 'Протух';
+            } else {
+                const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+                
+                const parts = [];
+                if (days > 0) parts.push(`${days}д`);
+                if (hours > 0) parts.push(`${hours}ч`);
+                if (minutes > 0) parts.push(`${minutes}м`);
+                parts.push(`${seconds}с`);
+                
+                timeStr = parts.join(' ');
+            }
+            
+            acc.tokens.push({ timeStr, id: token.id, hasExpiry: true });
+            return acc;
+        }, { expired: 0, tokens: [] });
+        
+        let tokenDetails = `✅ Всего: ${tokens.length}, Доступно: ${validTokens.length}`;
+        if (expirySummary.expired > 0) {
+            tokenDetails += `, Протухло: ${expirySummary.expired}`;
+        }
+        
+        checks.push({
+            name: '🎫 Токены',
+            status: tokens.length > 0,
+            details: tokenDetails
+        });
+        
+        // Добавляем отдельную строку с временем жизни каждого токена
+        if (expirySummary.tokens.length > 0) {
+            expirySummary.tokens.forEach((token, index) => {
+                checks.push({
+                    name: `   Токен ${index + 1}`,
+                    status: token.hasExpiry,
+                    details: token.hasExpiry 
+                        ? `⏱️ Осталось: ${token.timeStr}`
+                        : `⚠️ Время истечения: ${token.timeStr}`
+                });
+            });
+        }
+    } else {
+        checks.push({
+            name: '🎫 Токены',
+            status: false,
+            details: '❌ Нет токенов'
+        });
+    }
 
     // 3. Проверяем Telegram бота
     checks.push({
@@ -264,7 +324,7 @@ export async function checkAllSubsystems(botStarted) {
     // Группа 1: Основные компоненты
     reportLines.push(`<b>🔑 Основные компоненты:</b>`);
     const mainComponents = checks.filter(c => 
-        c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram')
+        c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') || c.name.includes('Токен ')
     );
     mainComponents.forEach(check => {
         reportLines.push(`${check.name}: ${check.details}`);
@@ -321,6 +381,9 @@ export async function checkAllSubsystems(botStarted) {
             logError('❌ Не удалось отправить отчет в Telegram:', e.message);
         }
     }
+    
+    // Возвращаем массив проверок для повторного использования
+    return checks;
 }
 
 /**
@@ -1388,80 +1451,87 @@ async function sendAboutMessage(chatId) {
     await sendMessage(chatId, aboutText);
 }
 
-async function sendStatusMessage(chatId) {
+async function sendStatusMessage(chatId, isScheduled = false) {
     try {
-        const sessionPath = path.join(process.cwd(), SESSION_DIR);
-        const accountsPath = path.join(sessionPath, 'accounts');
+        // Получаем статус бота
+        const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        const botStarted = !!telegramToken;
+        
+        // Проверяем все подсистемы
+        const checks = await checkAllSubsystems(botStarted);
+        
+        // Формируем сообщение с统一的格式
+        const reportLines = [];
 
-        let accountCount = 0;
-        const tokens = loadTokens();
-        const tokenCount = tokens.length;
-
-        if (fs.existsSync(accountsPath)) {
-            const accounts = fs.readdirSync(accountsPath);
-            accountCount = accounts.length;
-        }
-
-        let statusText =
-            `📊 <b>Статус FreeQwenApi</b>\n\n` +
-            `👥 Аккаунтов: ${accountCount}\n` +
-            `🎫 Токенов: ${tokenCount}\n` +
-            `📂 Session папка: ${fs.existsSync(sessionPath) ? '✅' : '❌'}\n\n`;
-
-        // Если есть токены, показываем информацию о них
-        if (tokenCount > 0) {
-            statusText += `<b>Информация о токенах:</b>\n`;
-
-            const now = Date.now();
-            for (let i = 0; i < Math.min(tokens.length, 5); i++) {
-                const token = tokens[i];
-                const isValid = !token.invalid && (!token.resetAt || new Date(token.resetAt).getTime() <= now);
-                const status = token.invalid ? '❌ Invalid' : !isValid ? '⏳ Rate limited' : '✅ Active';
-
-                statusText += `\n<b>${i + 1}. ${token.id}</b>\n`;
-                statusText += `   Статус: ${status}\n`;
-
-                // Показываем дату окончания токена если есть
-                if (token.resetAt) {
-                    const resetDate = new Date(token.resetAt);
-                    const formattedDate = resetDate.toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
-                    statusText += `   Доступен: ${formattedDate}\n`;
-                } else {
-                    statusText += `   Доступен: Сейчас\n`;
-                }
-
-                if (token.expiresAt) {
-                    const expireDate = new Date(token.expiresAt);
-                    const formattedExpire = expireDate.toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit'
-                    });
-                    statusText += `   Истекает: ${formattedExpire}\n`;
-                }
-            }
-
-            if (tokens.length > 5) {
-                statusText += `\n... и еще ${tokens.length - 5} аккаунтов`;
-            }
-
-            statusText += `\n`;
+        // Заголовок
+        if (isScheduled) {
+            const now = new Date();
+            const timeStr = now.toLocaleString('ru-RU', { 
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric',
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            reportLines.push(`⏰ <b>Плановая проверка</b> (${timeStr})\n`);
         } else {
-            statusText += `⚠️ <b>Нет аккаунтов</b>\n`;
-            statusText += `📦 Отправьте архив с session/ для добавления\n`;
-            statusText += `🛠️ Или используйте /setup для инструкции по созданию\n\n`;
+            reportLines.push(`🚀 <b>Сервис запущен!</b>\n`);
         }
 
-        statusText += `🟢 Сервис работает`;
+        // Группа 1: Основные компоненты
+        reportLines.push(`<b>🔑 Основные компоненты:</b>`);
+        const mainComponents = checks.filter(c => 
+            c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') || c.name.includes('Токен ')
+        );
+        mainComponents.forEach(check => {
+            reportLines.push(`${check.name}: ${check.details}`);
+        });
 
-        await sendMessage(chatId, statusText);
+        reportLines.push('');
+
+        // Группа 2: Инфраструктура
+        reportLines.push(`<b>🏗️ Инфраструктура:</b>`);
+        const infrastructure = checks.filter(c => 
+            c.name.includes('Прокси') || c.name.includes('Uploads') || c.name.includes('Логирование')
+        );
+        infrastructure.forEach(check => {
+            reportLines.push(`${check.name}: ${check.details}`);
+        });
+
+        reportLines.push('');
+
+        // Группа 3: Инструменты
+        reportLines.push(`<b>🔧 Инструменты:</b>`);
+        const tools = checks.filter(c => 
+            c.name.includes('p7zip')
+        );
+        tools.forEach(check => {
+            reportLines.push(`${check.name}: ${check.details}`);
+        });
+
+        reportLines.push('');
+        reportLines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+        // Итоговый статус
+        const tokens = loadTokens();
+        const hasTokens = tokens.length > 0;
+        const allOk = checks.every(c => c.status);
+        
+        if (hasTokens && allOk) {
+            reportLines.push(`✅ <b>Все системы работают</b>`);
+        } else if (!hasTokens) {
+            reportLines.push(`⚠️ <b>Режим ожидания архива</b>`);
+            reportLines.push(`📦 Отправьте архив с сессиями`);
+        } else {
+            reportLines.push(`⚠️ <b>Есть проблемы</b>`);
+        }
+
+        // Ссылки
+        reportLines.push(`\n🌐 API: http://localhost:${process.env.PORT || 3264}`);
+        reportLines.push(`📖 Docs: http://localhost:${process.env.PORT || 3264}/api`);
+
+        const report = reportLines.join('\n');
+        await sendMessage(chatId, report);
     } catch (error) {
         logError('Ошибка получения статуса', error);
         await sendMessage(chatId, '❌ Не удалось получить статус');
@@ -1475,6 +1545,52 @@ async function handleRestart(chatId) {
     await sendMessage(chatId, '🔄 Перезапуск сервиса...');
     await new Promise(resolve => setTimeout(resolve, 2000));
     await gracefulRestart(chatId);
+}
+
+/**
+ * Отправка плановой проверки всем админам
+ */
+async function sendScheduledStatusToAdmins() {
+    try {
+        const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (!telegramToken) {
+            return;
+        }
+
+        const adminUserIds = getAdminUserIds();
+        
+        if (adminUserIds.length === 0) {
+            logInfo('Нет админов для отправки плановой проверки');
+            return;
+        }
+
+        logInfo(`Отправка плановой проверки ${adminUserIds.length} админам`);
+
+        for (const adminId of adminUserIds) {
+            try {
+                await sendStatusMessage(adminId, true);
+                logInfo(`Плановая проверка отправлена админу ${adminId}`);
+            } catch (error) {
+                logError(`Ошибка отправки плановой проверки админу ${adminId}`, error);
+            }
+        }
+    } catch (error) {
+        logError('Ошибка отправки плановой проверки', error);
+    }
+}
+
+/**
+ * Запуск периодической проверки каждые 4 часа
+ */
+export function startPeriodicHealthCheck() {
+    const FOUR_HOURS = 4 * 60 * 60 * 1000; // 4 часа в миллисекундах
+    
+    logInfo(`Запуск периодической проверки здоровья каждые 4 часа`);
+    
+    setInterval(async () => {
+        logInfo('Выполняется плановая проверка здоровья...');
+        await sendScheduledStatusToAdmins();
+    }, FOUR_HOURS);
 }
 
 /**

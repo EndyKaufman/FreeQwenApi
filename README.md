@@ -7,6 +7,14 @@
 
 Это **улучшенная версия** оригинального проекта FreeQwenApi со значительными улучшениями для production использования и лучшего пользовательского опыта.
 
+<table>
+  <tr>
+    <td><img src="docs/images/stats.png" alt="информация о подсистемах" width="100%"/></td>
+    <td><img src="docs/images/help.png" alt="справка" width="100%"/></td>
+    <td><img src="docs/images/chat.png" alt="режим чата" width="100%"/></td>
+  </tr>
+</table>
+
 ### ⭐ Ключевые отличия от оригинала
 
 | Функция | Оригинал | Этот форк |

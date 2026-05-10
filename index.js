@@ -9,7 +9,7 @@ import { addAccountInteractive } from './src/utils/accountSetup.js';
 import { logHttpRequest, logInfo, logError, logWarn } from './src/logger/index.js';
 import { prompt } from './src/utils/prompt.js';
 import { PORT, HOST } from './src/config.js';
-import { startTelegramBot, stopTelegramBot, notifyAllUsers, configureProxy, processPendingArchive, checkAllSubsystems } from './src/utils/telegramBot.js';
+import { startTelegramBot, stopTelegramBot, notifyAllUsers, configureProxy, processPendingArchive, checkAllSubsystems, startPeriodicHealthCheck } from './src/utils/telegramBot.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -210,6 +210,11 @@ async function startServer() {
 
     // Проверяем все подсистемы
     await checkAllSubsystems(telegramBotStarted);
+
+    // Запускаем периодическую проверку здоровья каждые 4 часа
+    if (telegramBotStarted) {
+        startPeriodicHealthCheck();
+    }
 
     try {
         app.listen(port, host, () => {

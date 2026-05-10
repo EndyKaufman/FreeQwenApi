@@ -27,7 +27,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 # 2. Push README (one-time setup)
 npm install -g docker-push-readme
-docker-push-readme -u endykaufman -r qwen-api-proxy README.md
+docker-push-readme -u endykaufman -r qwen-api-proxy README_DOCKER.md
 ```
 
 ### Option 3: GitHub Actions (Fully Automated)
@@ -91,7 +91,7 @@ All builds include:
 
 1. Open https://hub.docker.com/repository/docker/endykaufman/qwen-api-proxy
 2. Click "Manage Repository" > "Description"
-3. Copy contents of README.md
+3. Copy contents of README_DOCKER.md
 4. Paste into "Full Description"
 5. Save
 
@@ -103,7 +103,7 @@ Already configured in `.github/workflows/docker.yml`. Updates automatically on e
 
 ```bash
 npm install -g docker-push-readme
-docker-push-readme -u endykaufman -r qwen-api-proxy README.md
+docker-push-readme -u endykaufman -r qwen-api-proxy README_DOCKER.md
 ```
 
 ## 🔍 Verify Image

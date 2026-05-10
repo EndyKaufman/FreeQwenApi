@@ -73,5 +73,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
-          readme-filepath: ./README.md
+          readme-filepath: ./README_DOCKER.md
           short-description: "Free Qwen AI API Proxy with OpenAI compatibility and Telegram bot"

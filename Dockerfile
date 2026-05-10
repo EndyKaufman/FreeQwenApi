@@ -10,7 +10,7 @@ LABEL org.opencontainers.image.documentation="https://github.com/EndyKaufman/Fre
 LABEL org.opencontainers.image.vendor="EndyKaufman"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.authors="Endy Kaufman"
-LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.version="1.0.1"
 LABEL org.opencontainers.image.keywords="qwen,ai,api,proxy,openai,telegram-bot,llm,free-api"
 
 RUN apk add --no-cache \

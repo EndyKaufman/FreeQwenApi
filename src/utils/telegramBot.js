@@ -2,6 +2,7 @@ import { logInfo, logError, logWarn, logDebug } from '../logger/index.js';
 import { TELEGRAM_BOT_TOKEN, TELEGRAM_USER_IDS, SESSION_DIR, DEFAULT_MODEL, TELEGRAM_PROXY, TELEGRAM_PROXY_URL } from '../config.js';
 import { getActiveModel as getBotSettingsModel } from './botSettings.js';
 import { loadBotSettings, saveBotSettings, loadChatModels, setChatModel, getChatModel } from './botSettings.js';
+import { fetchWithQwenProxy } from './proxy.js';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
@@ -170,8 +171,8 @@ export async function configureProxy() {
             await fetch(testUrl, {
                 dispatcher: proxyAgent,
                 timeout: 10000
-            })
-            logInfo('✅ Соединение с прокси установлено')
+            });
+            logInfo('✅ Соединение с прокси установлено');
         } catch (error) {
             logError('❌ Ошибка создания прокси агента');
             logError(`Проверьте формат URL прокси: ${error.message}`);
@@ -1862,7 +1863,7 @@ async function handleLLMChat(chatId, userMessage) {
             stream: false
         };
 
-        const response = await fetch(apiUrl, {
+        const response = await fetchWithQwenProxy(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -2052,6 +2053,7 @@ async function handleSetModel(chatId, text) {
     }
     
     const requestedModel = parts[1].trim();
+    const { getAvailableModelsFromFile } = await import('../api/chat.js');
     const availableModels = getAvailableModelsFromFile();
     
     // Проверяем что модель существует
@@ -2113,6 +2115,7 @@ export function getActiveModel() {
 async function showModelInfo(chatId) {
     const currentModel = getModelForChat(chatId);
     const context = chatContexts.get(chatId) || [];
+    const { getAvailableModelsFromFile } = await import('../api/chat.js');
     const availableModels = getAvailableModelsFromFile();
 
     const message =

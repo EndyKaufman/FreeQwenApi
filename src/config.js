@@ -78,3 +78,6 @@ export const TOKEN_EXPIRY_WARNING_MS = Number(process.env.TOKEN_EXPIRY_WARNING_M
 // ─── Telegram прокси ────────────────────────────────────────────────────────
 export const TELEGRAM_PROXY = process.env.TELEGRAM_PROXY || null;
 export const TELEGRAM_PROXY_URL = process.env.TELEGRAM_PROXY_URL || null;
+
+// ─── Qwen LLM прокси ────────────────────────────────────────────────────────
+export const QWEN_PROXY = process.env.QWEN_PROXY || null;

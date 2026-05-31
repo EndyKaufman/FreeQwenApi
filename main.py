@@ -33,6 +33,12 @@ SESSION_DIR = "session"
 TOKENS_FILE = os.path.join(SESSION_DIR, "tokens.json")
 DEFAULT_MODEL = "qwen-max-latest"
 AVAILABLE_MODELS_FILE = os.path.join("src", "AvailableModels.txt")
+MODELS_API_URL = "https://chat.qwen.ai/api/models"
+
+# Глобальный кэш моделей
+_cached_models: Optional[List[str]] = None
+_models_loaded_from_api: bool = False
+_models_fetch_lock: Optional[asyncio.Lock] = None
 
 # =================================================================
 # MODEL MAPPING (Embedded for standalone usage)
@@ -49,10 +55,122 @@ MODEL_MAPPING = {
 }
 
 def get_mapped_model(model_name: str) -> str:
-    return MODEL_MAPPING.get(model_name.lower(), model_name)
+    """
+    Получить соответствующую доступную модель с валидацией.
+    Если модель не найдена в списке доступных, возвращается первая доступная модель.
+    """
+    available_models = load_available_models()
+    
+    # Проверяем точное соответствие в словаре маппинга
+    if model_name.lower() in MODEL_MAPPING:
+        mapped_model = MODEL_MAPPING[model_name.lower()]
+        # Валидируем, что mapped модель существует в списке доступных
+        if mapped_model in available_models:
+            return mapped_model
+        logger.warning(f"Маппированная модель '{mapped_model}' не найдена в AvailableModels.txt")
+    
+    # Проверяем, является ли запрошенная модель доступной
+    if model_name in available_models:
+        return model_name
+    
+    # Если запрошенная модель не найдена, логируем предупреждение
+    logger.warning(f"Модель '{model_name}' не найдена в списке доступных.")
+    logger.warning(f"Используем первую доступную модель: {available_models[0] if available_models else DEFAULT_MODEL}")
+    
+    # Возвращаем первую доступную модель или default
+    return available_models[0] if available_models else DEFAULT_MODEL
 
-def load_available_models() -> List[str]:
-    models = set(MODEL_MAPPING.keys())
+async def fetch_models_from_api() -> Optional[List[str]]:
+    """
+    Загрузить список моделей из Qwen API
+    """
+    try:
+        # Добавляем параметры пагинации для получения большего количества моделей
+        # Qwen API использует limit для пагинации
+        params = {
+            'limit': '1000'  # Максимальное количество моделей
+        }
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(MODELS_API_URL, params=params, headers={
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.debug(f"API Response type: {type(data).__name__}")
+                
+                if not isinstance(data, dict):
+                    logger.debug(f"API Response keys: N/A (not a dict)")
+                else:
+                    logger.debug(f"API Response keys: {', '.join(data.keys())}")
+                
+                # Пробуем разные форматы ответа
+                models = []
+                if isinstance(data, list):
+                    models = data
+                    logger.debug(f"Извлечены модели: данные - массив ({len(data)} элементов)")
+                elif isinstance(data, dict):
+                    # Qwen API: { success, data: { data: [...] } }
+                    if 'data' in data and isinstance(data['data'], dict) and 'data' in data['data'] and isinstance(data['data']['data'], list):
+                        models = data['data']['data']
+                        logger.debug(f"Извлечены модели: data.data.data ({len(data['data']['data'])} элементов)")
+                    elif 'data' in data and isinstance(data['data'], list):
+                        models = data['data']
+                        logger.debug(f"Извлечены модели: data.data ({len(data['data'])} элементов)")
+                    elif 'models' in data and isinstance(data['models'], list):
+                        models = data['models']
+                        logger.debug(f"Извлечены модели: data.models ({len(data['models'])} элементов)")
+                    else:
+                        logger.warning(f"⚠️ Не удалось распознать формат ответа API. Keys: {', '.join(data.keys())}")
+                        logger.warning(f"Полный JSON ответ от API:")
+                        logger.warning(json.dumps(data, indent=2, ensure_ascii=False))
+                
+                # Извлекаем ID моделей
+                model_ids = []
+                for m in models:
+                    if isinstance(m, str):
+                        model_ids.append(m)
+                    elif isinstance(m, dict):
+                        model_id = m.get('id') or m.get('model_id') or m.get('name')
+                        if model_id:
+                            model_ids.append(model_id)
+                
+                logger.debug(f"Извлечено modelIds: {len(model_ids)}")
+                if 0 < len(model_ids) <= 5:
+                    logger.debug(f"Первые модели: {', '.join(model_ids)}")
+                
+                if model_ids:
+                    logger.info(f"✅ Загружено {len(model_ids)} моделей с API")
+                    
+                    # Проверяем пагинацию
+                    if isinstance(data, dict) and 'data' in data and isinstance(data['data'], dict):
+                        data_section = data['data']
+                        has_more = data_section.get('has_more') or data_section.get('hasMore')
+                        total = data_section.get('total') or data_section.get('total_count')
+                        
+                        if has_more or total:
+                            logger.info(f"📊 Пагинация: всего={total}, есть еще={has_more}")
+                            # TODO: Загрузить следующие страницы если нужно
+                    
+                    return model_ids
+                else:
+                    logger.warning(f"⚠️ Массив models не пустой ({len(models)}), но modelIds пустой")
+            else:
+                logger.warning(f"⚠️ API вернул статус {response.status_code}, используем локальный файл")
+            
+            return None
+    except Exception as e:
+        logger.warning(f"❌ Не удалось загрузить модели с API: {e}")
+        return None
+
+
+def load_available_models_from_file() -> List[str]:
+    """
+    Загрузить модели из файла (fallback)
+    """
+    models = set()
     models.add(DEFAULT_MODEL)
     if os.path.exists(AVAILABLE_MODELS_FILE):
         try:
@@ -64,6 +182,86 @@ def load_available_models() -> List[str]:
         except Exception as e:
             logger.warning(f"Не удалось загрузить список моделей из {AVAILABLE_MODELS_FILE}: {e}")
     return sorted(models)
+
+
+async def ensure_models_loaded() -> List[str]:
+    """
+    Загрузить список моделей из API с кэшированием.
+    Вызывается при первом запросе к LLM, результат кэшируется в памяти.
+    """
+    global _cached_models, _models_loaded_from_api, _models_fetch_lock
+    
+    # Если модели уже загружены, возвращаем кэш
+    if _cached_models and len(_cached_models) > 0:
+        return _cached_models
+    
+    # Создаем lock если нужно
+    if _models_fetch_lock is None:
+        _models_fetch_lock = asyncio.Lock()
+    
+    # Используем lock для предотвращения параллельных запросов
+    async with _models_fetch_lock:
+        # Повторная проверка после получения lock
+        if _cached_models and len(_cached_models) > 0:
+            return _cached_models
+        
+        try:
+            logger.info("🔄 Загрузка списка моделей из Qwen API...")
+            api_models = await fetch_models_from_api()
+            
+            if api_models and len(api_models) > 0:
+                _cached_models = api_models
+                _models_loaded_from_api = True
+                logger.info(f"✅ Загружено {len(api_models)} моделей с Qwen API")
+                logger.info("===== ДОСТУПНЫЕ МОДЕЛИ (API) =====")
+                for m in api_models[:10]:  # Логируем первые 10
+                    logger.info(f"- {m}")
+                if len(api_models) > 10:
+                    logger.info(f"... и еще {len(api_models) - 10} моделей")
+                logger.info("===================================")
+                return _cached_models
+            
+            # API не вернул модели - используем файл
+            logger.warning("⚠️ API не вернул список моделей, используем AvailableModels.txt")
+            return load_models_from_file()
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка загрузки моделей из API: {e}")
+            logger.warning("⚠️ Используем резервный список из AvailableModels.txt")
+            return load_models_from_file()
+
+
+def load_models_from_file() -> List[str]:
+    """
+    Загрузить модели из файла (синхронная версия)
+    """
+    global _cached_models, _models_loaded_from_api
+    
+    models = load_available_models_from_file()
+    if models:
+        _cached_models = models
+        _models_loaded_from_api = False
+        logger.info("===== ДОСТУПНЫЕ МОДЕЛИ (ФАЙЛ) =====")
+        for m in models[:10]:  # Логируем первые 10
+            logger.info(f"- {m}")
+        if len(models) > 10:
+            logger.info(f"... и еще {len(models) - 10} моделей")
+        logger.info("====================================")
+    
+    return models
+
+
+def load_available_models() -> List[str]:
+    """
+    Получить список доступных моделей (синхронная версия для обратной совместимости)
+    """
+    global _cached_models
+    
+    # Если модели еще не загружены, загружаем из файла
+    if not _cached_models or len(_cached_models) == 0:
+        return load_models_from_file()
+    
+    return _cached_models
 
 # =================================================================
 # LOGGING
@@ -605,6 +803,9 @@ async def _stream_openai_response(token_info, chat_id: str, payload: Dict[str, A
             task.cancel()
 
 async def handle_chat_completions(body: Dict[str, Any]):
+    # Загружаем модели из API при первом запросе
+    await ensure_models_loaded()
+    
     messages = _extract_messages(body)
     if not messages:
         return JSONResponse(status_code=400, content={"error": "Сообщения не указаны"})

@@ -6,10 +6,11 @@ import apiRoutes from './src/api/routes.js';
 import { getAvailableModelsFromFile, fetchModelsFromAPI, getDefaultModel, getApiKeys } from './src/api/chat.js';
 import { loadTokens } from './src/api/tokenManager.js';
 import { addAccountInteractive } from './src/utils/accountSetup.js';
-import { logHttpRequest, logInfo, logError, logWarn } from './src/logger/index.js';
+import { logHttpRequest, logInfo, logError, logWarn, logDebug } from './src/logger/index.js';
 import { prompt } from './src/utils/prompt.js';
 import { PORT, HOST } from './src/config.js';
 import { startTelegramBot, stopTelegramBot, notifyAllUsers, configureProxy, processPendingArchive, checkAllSubsystems, startPeriodicHealthCheck } from './src/utils/telegramBot.js';
+import { getProxyInfo } from './src/utils/proxy.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -211,6 +212,19 @@ async function startServer() {
     // Проверяем все подсистемы
     await checkAllSubsystems(telegramBotStarted);
 
+    // Логируем информацию о прокси
+    const proxyInfo = getProxyInfo();
+    if (proxyInfo.telegram.configured) {
+        logInfo(`📱 Telegram Прокси: ${proxyInfo.telegram.url} (${proxyInfo.telegram.active ? '✅ активен' : '❌ неактивен'})`);
+    } else {
+        logInfo('📱 Telegram Прокси: не настроен');
+    }
+    if (proxyInfo.qwen.configured) {
+        logInfo(`🧠 Qwen LLM Прокси: ${proxyInfo.qwen.url} (${proxyInfo.qwen.active ? '✅ активен' : '❌ неактивен'})`);
+    } else {
+        logInfo('🧠 Qwen LLM Прокси: не настроен');
+    }
+
     // Запускаем периодическую проверку здоровья каждые 4 часа
     if (telegramBotStarted) {
         startPeriodicHealthCheck();
@@ -246,17 +260,24 @@ async function startServer() {
             logInfo('======================================================');
 
             // Загружаем список моделей (сначала из API, потом из файла как fallback)
+            logInfo('🔍 Начинаем загрузку списка моделей...');
             const apiModels = await fetchModelsFromAPI();
+            logDebug(`fetchModelsFromAPI вернул: ${apiModels ? apiModels.length + ' моделей' : 'null'}`);
+            
             if (apiModels && apiModels.length > 0) {
                 logInfo(`✅ Загружено ${apiModels.length} моделей с Qwen API`);
+                logDebug(`Первые 5 моделей: ${apiModels.slice(0, 5).join(', ')}`);
                 // Можно сохранить в файл при необходимости
             } else {
-                logInfo('⚠️ Используем модели из локального файла');
-                getAvailableModelsFromFile();
+                logWarn('⚠️ Используем модели из локального файла');
+                logDebug('Вызываем getAvailableModelsFromFile()...');
+                const fileModels = getAvailableModelsFromFile();
+                logDebug(`getAvailableModelsFromFile вернул: ${fileModels ? fileModels.length + ' моделей' : 'null'}`);
             }
             
             const defaultModel = getDefaultModel();
             logInfo(`🎯 Модель по умолчанию: ${defaultModel}`);
+            logDebug(`getDefaultModel() вернул: ${defaultModel}`);
             
             getApiKeys();
         });

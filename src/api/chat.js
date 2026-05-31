@@ -5,6 +5,7 @@ import { saveAuthToken } from '../browser/session.js';
 import { getAvailableToken, markRateLimited, removeInvalidToken, checkTokenExpiry, checkAllTokensExpiry, getSafeToken } from './tokenManager.js';
 import { sendTelegramNotification, formatTokenExpiryMessage } from '../utils/telegramNotifier.js';
 import { getActiveModel } from '../utils/botSettings.js';
+import { fetchWithQwenProxy } from '../utils/proxy.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,6 +27,8 @@ const AUTH_KEYS_FILE = path.join(__dirname, '..', 'Authorization.txt');
 
 let authToken = null;
 let availableModels = null;
+let modelsLoadedFromAPI = false; // Флаг: загружены ли модели из API
+let modelsFetchPromise = null; // Промис для предотвращения параллельных запросов
 let authKeys = null;
 let browserTokenRateLimited = false;
 let resolvedDefaultModel = null; // Будет установлен при загрузке моделей
@@ -221,7 +224,7 @@ export async function extractAuthToken(context, forceRefresh = false) {
             logError('Токен авторизации не найден в браузере');
             return null;
         } catch (error) {
-            if (shouldClosePage) await page.close().catch(() => {});
+            if (shouldClosePage) await page.close().catch(() => { });
             throw error;
         }
     } catch (error) {
@@ -234,80 +237,257 @@ export async function extractAuthToken(context, forceRefresh = false) {
 
 export async function fetchModelsFromAPI() {
     try {
-        logInfo('Загрузка списка моделей с Qwen API...');
-        
-        // Пробуем получить через node fetch (без браузера)
-        if (typeof fetch === 'function') {
-            const response = await fetch(MODELS_API_URL, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                },
-                timeout: 10000
+        logInfo('🔍 Загрузка списка моделей с Qwen API...');
+        logDebug(`MODELS_API_URL: ${MODELS_API_URL}`);
+
+        // Добавляем параметры для получения большего количества моделей
+        // Пробуем разные варианты URL с параметрами пагинации
+        let modelsUrl = MODELS_API_URL;
+
+        // Если URL не содержит параметров, добавляем их
+        if (!MODELS_API_URL.includes('?')) {
+            // Qwen API использует limit для пагинации
+            const params = new URLSearchParams({
+                limit: '1000'  // Максимальное количество моделей
             });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
-                // Пробуем разные форматы ответа
-                let models = [];
-                if (Array.isArray(data)) {
-                    models = data;
-                } else if (data.models && Array.isArray(data.models)) {
-                    models = data.models;
-                } else if (data.data && Array.isArray(data.data)) {
-                    models = data.data;
-                }
-                
-                // Извлекаем ID моделей
-                const modelIds = models.map(m => {
-                    if (typeof m === 'string') return m;
-                    return m.id || m.model_id || m.name;
-                }).filter(Boolean);
-                
-                if (modelIds.length > 0) {
-                    logInfo(`Загружено ${modelIds.length} моделей с API`);
-                    return modelIds;
-                }
-            } else {
-                logWarn(`API вернул статус ${response.status}, используем локальный файл`);
-            }
+            modelsUrl = `${MODELS_API_URL}?${params.toString()}`;
+            logDebug(`URL с параметрами пагинации: ${modelsUrl}`);
         }
-        
+
+        logInfo(`Пытаемся получить модели с URL: ${modelsUrl}`);
+
+        // Пробуем получить через node fetch (без браузера)
+        const response = await fetchWithQwenProxy(modelsUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            timeout: 10000
+        });
+
+        logDebug(`API Response status: ${response.status}`);
+        logDebug(`API Response ok: ${response.ok}`);
+
+        if (response.ok) {
+            const data = await response.json();
+            logDebug(`API Response type: ${Array.isArray(data) ? 'array' : typeof data}`);
+
+            if (!Array.isArray(data)) {
+                logDebug(`API Response keys: ${Object.keys(data).join(', ')}`);
+            }
+
+            // Логируем структуру для отладки
+            logDebug(`data.data существует: ${!!data.data}`);
+            if (data.data) {
+                logDebug(`data.data type: ${typeof data.data}`);
+                logDebug(`data.data is array: ${Array.isArray(data.data)}`);
+                if (typeof data.data === 'object' && !Array.isArray(data.data)) {
+                    logDebug(`data.data keys: ${Object.keys(data.data).join(', ')}`);
+                    if (data.data.data) {
+                        logDebug(`data.data.data is array: ${Array.isArray(data.data.data)}`);
+                        logDebug(`data.data.data length: ${data.data.data.length}`);
+                    }
+                } else if (Array.isArray(data.data)) {
+                    logDebug(`data.data length: ${data.data.length}`);
+                }
+            }
+
+            // Пробуем разные форматы ответа
+            let models = [];
+            if (Array.isArray(data)) {
+                models = data;
+                logDebug(`Извлечены модели: данные - массив (${data.length} элементов)`);
+            } else if (data.data && data.data.data && Array.isArray(data.data.data)) {
+                // Вложенная структура Qwen API: { success: true, data: { data: [...] } }
+                models = data.data.data;
+                logDebug(`Извлечены модели: data.data.data (${data.data.data.length} элементов)`);
+            } else if (data.data && Array.isArray(data.data)) {
+                // Простая структура: { data: [...] }
+                models = data.data;
+                logDebug(`Извлечены модели: data.data (${data.data.length} элементов)`);
+            } else if (data.models && Array.isArray(data.models)) {
+                models = data.models;
+                logDebug(`Извлечены модели: data.models (${data.models.length} элементов)`);
+            } else {
+                logWarn(`⚠️ Не удалось распознать формат ответа API. Keys: ${Object.keys(data).join(', ')}`);
+                logWarn(`Полный JSON ответ от API:`);
+                logWarn(JSON.stringify(data, null, 2));
+            }
+
+            // Извлекаем ID моделей
+            const modelIds = models.map(m => {
+                if (typeof m === 'string') return m;
+                return m.id || m.model_id || m.name;
+            }).filter(Boolean);
+
+            logDebug(`Извлечено modelIds: ${modelIds.length}`);
+            if (modelIds.length > 0 && modelIds.length <= 5) {
+                logDebug(`Первые модели: ${modelIds.join(', ')}`);
+            }
+
+            if (modelIds.length > 0) {
+                logInfo(`✅ Загружено ${modelIds.length} моделей с API`);
+
+                // Проверяем, есть ли информация о пагинации
+                let paginationInfo = null;
+                if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+                    const hasMore = data.data.has_more || data.data.hasMore;
+                    const total = data.data.total || data.data.total_count;
+                    const nextPage = data.data.next_page || data.data.nextPage;
+
+                    if (hasMore || total) {
+                        paginationInfo = { hasMore, total, nextPage };
+                        logInfo(`📊 Пагинация: всего=${total}, есть еще=${hasMore}, следующая страница=${nextPage}`);
+                    }
+                }
+
+                // TODO: Если есть пагинация, можно загрузить следующие страницы
+                // if (paginationInfo && paginationInfo.hasMore) {
+                //     logInfo('Загрузка следующих страниц моделей...');
+                //     // Здесь можно добавить цикл для загрузки всех страниц
+                // }
+
+                return modelIds;
+            } else {
+                logWarn(`⚠️ Массив models не пустой (${models.length}), но modelIds пустой`);
+            }
+        } else {
+            logWarn(`⚠️ API вернул статус ${response.status}, используем локальный файл`);
+        }
+
         return null;
     } catch (error) {
-        logWarn(`Не удалось загрузить модели с API: ${error.message}`);
+        logWarn(`❌ Не удалось загрузить модели с API: ${error.message}`);
+        logDebug(`Stack trace: ${error.stack}`);
         return null;
     }
 }
 
-export function getAvailableModelsFromFile() {
-    try {
-        if (!fs.existsSync(MODELS_FILE)) {
-            logError(`Файл с моделями не найден: ${MODELS_FILE}`);
-            return resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
+/**
+ * Загрузить список моделей из API с кэшированием
+ * Вызывается при первом запросе к LLM, результат кэшируется в памяти
+ * @returns {Promise<string[]>} - Список доступных моделей
+ */
+export async function ensureModelsLoaded() {
+    // Если модели уже загружены, возвращаем кэш
+    if (availableModels && availableModels.length > 0) {
+        logDebug(`📦 Модели уже загружены: ${availableModels.length} моделей, из API: ${modelsLoadedFromAPI}`);
+        return availableModels;
+    }
+
+    // Если уже идет загрузка, ждем тот же промис
+    if (modelsFetchPromise) {
+        logDebug('⏳ Ожидание завершения параллельной загрузки моделей...');
+        return modelsFetchPromise;
+    }
+
+    // Начинаем загрузку
+    logInfo('🚀 Начинаем процесс загрузки моделей...');
+    modelsFetchPromise = (async () => {
+        try {
+            logInfo('🔄 Загрузка списка моделей из Qwen API...');
+            const apiModels = await fetchModelsFromAPI();
+
+            logDebug(`Результат fetchModelsFromAPI: ${apiModels ? apiModels.length + ' моделей' : 'null'}`);
+
+            if (apiModels && apiModels.length > 0) {
+                availableModels = apiModels;
+                modelsLoadedFromAPI = true;
+                logInfo(`✅ Загружено ${apiModels.length} моделей с Qwen API`);
+                logInfo('===== ДОСТУПНЫЕ МОДЕЛИ (API) =====');
+                apiModels.forEach(m => logInfo(`- ${m}`));
+                logInfo('===================================');
+
+                // Устанавливаем default model как первую из API, если не задана в .env
+                if (!resolvedDefaultModel && apiModels.length > 0) {
+                    resolvedDefaultModel = apiModels[0];
+                    logInfo(`Default модель установлена: ${resolvedDefaultModel} (первая из API)`);
+                }
+
+                return availableModels;
+            }
+
+            // API не вернул модели - используем файл
+            logWarn('⚠️ API не вернул список моделей, используем AvailableModels.txt');
+            const fileModels = loadModelsFromFile();
+            logDebug(`loadModelsFromFile вернул: ${fileModels ? fileModels.length + ' моделей' : 'null'}`);
+            return fileModels;
+        } catch (error) {
+            logError(`❌ Ошибка загрузки моделей из API: ${error.message}`);
+            logWarn('⚠️ Используем резервный список из AvailableModels.txt');
+            const fileModels = loadModelsFromFile();
+            logDebug(`loadModelsFromFile (catch) вернул: ${fileModels ? fileModels.length + ' моделей' : 'null'}`);
+            return fileModels;
+        } finally {
+            modelsFetchPromise = null; // Сбрасываем промис
         }
-        const models = fs.readFileSync(MODELS_FILE, 'utf8')
+    })();
+
+    return modelsFetchPromise;
+}
+
+/**
+ * Загрузить модели из файла (fallback)
+ * @returns {string[]} - Список моделей из файла
+ */
+function loadModelsFromFile() {
+    try {
+        logDebug(`📂 Попытка загрузки моделей из файла: ${MODELS_FILE}`);
+
+        if (!fs.existsSync(MODELS_FILE)) {
+            logError(`❌ Файл с моделями не найден: ${MODELS_FILE}`);
+            const fallback = resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
+            logDebug(`Fallback модели: ${fallback.join(', ')}`);
+            return fallback;
+        }
+
+        const fileContent = fs.readFileSync(MODELS_FILE, 'utf8');
+        logDebug(`Размер файла: ${fileContent.length} байт`);
+
+        const models = fileContent
             .split('\n')
             .map(l => l.trim())
             .filter(l => l && !l.startsWith('#'));
 
-        logInfo('===== ДОСТУПНЫЕ МОДЕЛИ =====');
-        models.forEach(m => logInfo(`- ${m}`));
-        logInfo('============================');
-        
-        // Устанавливаем default model как первую из списка, если не задана в .env
-        if (!resolvedDefaultModel && models.length > 0) {
-            resolvedDefaultModel = models[0];
-            logInfo(`Default модель установлена: ${resolvedDefaultModel} (первая из списка)`);
+        logDebug(`Распознано моделей: ${models.length}`);
+
+        if (models.length > 0) {
+            availableModels = models;
+            modelsLoadedFromAPI = false;
+
+            logInfo('===== ДОСТУПНЫЕ МОДЕЛИ (ФАЙЛ) =====');
+            models.forEach(m => logInfo(`- ${m}`));
+            logInfo('====================================');
+
+            // Устанавливаем default model как первую из файла, если не задана в .env
+            if (!resolvedDefaultModel && models.length > 0) {
+                resolvedDefaultModel = models[0];
+                logInfo(`Default модель установлена: ${resolvedDefaultModel} (первая из файла)`);
+            }
+        } else {
+            logWarn('⚠️ Файл существует, но не содержит моделей');
         }
-        
+
         return models;
     } catch (error) {
-        logError('Ошибка при чтении файла с моделями', error);
-        return resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
+        logError(`❌ Ошибка при чтении файла с моделями: ${error.message}`);
+        const fallback = resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
+        logDebug(`Fallback модели после ошибки: ${fallback.join(', ')}`);
+        return fallback;
     }
+}
+
+/**
+ * Получить список доступных моделей (синхронная версия для обратной совместимости)
+ * @returns {string[]} - Список доступных моделей
+ */
+export function getAvailableModelsFromFile() {
+    // Если модели еще не загружены, загружаем из файла
+    if (!availableModels || availableModels.length === 0) {
+        return loadModelsFromFile();
+    }
+    return availableModels;
 }
 
 function getAuthKeysFromFile() {
@@ -380,41 +560,41 @@ function validateAndPrepareMessage(message) {
 async function resolveAuthToken(browserContext) {
     // Сначала пытаемся получить безопасный токен (не истекающий в ближайшее время)
     let tokenObj = await getSafeToken(TOKEN_EXPIRY_WARNING_MS);
-    
+
     // Если безопасных токенов нет, проверяем все токены
     if (!tokenObj) {
         const expiryStatus = checkAllTokensExpiry(TOKEN_EXPIRY_WARNING_MS);
-        
+
         if (expiryStatus.allTokensExpired) {
             logWarn('⚠️ Все токены истекают или уже истекли!');
-            
+
             // Отправляем уведомление в Telegram
             const telegramMessage = formatTokenExpiryMessage(expiryStatus.expiringTokens);
             await sendTelegramNotification(telegramMessage);
-            
+
             // Пытаемся использовать любой доступный токен (даже истекающий)
             tokenObj = await getAvailableToken();
-            
+
             if (!tokenObj) {
                 logError('Нет доступных токенов для использования');
                 return null;
             }
-            
+
             logWarn(`Используем истекающий токен: ${tokenObj.id}`);
         } else {
             // Есть активные токены, но они не попали в безопасную выборку
             tokenObj = await getAvailableToken();
         }
     }
-    
+
     if (tokenObj && tokenObj.token) {
         // Проверяем, не истекает ли токен в ближайшее время
         const expiryInfo = checkTokenExpiry(tokenObj.id, TOKEN_EXPIRY_WARNING_MS);
-        
+
         if (expiryInfo.willExpireSoon) {
             const timeLeftMs = expiryInfo.timeLeft;
             const timeLeftMin = timeLeftMs ? Math.floor(timeLeftMs / 60000) : 0;
-            
+
             if (expiryInfo.isExpired || expiryInfo.isInvalid) {
                 logWarn(`Токен ${tokenObj.id} недействителен или истёк, пытаемся использовать следующий`);
                 // Помечаем как rate limited и пробуем другой
@@ -426,7 +606,7 @@ async function resolveAuthToken(browserContext) {
                 logWarn(`⚠️ Токен ${tokenObj.id} истекает через ${timeLeftMin} мин. Используем с осторожностью.`);
             }
         }
-        
+
         authToken = tokenObj.token;
         logInfo(`Используется аккаунт: ${tokenObj.id}`);
         return tokenObj;
@@ -544,7 +724,7 @@ async function executeApiRequestWithNodeStreaming(apiUrl, payload, token, onChun
         if (!token) return { success: false, error: 'Токен авторизации не найден' };
         if (typeof fetch !== 'function') return { success: false, error: 'Fetch API is unavailable' };
 
-        const response = await fetch(apiUrl, {
+        const response = await fetchWithQwenProxy(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -819,18 +999,18 @@ async function executeApiRequest(page, apiUrl, payload, token, onChunk = null) {
 
 async function handleApiError(response, tokenObj, message, model, chatId, parentId, files, retryCount, chatType, size, waitForCompletion, onChunk = null) {
     logRaw(JSON.stringify(response));
-    
+
     // Улучшенная обработка ошибок с полной диагностикой
     const errorMessage = response.error || response.statusText || response.errorBody || 'Неизвестная ошибка';
     logError(`Ошибка при получении ответа: ${errorMessage}`);
-    
+
     // Логируем дополнительную информацию для отладки
     if (response.status) logDebug(`HTTP статус: ${response.status}`);
     if (response.errorBody) logDebug(`Тело ответа с ошибкой: ${response.errorBody.substring(0, 500)}${response.errorBody.length > 500 ? '...' : ''}`);
     if (response.error) logDebug(`Ошибка из response: ${response.error}`);
     if (response.statusText) logDebug(`StatusText: ${response.statusText}`);
     logDebug(`Полный объект ответа: ${JSON.stringify(response, null, 2).substring(0, 1000)}`);
-    
+
     if (response.html && response.html.includes('Verification')) {
         setAuthenticationStatus(false);
         logInfo('Обнаружена необходимость верификации, перезапуск браузера в видимом режиме...');
@@ -1020,12 +1200,12 @@ export async function sendMessage(message, model = null, chatId = null, parentId
             response.data.chatId = chatId;
             response.data.parentId = response.data.response_id;
             response.data.id = response.data.id || 'chatcmpl-' + Date.now();
-            
+
             // Fallback: если поток чанков не был отдан, отправляем контент единым куском.
             if (typeof onChunk === 'function' && response.data.choices?.[0]?.message?.content && !response.hasStreamedChunks) {
                 onChunk(response.data.choices[0].message.content);
             }
-            
+
             return response.data;
         }
 
@@ -1075,7 +1255,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
     if (tokenObj?.token) {
         authToken = tokenObj.token;
         logInfo(`Используется аккаунт для создания чата: ${tokenObj.id}`);
-        
+
         // Проверяем, не истекает ли токен
         const expiryInfo = checkTokenExpiry(tokenObj.id, TOKEN_EXPIRY_WARNING_MS);
         if (expiryInfo.willExpireSoon && (expiryInfo.isExpired || expiryInfo.isInvalid)) {

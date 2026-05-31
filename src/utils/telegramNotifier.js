@@ -1,5 +1,6 @@
 import { logInfo, logError, logWarn } from '../logger/index.js';
 import { TELEGRAM_BOT_TOKEN, TELEGRAM_USER_IDS } from '../config.js';
+import { fetchWithTelegramProxy } from './proxy.js';
 
 /**
  * Отправляет уведомление в Telegram
@@ -16,7 +17,7 @@ export async function sendTelegramNotification(message) {
 
     const notifications = TELEGRAM_USER_IDS.map(async (userId) => {
         try {
-            const response = await fetch(telegramUrl, {
+            const response = await fetchWithTelegramProxy(telegramUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

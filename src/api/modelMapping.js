@@ -1,4 +1,12 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { getActiveModel } from '../utils/botSettings.js';
+import { logWarn } from '../logger/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const MODELS_FILE = path.join(__dirname, '..', 'AvailableModels.txt');
 
 const CANONICAL_MODELS = Object.freeze([
     "qwen3.5-plus",
@@ -204,7 +212,35 @@ const buildModelMapping = () => {
 export const MODEL_MAPPING = buildModelMapping();
 
 /**
- * Получить соответствующую доступную модель
+ * Получить список доступных моделей из кэша или файла
+ * @returns {string[]} - Список доступных моделей
+ */
+function getAvailableModelsList() {
+    try {
+        if (!fs.existsSync(MODELS_FILE)) {
+            return [];
+        }
+        return fs.readFileSync(MODELS_FILE, 'utf8')
+            .split('\n')
+            .map(l => l.trim())
+            .filter(l => l && !l.startsWith('#'));
+    } catch (error) {
+        return [];
+    }
+}
+
+/**
+ * Проверить, существует ли модель в списке доступных
+ * @param {string} modelName - Название модели для проверки
+ * @returns {boolean} - true если модель доступна
+ */
+export function isValidModel(modelName) {
+    const availableModels = getAvailableModelsList();
+    return availableModels.includes(modelName);
+}
+
+/**
+ * Получить соответствующую доступную модель с валидацией
  * @param {string} requestedModel - Запрошенная модель
  * @param {string} defaultModel - Модель по умолчанию
  * @returns {string} - Доступная модель
@@ -216,15 +252,23 @@ export function getMappedModel(requestedModel, defaultModel = null) {
 
     // Проверяем точное соответствие в словаре
     if (MODEL_MAPPING[requestedModel]) {
-        return MODEL_MAPPING[requestedModel];
+        const mappedModel = MODEL_MAPPING[requestedModel];
+        // Валидируем, что mapped модель существует в списке доступных
+        if (isValidModel(mappedModel)) {
+            return mappedModel;
+        }
+        logWarn(`Маппированная модель "${mappedModel}" не найдена в AvailableModels.txt`);
     }
 
     // Проверяем, является ли запрошенная модель уже доступной
-    const availableModels = Object.values(MODEL_MAPPING);
-    if (availableModels.includes(requestedModel)) {
+    if (isValidModel(requestedModel)) {
         return requestedModel;
     }
 
-    // Возвращаем модель по умолчанию, если соответствие не найдено
+    // Если запрошенная модель не найдена, логируем предупреждение
+    logWarn(`Модель "${requestedModel}" не найдена в списке доступных.`);
+    logWarn(`Используем модель по умолчанию: ${effectiveDefault}`);
+    
+    // Возвращаем модель по умолчанию
     return effectiveDefault;
 } 

@@ -53,6 +53,103 @@ function hasAccounts() {
     return tokens.length > 0;
 }
 
+/**
+ * Проверяет работоспособность AI нейросети (единственный источник истины)
+ * @param {Array} tokens - массив токенов
+ * @returns {Promise<Array>} массив результатов проверки
+ */
+async function checkAIHealth(tokens) {
+    // Если нет токенов - пропускаем
+    if (!tokens || tokens.length === 0) {
+        return [{
+            name: '🧠 AI Нейросеть',
+            status: false,
+            details: '⏸️ Пропущено (нет токенов)'
+        }];
+    }
+
+    try {
+        logInfo('🧪 Тестирование AI нейросети (ping pong)...');
+        
+        // Импортируем функцию sendMessage для прямого запроса к Qwen
+        const { sendMessage } = await import('../api/chat.js');
+        const testModel = getDefaultModel();
+        
+        // Делаем запрос напрямую к Qwen API через наш модуль
+        const startTime = Date.now();
+        const result = await sendMessage('ping', testModel, null, null, null, null, null, null, 't2t', null, true, 0);
+        const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        
+        if (result && !result.error) {
+            const responseContent = result.choices?.[0]?.message?.content || '';
+            const usedModel = result.model || testModel;
+            
+            // Проверяем что ответ содержит "pong" (в любом регистре)
+            const hasPong = responseContent.toLowerCase().includes('pong');
+            
+            if (hasPong) {
+                // Тест пройден - ответ содержит pong
+                logInfo(`✅ AI тест прошел успешно: модель=${usedModel}, время=${responseTime}с, ответ="${responseContent.substring(0, 50)}"`);
+                
+                return [
+                    {
+                        name: '🧠 AI Нейросеть',
+                        status: true,
+                        details: `✅ Работает (модель: ${usedModel}, время: ${responseTime}с)`
+                    },
+                    {
+                        name: '   📝 Ответ',
+                        status: true,
+                        details: `💬 "${responseContent.substring(0, 50)}${responseContent.length > 50 ? '...' : ''}"`
+                    }
+                ];
+            } else {
+                // Тест не пройден - ответ не содержит pong
+                const fullResponse = JSON.stringify(result, null, 2);
+                
+                logError(`❌ AI тест не пройден: ответ не содержит "pong"`);
+                logError(`Получен ответ: ${responseContent.substring(0, 200)}`);
+                logDebug(`Полный JSON ответа: ${fullResponse.substring(0, 1000)}`);
+                
+                return [
+                    {
+                        name: '🧠 AI Нейросеть',
+                        status: false,
+                        details: `❌ Тест не пройден: ответ не содержит "pong"`
+                    },
+                    {
+                        name: '   📝 Ответ',
+                        status: false,
+                        details: `⚠️ Получен ответ без "pong": "${responseContent.substring(0, 50)}${responseContent.length > 50 ? '...' : ''}"`
+                    }
+                ];
+            }
+        } else {
+            // Ошибка от API
+            const errorMsg = result.error || 'Unknown error';
+            const fullResponse = JSON.stringify(result, null, 2);
+            
+            logError(`❌ AI тест не пройден: ${errorMsg}`);
+            logDebug(`Полный JSON ошибки: ${fullResponse.substring(0, 1000)}`);
+            
+            return [{
+                name: '🧠 AI Нейросеть',
+                status: false,
+                details: `❌ Ошибка: ${errorMsg.substring(0, 80)}`
+            }];
+        }
+    } catch (error) {
+        // Ошибка подключения
+        logError('❌ AI тест не пройден (ошибка подключения)', error);
+        
+        return [{
+            name: '🧠 AI Нейросеть',
+            status: false,
+            details: `❌ Ошибка подключения: ${error.message.substring(0, 80)}`
+        }];
+    }
+}
+
 // Создаем агент для прокси если настроен
 let proxyAgent = null;
 let proxyConfigured = false;
@@ -333,63 +430,8 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
     }
 
     // 8. Проверяем работу AI (только если есть токены)
-    if (tokens.length > 0) {
-        try {
-            logInfo('🧪 Тестирование AI нейросети (ping pong)...');
-            
-            // Импортируем функцию sendMessage для прямого запроса к Qwen
-            const { sendMessage } = await import('../api/chat.js');
-            const testModel = getDefaultModel();
-            
-            // Делаем запрос напрямую к Qwen API через наш модуль
-            const startTime = Date.now();
-            const result = await sendMessage('ping', testModel, null, null, null, null, null, null, 't2t', null, true, 0);
-            const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
-            
-            if (result && !result.error) {
-                const responseContent = result.choices?.[0]?.message?.content || '';
-                const usedModel = result.model || testModel;
-                
-                checks.push({
-                    name: '🧠 AI Нейросеть',
-                    status: true,
-                    details: `✅ Работает (модель: ${usedModel}, время: ${responseTime}с)`
-                });
-                
-                checks.push({
-                    name: '   📝 Ответ',
-                    status: true,
-                    details: `💬 "${responseContent.substring(0, 50)}${responseContent.length > 50 ? '...' : ''}"`
-                });
-                
-                logInfo(`✅ AI тест прошел успешно: модель=${usedModel}, время=${responseTime}с, ответ="${responseContent.substring(0, 50)}"`);
-            } else {
-                const errorMsg = result.error || 'Unknown error';
-                
-                checks.push({
-                    name: '🧠 AI Нейросеть',
-                    status: false,
-                    details: `❌ Ошибка: ${errorMsg.substring(0, 80)}`
-                });
-                
-                logError(`❌ AI тест не пройден: ${errorMsg}`);
-            }
-        } catch (error) {
-            checks.push({
-                name: '🧠 AI Нейросеть',
-                status: false,
-                details: `❌ Ошибка подключения: ${error.message.substring(0, 80)}`
-            });
-            
-            logError('❌ AI тест не пройден (ошибка подключения)', error);
-        }
-    } else {
-        checks.push({
-            name: '🧠 AI Нейросеть',
-            status: false,
-            details: '⏸️ Пропущено (нет токенов)'
-        });
-    }
+    const aiCheckResult = await checkAIHealth(tokens);
+    checks.push(...aiCheckResult);
 
     // Формируем отчет для логов
     logInfo('='.repeat(60));
@@ -2054,6 +2096,15 @@ function getModelForChat(chatId) {
     
     // Возвращаем default модель из config
     return getDefaultModel();
+}
+
+/**
+ * Получает глобальную активную модель (для использования в API)
+ * Экспортируется для использования в routes.js
+ * @returns {string|null} activeModel или null
+ */
+export function getActiveModel() {
+    return activeModel;
 }
 
 /**

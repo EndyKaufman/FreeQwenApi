@@ -9,6 +9,7 @@ import { loadHistory, saveHistory } from './chatHistory.js';
 import { generateImage, getAvailableImageModels, checkImageApiAvailability } from './imageGeneration.js';
 import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE } from '../config.js';
 import { getDefaultModel } from './chat.js';
+import { getActiveModel } from '../utils/telegramBot.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -663,7 +664,9 @@ router.get('/status', async (req, res) => {
 router.post('/chats', async (req, res) => {
     try {
         const { name, model } = req.body;
-        const chatModel = model ? getMappedModel(model) : getDefaultModel();
+        // Приоритет: activeModel из конфига > переданная модель > getDefaultModel()
+        const activeModel = getActiveModel();
+        const chatModel = activeModel || (model ? getMappedModel(model) : getDefaultModel());
         logInfo(`Создание нового чата${name ? ` с именем: ${name}` : ''}, модель: ${chatModel}`);
         const result = await createChatV2(chatModel, name || 'Новый чат');
         if (result.error) { logError(`Ошибка создания чата: ${result.error}`); return res.status(500).json({ error: result.error }); }
@@ -781,7 +784,9 @@ router.post('/chat/completions', async (req, res) => {
             logDebug('OpenWebUI meta-запрос: используем отдельный чат (без привязки к сессии)');
         }
 
-        let mappedModel = model ? getMappedModel(model) : "qwen-max-latest";
+        // Приоритет: activeModel из конфига > переданная модель > qwen-max-latest
+        const configActiveModel = getActiveModel();
+        let mappedModel = configActiveModel || (model ? getMappedModel(model) : "qwen-max-latest");
         if (model && mappedModel !== model) {
             logInfo(`Модель "${model}" заменена на "${mappedModel}"`);
         }
@@ -1079,7 +1084,9 @@ router.post('/v1/chat/completions', async (req, res) => {
             logDebug('OpenWebUI meta-запрос: используем отдельный чат (без привязки к сессии)');
         }
 
-        let mappedModel = model ? getMappedModel(model) : "qwen-max-latest";
+        // Приоритет: activeModel из конфига > переданная модель > qwen-max-latest
+        const configActiveModel = getActiveModel();
+        let mappedModel = configActiveModel || (model ? getMappedModel(model) : "qwen-max-latest");
         if (model && mappedModel !== model) {
             logInfo(`Модель "${model}" заменена на "${mappedModel}"`);
         }

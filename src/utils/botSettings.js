@@ -10,25 +10,71 @@ const __dirname = path.dirname(__filename);
 // Пути к файлам настроек
 const SETTINGS_FILE = path.join(process.cwd(), SESSION_DIR, 'bot_settings.json');
 
+// Кэш настроек
+let settingsCache = null;
+let settingsCacheMTime = null; // Время последнего изменения файла
+
 /**
- * Загружает настройки бота из файла
+ * Проверяет изменился ли файл с момента последнего чтения
+ */
+function hasFileChanged() {
+    try {
+        if (!fs.existsSync(SETTINGS_FILE)) {
+            return true; // Файл не существует, нужно перечитать
+        }
+        
+        const stats = fs.statSync(SETTINGS_FILE);
+        const currentMTime = stats.mtimeMs;
+        
+        // Если кэш пуст или время изменения отличается - файл изменился
+        return !settingsCacheMTime || currentMTime !== settingsCacheMTime;
+    } catch (error) {
+        return true; // При ошибке перечитываем
+    }
+}
+
+/**
+ * Загружает настройки бота из файла (с кэшированием)
  */
 export function loadBotSettings() {
     try {
+        // Проверяем есть ли файл
         if (!fs.existsSync(SETTINGS_FILE)) {
-            logInfo('📝 Файл настроек бота не найден, используем значения по умолчанию');
-            return {
+            if (!settingsCache) {
+                logInfo('📝 Файл настроек бота не найден, используем значения по умолчанию');
+            }
+            const defaultSettings = {
                 activeModel: null,
                 llmChatEnabled: false,
                 lastUpdated: null
             };
+            settingsCache = defaultSettings;
+            settingsCacheMTime = null;
+            return defaultSettings;
         }
-
+        
+        // Проверяем изменился ли файл
+        if (!hasFileChanged() && settingsCache) {
+            // Файл не изменился, возвращаем кэш
+            return settingsCache;
+        }
+        
+        // Файл изменился или кэш пуст - читаем файл
+        const stats = fs.statSync(SETTINGS_FILE);
+        settingsCacheMTime = stats.mtimeMs;
+        
         const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-        logInfo(`✅ Настройки бота загружены: модель=${settings.activeModel || 'default'}, LLM=${settings.llmChatEnabled}`);
+        settingsCache = settings;
+        
+        logInfo(`✅ Настройки бота загружены из файла: модель=${settings.activeModel || 'default'}, LLM=${settings.llmChatEnabled}`);
         return settings;
     } catch (error) {
         logError('❌ Ошибка загрузки настроек бота', error);
+        // Возвращаем кэш если есть, иначе defaults
+        if (settingsCache) {
+            logWarn('⚠️ Используется кэш настроек из-за ошибки чтения');
+            return settingsCache;
+        }
         return {
             activeModel: null,
             llmChatEnabled: false,
@@ -38,7 +84,7 @@ export function loadBotSettings() {
 }
 
 /**
- * Сохраняет настройки бота в файл
+ * Сохраняет настройки бота в файл и обновляет кэш
  */
 export function saveBotSettings(settings) {
     try {
@@ -51,6 +97,13 @@ export function saveBotSettings(settings) {
         settings.lastUpdated = new Date().toISOString();
         
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
+        
+        // Обновляем кэш
+        settingsCache = settings;
+        // Обновляем время модификации
+        const stats = fs.statSync(SETTINGS_FILE);
+        settingsCacheMTime = stats.mtimeMs;
+        
         logInfo(`💾 Настройки бота сохранены: модель=${settings.activeModel || 'default'}, LLM=${settings.llmChatEnabled}`);
         return true;
     } catch (error) {
@@ -71,6 +124,28 @@ export function loadChatModels() {
  */
 export function saveChatModels(chatModels) {
     return true;
+}
+
+/**
+ * Принудительно очищает кэш настроек
+ * Используйте если файл был изменен вручную
+ */
+export function clearSettingsCache() {
+    settingsCache = null;
+    settingsCacheMTime = null;
+    logInfo('🗑️ Кэш настроек очищен');
+}
+
+/**
+ * Получает текущий статус кэша (для отладки)
+ */
+export function getCacheStatus() {
+    return {
+        hasCache: settingsCache !== null,
+        cacheMTime: settingsCacheMTime,
+        cachedModel: settingsCache?.activeModel || null,
+        cachedLLM: settingsCache?.llmChatEnabled || false
+    };
 }
 
 /**

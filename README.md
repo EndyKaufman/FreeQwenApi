@@ -20,15 +20,17 @@
 | Функция | Оригинал | Этот форк |
 |---------|----------|-----------|
 | **Telegram бот** | ❌ Нет | ✅ Полная интеграция |
-| **Управление сессиями** | Только вручную | ✅ Загрузка через Telegram (.zip/.7z) |
 | **LLM чат** | ❌ Нет | ✅ AI ассистент через Telegram |
-| **Система логов** | Базовая консоль | ✅ Winston с ротацией |
+| **Управление сессиями** | Только вручную | ✅ Загрузка через Telegram (.zip/.7z) |
 | **Прокси поддержка** | ❌ Нет для Telegram | ✅ HTTP/HTTPS/SOCKS |
+| **Проверка здоровья** | ❌ Нет | ✅ При старте + каждые 4 часа |
+| **Система логов** | Базовая консоль | ✅ Winston с ротацией |
 | **Распаковка архивов** | Вручную | ✅ Автоматически с backup |
-| **Мониторинг здоровья** | ❌ Нет | ✅ Проверки при запуске |
 | **Обработка ошибок** | Базовая | ✅ Fault-tolerant extraction |
-| **Документация** | Базовая | ✅ Подробные руководства |
+| **Работа без токенов** | ❌ Нет | ✅ Режим только бота |
+| **Документация** | Базовая | ✅ ~2000 строк руководств |
 | **Docker поддержка** | Базовая | ✅ Production-оптимизация |
+| **Автоматическая .env** | ❌ Нет | ✅ dotenv integration |
 
 ### 🚀 Новые функции в этом форке
 
@@ -38,18 +40,27 @@
    - Чат с AI ассистентом (LLM режим)
    - Автоматический backup сессий перед обновлениями
    - Graceful перезапуски сервиса
+   - Команды: `/help`, `/status`, `/chat`, `/model`, `/clear`, `/restart`
 
 2. **Повышенная надёжность**
    - Автоматическая распаковка архивов при запуске
    - Fault-tolerant извлечение файлов (продолжает при ошибках)
    - Комплексные проверки здоровья при запуске
+   - Периодические проверки каждые 4 часа
    - Отчёты о статусе системы в Telegram
 
 3. **Улучшенная безопасность**
    - Безопасная обработка credentials (никогда не логируются)
-   - Прокси поддержка для Telegram API
+   - Прокси поддержка для Telegram API (HTTP/HTTPS/SOCKS)
    - Контроль доступа по whitelist
    - Безопасное управление правами файлов
+   - Автоматическая загрузка .env
+
+4. **Гибкость работы**
+   - Работает как Telegram бот даже без токенов Qwen
+   - Добавление первого аккаунта через Telegram
+   - Поддержка множества прокси протоколов
+   - Конфигурация через .env файл
 
 ---
 
@@ -166,7 +177,11 @@ python main.py
 # 1. Добавляем аккаунт(ы) локально
 npm run auth
 
-# 2. Собираем и запускаем
+# 2. Создаём .env файл
+cp .env.example .env
+nano .env  # Редактируем переменные
+
+# 3. Собираем и запускаем
 docker compose build --no-cache
 docker compose up -d
 ```
@@ -177,12 +192,23 @@ docker compose up -d
 services:
   qwen-proxy:
     build: .
+    image: endykaufman/qwen-api-proxy:1.0.3
     container_name: qwen-proxy
+    env_file:
+      - .env  # Автоматическая загрузка переменных
     environment:
+      - NODE_ENV=production
+      - PORT=${PORT:-3264}
+      - HOST=0.0.0.0
       - SKIP_ACCOUNT_MENU=true
-      - PORT=3264
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_USER_IDS=${TELEGRAM_USER_IDS:-}
+      - TELEGRAM_PROXY=${TELEGRAM_PROXY:-}
+      - TELEGRAM_PROXY_URL=${TELEGRAM_PROXY_URL:-}
+      - TOKEN_EXPIRY_WARNING_MS=${TOKEN_EXPIRY_WARNING_MS:-3600000}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-qwen-max-latest}
     ports:
-      - "3264:3264"
+      - "${PORT:-3264}:3264"
     volumes:
       - ./session:/app/session
       - ./logs:/app/logs
@@ -191,6 +217,8 @@ services:
 ```
 
 Переменная `SKIP_ACCOUNT_MENU=true` (или `NON_INTERACTIVE=true`) пропускает интерактивное меню и сразу запускает сервер, используя ранее сохранённые токены из `session/`.
+
+> **💡 Новое в v1.0.3:** Сервис может работать **только как Telegram бот** даже без токенов! Это позволяет добавить первый аккаунт через Telegram.
 
 ### Тома Docker и структура директорий
 
@@ -1389,6 +1417,9 @@ python examples/python-direct/httpx_streaming.py
 
 Все настройки читаются из переменных окружения с фоллбэками на значения по умолчанию. Полный список задаётся в `src/config.js`.
 
+> **💡 Совет:** Создайте `.env` файл на основе `.env.example` для удобной настройки.
+> Файл `.env` загружается автоматически при старте.
+
 ### Сервер
 
 | Переменная | По умолчанию | Описание |
@@ -1397,6 +1428,36 @@ python examples/python-direct/httpx_streaming.py
 | `HOST` | `0.0.0.0` | Адрес привязки |
 | `DEFAULT_MODEL` | `qwen-max-latest` | Модель, используемая если не указана в запросе |
 | `ALLOW_UNSCOPED_SESSION_CHAT_RESTORE` | `false` | Разрешить legacy-восстановление контекста по IP + User-Agent, даже без `conversation_id`/`chatId` |
+
+### Telegram бот 🤖
+
+| Переменная | По умолчанию | Описание |
+|-----------|-------------|----------|
+| `TELEGRAM_BOT_TOKEN` | *(нет)* | Токен бота от @BotFather |
+| `TELEGRAM_USER_IDS` | *(нет)* | ID авторизованных пользователей (через запятую) |
+| `TELEGRAM_PROXY` | *(нет)* | Прокси для Telegram API (HTTP/SOCKS) |
+| `TELEGRAM_PROXY_URL` | *(нет)* | Альтернативная переменная для прокси |
+
+**Пример:**
+```bash
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+TELEGRAM_USER_IDS=102375526,123456789
+TELEGRAM_PROXY=http://user:pass@proxy.example.com:8080
+```
+
+📖 **Документация:** [docs/TELEGRAM_PROXY.md](docs/TELEGRAM_PROXY.md)
+
+### Токены и уведомления
+
+| Переменная | По умолчанию | Описание |
+|-----------|-------------|----------|
+| `TOKEN_EXPIRY_WARNING_MS` | `3600000` (1 час) | Время предупреждения об истечении токена |
+
+**Пример:**
+```bash
+# Предупреждать за 2 часа до истечения
+TOKEN_EXPIRY_WARNING_MS=7200000
+```
 
 ### Режимы запуска
 

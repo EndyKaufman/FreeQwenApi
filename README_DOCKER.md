@@ -1,5 +1,6 @@
 # FreeQwenApi
 
+> **🐳 Docker Hub:** https://hub.docker.com/r/endykaufman/qwen-api-proxy  
 > **🔧 Fork:** https://github.com/EndyKaufman/FreeQwenApi  
 > **🌐 Original:** https://github.com/y13sint/FreeQwenApi
 

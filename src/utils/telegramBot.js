@@ -473,6 +473,7 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
     reportLines.push(`\n📚 <b>Репозиторий:</b>`);
     reportLines.push(`🔗 GitHub: https://github.com/EndyKaufman/FreeQwenApi`);
     reportLines.push(`⭐ Оригинал: https://github.com/y1n7sint/FreeQwenApi`);
+    reportLines.push(`🐳 Docker: https://hub.docker.com/r/endykaufman/qwen-api-proxy`);
     
     // Справка
     reportLines.push(`\n💡 <b>Справка:</b>`);
@@ -1433,7 +1434,9 @@ async function sendHelpMessage(chatId) {
         `📚 <b>Дополнительные команды:</b>\n\n` +
         `/setup - Инструкция по созданию сессии\n` +
         `/connect - Как подключить к проекту\n` +
-        `/about - Информация о проекте`;
+        `/about - Информация о проекте\n\n` +
+        `🐳 <b>Docker:</b>\n` +
+        `https://hub.docker.com/r/endykaufman/qwen-api-proxy`;
 
     await sendMessage(chatId, helpText);
 }
@@ -1664,6 +1667,7 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         reportLines.push(`\n📚 <b>Репозиторий:</b>`);
         reportLines.push(`🔗 GitHub: https://github.com/EndyKaufman/FreeQwenApi`);
         reportLines.push(`⭐ Оригинал: https://github.com/y1n7sint/FreeQwenApi`);
+        reportLines.push(`🐳 Docker: https://hub.docker.com/r/endykaufman/qwen-api-proxy`);
         
         // Справка
         reportLines.push(`\n💡 <b>Справка:</b>`);

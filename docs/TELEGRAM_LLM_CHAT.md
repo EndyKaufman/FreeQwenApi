@@ -12,9 +12,11 @@ The Telegram bot now includes a built-in **LLM chat mode** that allows you to in
 - Supports all Qwen models available in the project
 
 ### 2. Smart Commands
-- `/chat` - Toggle LLM chat mode on/off
+- `/chat` - Show LLM chat status
+- `/togglechat` - Toggle LLM chat mode on/off
 - `/clear` - Clear conversation context
-- `/model` - Show model information
+- `/model` - Show model information with all available models
+- `/setmodel <name>` - Change active model
 
 ### 3. Context Management
 - Automatic context window (last 20 messages)
@@ -23,7 +25,7 @@ The Telegram bot now includes a built-in **LLM chat mode** that allows you to in
 
 ## 🚀 Quick Start
 
-### 1. Enable LLM Chat
+### 1. Check LLM Chat Status
 
 Send command in Telegram:
 ```
@@ -32,20 +34,40 @@ Send command in Telegram:
 
 Bot responds:
 ```
+📊 LLM Chat Status
+
+🔧 Status: ❌ Disabled
+🤖 Model: qwen3.5-plus
+💬 Messages in context: 0
+
+💡 Use /togglechat to enable LLM chat
+```
+
+### 2. Enable LLM Chat
+
+Send command:
+```
+/togglechat
+```
+
+Bot responds:
+```
 ✅ LLM чат включен!
 
 🤖 Теперь я отвечаю как AI ассистент.
-📝 Модель: qwen-max-latest
+📝 Модель: qwen3.5-plus
 💬 Просто отправляйте сообщения.
+💾 Настройка сохранена
 
 Команды:
-/chat - Выключить LLM чат
+/togglechat - Выключить LLM чат
 /clear - Очистить контекст
 /model - Информация о модели
+/setmodel <название> - Сменить модель
 /help - Все команды бота
 ```
 
-### 2. Start Chatting
+### 3. Start Chatting
 
 Just send any message (not starting with `/`):
 
@@ -61,13 +83,14 @@ Just send any message (not starting with `/`):
 Что вас интересует?
 ```
 
-### 3. Use Commands While in Chat Mode
+### 4. Use Commands While in Chat Mode
 
 All commands still work:
 - `/status` - Check service status
 - `/clear` - Clear chat context
-- `/model` - See model info
-- `/chat` - Disable LLM mode
+- `/model` - See model info with all available models
+- `/chat` - Check LLM status
+- `/togglechat` - Disable LLM mode
 
 ## 📋 Available Commands
 
@@ -81,9 +104,11 @@ All commands still work:
 ### LLM Chat Commands
 | Command | Description |
 |---------|-------------|
-| `/chat` | Toggle LLM chat mode on/off |
+| `/chat` | Show LLM chat status |
+| `/togglechat` | Toggle LLM chat mode on/off |
 | `/clear` | Clear conversation context |
-| `/model` | Show current model info |
+| `/model` | Show model info and all available models |
+| `/setmodel <name>` | Change active model |
 
 ## 💡 Usage Examples
 

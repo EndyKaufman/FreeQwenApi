@@ -302,7 +302,7 @@ Bot: 🚀 Сервис запущен!
 1. `activeModel` из `bot_settings.json` (если установлен)
 2. `DEFAULT_MODEL` из `.env` (если установлен)
 3. Первая модель из списка доступных
-4. Fallback: `qwen-max-latest`
+4. Fallback: `qwen3.5-plus` (first model from AvailableModels.txt)
 
 ### Проверка AI при запуске
 

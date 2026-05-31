@@ -8,8 +8,7 @@ import { getStsToken, uploadFileToQwen } from './fileUpload.js';
 import { loadHistory, saveHistory } from './chatHistory.js';
 import { generateImage, getAvailableImageModels, checkImageApiAvailability } from './imageGeneration.js';
 import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE } from '../config.js';
-import { getDefaultModel } from './chat.js';
-import { getActiveModel } from '../utils/telegramBot.js';
+import { getActiveModel } from '../utils/botSettings.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -463,7 +462,7 @@ router.post('/chat', async (req, res) => {
             logInfo(`История содержит ${allMessages.length} сообщений`);
         }
 
-        let mappedModel = model || "qwen-max-latest";
+        let mappedModel = model || getActiveModel();
         if (model) {
             mappedModel = getMappedModel(model);
             if (mappedModel !== model) {
@@ -495,7 +494,7 @@ router.post('/chat', async (req, res) => {
                             id: 'chatcmpl-' + Date.now(),
                             object: 'chat.completion.chunk',
                             created: Math.floor(Date.now() / 1000),
-                            model: mappedModel || 'qwen-max-latest',
+                            model: mappedModel,
                             choices: [
                                 { index: 0, delta: { content: chunk }, finish_reason: null }
                             ]
@@ -524,7 +523,7 @@ router.post('/chat', async (req, res) => {
                         id: 'chatcmpl-' + Date.now(),
                         object: 'chat.completion.chunk',
                         created: Math.floor(Date.now() / 1000),
-                        model: mappedModel || 'qwen-max-latest',
+                        model: mappedModel,
                         choices: [
                             { index: 0, delta: { content: `Error: ${result.error}` }, finish_reason: 'stop' }
                         ]
@@ -546,7 +545,7 @@ router.post('/chat', async (req, res) => {
                     id: 'chatcmpl-' + Date.now(),
                     object: 'chat.completion.chunk',
                     created: Math.floor(Date.now() / 1000),
-                    model: mappedModel || 'qwen-max-latest',
+                    model: mappedModel,
                     choices: [
                         { index: 0, delta: {}, finish_reason: 'stop' }
                     ]
@@ -560,7 +559,7 @@ router.post('/chat', async (req, res) => {
                     id: 'chatcmpl-stream',
                     object: 'chat.completion.chunk',
                     created: Math.floor(Date.now() / 1000),
-                    model: mappedModel || 'qwen-max-latest',
+                    model: mappedModel,
                     choices: [
                         { index: 0, delta: { content: 'Internal server error' }, finish_reason: 'stop' }
                     ]
@@ -664,9 +663,8 @@ router.get('/status', async (req, res) => {
 router.post('/chats', async (req, res) => {
     try {
         const { name, model } = req.body;
-        // Приоритет: activeModel из конфига > переданная модель > getDefaultModel()
-        const activeModel = getActiveModel();
-        const chatModel = activeModel || (model ? getMappedModel(model) : getDefaultModel());
+        // Приоритет: переданная модель > activeModel из настроек
+        const chatModel = model ? getMappedModel(model) : getActiveModel();
         logInfo(`Создание нового чата${name ? ` с именем: ${name}` : ''}, модель: ${chatModel}`);
         const result = await createChatV2(chatModel, name || 'Новый чат');
         if (result.error) { logError(`Ошибка создания чата: ${result.error}`); return res.status(500).json({ error: result.error }); }
@@ -784,9 +782,8 @@ router.post('/chat/completions', async (req, res) => {
             logDebug('OpenWebUI meta-запрос: используем отдельный чат (без привязки к сессии)');
         }
 
-        // Приоритет: activeModel из конфига > переданная модель > qwen-max-latest
-        const configActiveModel = getActiveModel();
-        let mappedModel = configActiveModel || (model ? getMappedModel(model) : "qwen-max-latest");
+        // Приоритет: переданная модель > activeModel из настроек
+        let mappedModel = model ? getMappedModel(model) : getActiveModel();
         if (model && mappedModel !== model) {
             logInfo(`Модель "${model}" заменена на "${mappedModel}"`);
         }
@@ -832,7 +829,7 @@ router.post('/chat/completions', async (req, res) => {
                             id: 'chatcmpl-stream',
                             object: 'chat.completion.chunk',
                             created: Math.floor(Date.now() / 1000),
-                            model: mappedModel || 'qwen-max-latest',
+                            model: mappedModel,
                             choices: [
                                 { index: 0, delta: { content: chunk }, finish_reason: null }
                             ]
@@ -873,7 +870,7 @@ router.post('/chat/completions', async (req, res) => {
                         id: 'chatcmpl-stream',
                         object: 'chat.completion.chunk',
                         created: Math.floor(Date.now() / 1000),
-                        model: mappedModel || 'qwen-max-latest',
+                        model: mappedModel,
                         choices: [
                             { index: 0, delta: { content: `Error: ${result.error}` }, finish_reason: null }
                         ]
@@ -894,7 +891,7 @@ router.post('/chat/completions', async (req, res) => {
                     id: 'chatcmpl-stream',
                     object: 'chat.completion.chunk',
                     created: Math.floor(Date.now() / 1000),
-                    model: mappedModel || 'qwen-max-latest',
+                    model: mappedModel,
                     choices: [
                         { index: 0, delta: {}, finish_reason: 'stop' }
                     ]
@@ -908,7 +905,7 @@ router.post('/chat/completions', async (req, res) => {
                     id: 'chatcmpl-stream',
                     object: 'chat.completion.chunk',
                     created: Math.floor(Date.now() / 1000),
-                    model: mappedModel || 'qwen-max-latest',
+                    model: mappedModel,
                     choices: [
                         { index: 0, delta: { content: 'Internal server error' }, finish_reason: 'stop' }
                     ]
@@ -942,7 +939,7 @@ router.post('/chat/completions', async (req, res) => {
                 id: result.id || "chatcmpl-" + Date.now(),
                 object: "chat.completion",
                 created: Math.floor(Date.now() / 1000),
-                model: result.model || mappedModel || "qwen-max-latest",
+                model: result.model || mappedModel,
                 choices: result.choices || [{
                     index: 0,
                     message: {
@@ -1084,9 +1081,8 @@ router.post('/v1/chat/completions', async (req, res) => {
             logDebug('OpenWebUI meta-запрос: используем отдельный чат (без привязки к сессии)');
         }
 
-        // Приоритет: activeModel из конфига > переданная модель > qwen-max-latest
-        const configActiveModel = getActiveModel();
-        let mappedModel = configActiveModel || (model ? getMappedModel(model) : "qwen-max-latest");
+        // Приоритет: переданная модель > activeModel из настроек
+        let mappedModel = model ? getMappedModel(model) : getActiveModel();
         if (model && mappedModel !== model) {
             logInfo(`Модель "${model}" заменена на "${mappedModel}"`);
         }
@@ -1130,7 +1126,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                             id: 'chatcmpl-' + Date.now(),
                             object: 'chat.completion.chunk',
                             created: Math.floor(Date.now() / 1000),
-                            model: mappedModel || 'qwen-max-latest',
+                            model: mappedModel,
                             choices: [
                                 { index: 0, delta: { content: chunk }, finish_reason: null }
                             ]
@@ -1166,7 +1162,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                         id: 'chatcmpl-stream',
                         object: 'chat.completion.chunk',
                         created: Math.floor(Date.now() / 1000),
-                        model: mappedModel || 'qwen-max-latest',
+                        model: mappedModel,
                         choices: [
                             { index: 0, delta: { content: `Error: ${result.error}` }, finish_reason: 'stop' }
                         ]
@@ -1187,7 +1183,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                     id: 'chatcmpl-stream',
                     object: 'chat.completion.chunk',
                     created: Math.floor(Date.now() / 1000),
-                    model: mappedModel || 'qwen-max-latest',
+                    model: mappedModel,
                     choices: [
                         { index: 0, delta: {}, finish_reason: 'stop' }
                     ]
@@ -1201,7 +1197,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                     id: 'chatcmpl-stream',
                     object: 'chat.completion.chunk',
                     created: Math.floor(Date.now() / 1000),
-                    model: mappedModel || 'qwen-max-latest',
+                    model: mappedModel,
                     choices: [
                         { index: 0, delta: { content: 'Internal server error' }, finish_reason: 'stop' }
                     ]
@@ -1245,7 +1241,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                 id: result.id || "chatcmpl-" + Date.now(),
                 object: "chat.completion",
                 created: Math.floor(Date.now() / 1000),
-                model: result.model || mappedModel || "qwen-max-latest",
+                model: result.model || mappedModel,
                 choices: [{
                     index: 0,
                     message: {

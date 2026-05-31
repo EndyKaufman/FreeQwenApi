@@ -4,6 +4,7 @@ import { shutdownBrowser, initBrowser } from '../browser/browser.js';
 import { saveAuthToken } from '../browser/session.js';
 import { getAvailableToken, markRateLimited, removeInvalidToken, checkTokenExpiry, checkAllTokensExpiry, getSafeToken } from './tokenManager.js';
 import { sendTelegramNotification, formatTokenExpiryMessage } from '../utils/telegramNotifier.js';
+import { getActiveModel } from '../utils/botSettings.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -285,7 +286,7 @@ export function getAvailableModelsFromFile() {
     try {
         if (!fs.existsSync(MODELS_FILE)) {
             logError(`Файл с моделями не найден: ${MODELS_FILE}`);
-            return resolvedDefaultModel ? [resolvedDefaultModel] : ['qwen-max-latest'];
+            return resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
         }
         const models = fs.readFileSync(MODELS_FILE, 'utf8')
             .split('\n')
@@ -305,7 +306,7 @@ export function getAvailableModelsFromFile() {
         return models;
     } catch (error) {
         logError('Ошибка при чтении файла с моделями', error);
-        return resolvedDefaultModel ? [resolvedDefaultModel] : ['qwen-max-latest'];
+        return resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
     }
 }
 
@@ -337,8 +338,8 @@ export function isValidModel(modelName) {
 }
 
 export function getDefaultModel() {
-    // Приоритет: .env > первая модель из списка > fallback
-    return DEFAULT_MODEL || resolvedDefaultModel || 'qwen-max-latest';
+    // Используем активную модель из настроек бота
+    return getActiveModel();
 }
 
 export function getAllModels() {
@@ -884,7 +885,7 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
 
 // ─── Main public API ─────────────────────────────────────────────────────────
 
-export async function sendMessage(message, model = getDefaultModel(), chatId = null, parentId = null, files = null, tools = null, toolChoice = null, systemMessage = null, chatType = 't2t', size = null, waitForCompletion = true, retryCount = 0, onChunk = null) {
+export async function sendMessage(message, model = null, chatId = null, parentId = null, files = null, tools = null, toolChoice = null, systemMessage = null, chatType = 't2t', size = null, waitForCompletion = true, retryCount = 0, onChunk = null) {
     if (!availableModels) availableModels = getAvailableModelsFromFile();
 
     if (!chatId) {
@@ -902,9 +903,12 @@ export async function sendMessage(message, model = getDefaultModel(), chatId = n
     const messageContent = validated.content;
 
     if (!model || model.trim() === '') {
+        logWarn('Модель не указана, используем модель по умолчанию');
         model = getDefaultModel();
     } else if (!isValidModel(model)) {
-        logWarn(`Модель "${model}" не найдена в списке доступных. Используется модель по умолчанию.`);
+        logWarn(`Модель "${model}" не найдена в списке доступных.`);
+        logWarn(`Доступные модели: ${availableModels ? availableModels.slice(0, 10).join(', ') + '...' : 'не загружены'}`);
+        logWarn(`Используем модель по умолчанию: ${getDefaultModel()}`);
         model = getDefaultModel();
     }
     logInfo(`Используемая модель: "${model}"`);

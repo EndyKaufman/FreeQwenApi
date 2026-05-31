@@ -8,7 +8,62 @@
 
 ## ✨ Новые функции
 
-### 1. 🤖 Telegram Bot - Полная интеграция
+### 1. 🎯 Динамическая система выбора модели
+
+**Централизованное управление моделями через настройки бота**
+
+#### Что изменилось
+- ❌ **Удалено:** Жёстко закодированный fallback `qwen-max-latest` по всему коду
+- ✅ **Добавлено:** Единая система с приоритетом: bot_settings.json → .env → AvailableModels.txt
+- ✅ **Добавлено:** Функция `getActiveModel()` в botSettings.js
+- ✅ **Обновлено:** Все модули используют `getActiveModel()` вместо хардкода
+
+#### Приоритет выбора модели
+```
+1. Запрошенная модель в запросе (параметр `model`)  ← ВЫСШИЙ ПРИОРИТЕТ
+   ↓ (если не указана)
+2. bot_settings.json (activeModel) ← через /model в Telegram
+   ↓
+3. .env (DEFAULT_MODEL)
+   ↓
+4. AvailableModels.txt (первая модель) = qwen3.5-plus
+   ↓
+5. Fallback = qwen3.5-plus
+```
+
+#### Преимущества
+- ✅ **Мгновенное применение** - Смена модели через Telegram без перезапуска
+- ✅ **Единый источник истины** - Все модули читают из одного места
+- ✅ **Гибкость** - Легко изменить модель по умолчанию
+- ✅ **Нет хардкода** - Все модели из конфигурации
+
+**Пример использования:**
+```bash
+# Через Telegram бота
+/model qwen3.5-flash  # Мгновенно применяется везде!
+
+# Через .env
+DEFAULT_MODEL=qwen3.5-397b-a17b
+
+# Программно (model можно не указывать)
+curl http://localhost:3264/api/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Привет!"}]}'
+# Использует активную модель из настроек
+```
+
+#### Изменённые файлы
+- `src/utils/botSettings.js` - добавлена `getActiveModel()`
+- `src/api/chat.js` - `getDefaultModel()` теперь вызывает `getActiveModel()`
+- `src/api/routes.js` - все fallback заменены на `getActiveModel()`
+- `src/api/modelMapping.js` - использует `getActiveModel()`
+- `src/utils/telegramBot.js` - разделены локальная и глобальная модели
+
+📖 **Документация:** Обновлена в README.md
+
+---
+
+### 2. 🤖 Telegram Bot - Полная интеграция
 
 #### LLM Chat (AI Ассистент)
 - **Команда `/chat`** - Включить/выключить режим AI ассистента
@@ -101,7 +156,7 @@ TELEGRAM_PROXY=socks5://user:pass@proxy.example.com:1080
 🌐 Qwen API: ✅ Доступен
 👥 Аккаунты: 3 активных
 ⏰ Токены: В норме
-📝 Модель: qwen-max-latest
+📝 Модель: qwen3.5-plus (из настроек бота)
 ━━━━━━━━━━━━━━━━━━━━
 ✅ Все системы работают нормально
 ```
@@ -277,7 +332,7 @@ TELEGRAM_USER_IDS=your_user_id
 
 # Опциональные
 TELEGRAM_PROXY=http://proxy:port
-DEFAULT_MODEL=qwen-max-latest
+DEFAULT_MODEL=qwen3.5-plus  # Если не задана в bot_settings.json
 ```
 
 ### 3. Пересоберите Docker

@@ -1,6 +1,6 @@
-import { logInfo, logError, logWarn } from '../logger/index.js';
+import { logInfo, logError, logWarn, logDebug } from '../logger/index.js';
 import { TELEGRAM_BOT_TOKEN, TELEGRAM_USER_IDS, SESSION_DIR, DEFAULT_MODEL, TELEGRAM_PROXY, TELEGRAM_PROXY_URL } from '../config.js';
-import { getDefaultModel, getAvailableModelsFromFile } from '../api/chat.js';
+import { getActiveModel as getBotSettingsModel } from './botSettings.js';
 import { loadBotSettings, saveBotSettings, loadChatModels, setChatModel, getChatModel } from './botSettings.js';
 import fs from 'fs';
 import path from 'path';
@@ -73,7 +73,7 @@ async function checkAIHealth(tokens) {
         
         // Импортируем функцию sendMessage для прямого запроса к Qwen
         const { sendMessage } = await import('../api/chat.js');
-        const testModel = getDefaultModel();
+        const testModel = getBotSettingsModel();
         
         // Делаем запрос напрямую к Qwen API через наш модуль
         const startTime = Date.now();
@@ -377,7 +377,7 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
     // 3.1. Показываем настройки бота (если загружены)
     if (botStarted) {
         const llmStatus = llmChatEnabled ? '✅ Включен' : '❌ Выключен';
-        const modelUsed = activeModel || getDefaultModel();
+        const modelUsed = activeModel || getBotSettingsModel();
         checks.push({
             name: '   ⚙️ LLM режим',
             status: llmChatEnabled,
@@ -1556,14 +1556,14 @@ async function sendConnectMessage(chatId) {
         `\`\`\`bash\n` +
         `curl http://localhost:3264/api/chat/completions \\\n` +
         `  -H "Content-Type: application/json" \\\n` +
-        `  -d '{"model":"qwen-max-latest","messages":[{"role":"user","content":"Привет!"}]}'\n` +
+        `  -d '{"model":"qwen3.5-plus","messages":[{"role":"user","content":"Привет!"}]}'\n` +
         `\`\`\`\n\n` +
         `<b>С продолжением диалога:</b>\n` +
         `\`\`\`bash\n` +
         `curl -X POST http://localhost:3264/api/chat/completions \\\n` +
         `  -H "Content-Type: application/json" \\\n` +
         `  -d '{\n` +
-        `    "model": "qwen-max-latest",\n` +
+        `    "model": "qwen3.5-plus",\n` +
         `    "messages": [{"role": "user", "content": "Сколько будет 2+2?"}]\n` +
         `  }'\n` +
         `\`\`\`\n\n` +
@@ -1575,7 +1575,7 @@ async function sendConnectMessage(chatId) {
         `    apiKey: 'any-string'\n` +
         `});\n\n` +
         `const response = await client.chat.completions.create({\n` +
-        `    model: 'qwen-max-latest',\n` +
+        `    model: 'qwen3.5-plus',\n` +
         `    messages: [{ role: 'user', content: 'Привет!' }]\n` +
         `});\n` +
         `\`\`\`\n\n` +
@@ -2094,8 +2094,8 @@ function getModelForChat(chatId) {
         return activeModel;
     }
     
-    // Возвращаем default модель из config
-    return getDefaultModel();
+    // Возвращаем модель из настроек бота
+    return getBotSettingsModel();
 }
 
 /**

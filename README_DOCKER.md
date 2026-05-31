@@ -77,7 +77,7 @@ npm start
 ```bash
 curl http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen-max-latest","messages":[{"role":"user","content":"Hello!"}]}'
+  -d '{"messages":[{"role":"user","content":"Hello!"}]}'
 ```
 
 ### OpenAI SDK
@@ -91,7 +91,7 @@ const client = new OpenAI({
 });
 
 const response = await client.chat.completions.create({
-    model: 'qwen-max-latest',
+    model: 'qwen3.5-plus',  // Optional - uses active model from settings if not specified
     messages: [{ role: 'user', content: 'Hello!' }],
 });
 ```
@@ -101,7 +101,7 @@ const response = await client.chat.completions.create({
 ```bash
 curl -X POST http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen-max-latest","messages":[{"role":"user","content":"Write a poem"}],"stream":true}'
+  -d '{"messages":[{"role":"user","content":"Write a poem"}],"stream":true}'
 ```
 
 ### Context-Aware Conversation
@@ -171,7 +171,7 @@ Configure via environment variables:
 |----------|---------|-------------|
 | `PORT` | `3264` | HTTP server port |
 | `SKIP_ACCOUNT_MENU` | `false` | Skip interactive account menu |
-| `DEFAULT_MODEL` | `qwen-max-latest` | Default model if not specified |
+| `DEFAULT_MODEL` | `qwen3.5-plus` | Default model if not set in bot_settings.json |
 | `LOG_LEVEL` | `info` | Logging level (error/warn/info/debug) |
 | `MAX_FILE_SIZE` | `10485760` | Max upload size (10MB) |
 | `DASHSCOPE_API_KEY` | - | Required for image generation |
@@ -217,7 +217,7 @@ With multiple accounts:
 
 ```json
 {
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Optional - uses active model from settings
   "messages": [
     {"role": "system", "content": "You are a helpful assistant"},
     {"role": "user", "content": "Hello!"}
@@ -241,7 +241,7 @@ With multiple accounts:
 ```json
 {
   "message": "Hello!",
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Optional - uses active model from settings
   "chatId": "abc-123",
   "parentId": "def-456"
 }

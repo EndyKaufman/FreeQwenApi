@@ -1,4 +1,4 @@
-import { getDefaultModel } from './chat.js';
+import { getActiveModel } from '../utils/botSettings.js';
 
 const CANONICAL_MODELS = Object.freeze([
     "qwen3.5-plus",
@@ -211,7 +211,7 @@ export const MODEL_MAPPING = buildModelMapping();
  */
 export function getMappedModel(requestedModel, defaultModel = null) {
     // Если defaultModel не передан, используем динамический default
-    const effectiveDefault = defaultModel || getDefaultModel();
+    const effectiveDefault = defaultModel || getActiveModel();
     if (!requestedModel) return effectiveDefault;
 
     // Проверяем точное соответствие в словаре

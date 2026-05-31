@@ -29,19 +29,15 @@ npm start
 
 ## 🤖 Telegram Bot Commands
 
-### Management Commands
+### Telegram Bot Commands
 | Command | Description |
 |---------|-------------|
 | `/help` | Show all commands |
 | `/status` | Service status |
 | `/restart` | Restart service |
-
-### LLM Chat Commands
-| Command | Description |
-|---------|-------------|
+| `/model [name]` | Set/show active model |
 | `/chat` | Toggle AI chat mode |
 | `/clear` | Clear chat context |
-| `/model` | Model information |
 
 ### File Upload
 - Send `.zip` or `.7z` archive with `session/` folder
@@ -66,8 +62,8 @@ TELEGRAM_PROXY=http://user:pass@proxy:8080
 # Token expiry warning (default: 1 hour)
 TOKEN_EXPIRY_WARNING_MS=3600000
 
-# Default model
-DEFAULT_MODEL=qwen-max-latest
+# Default model (if not set in bot_settings.json)
+DEFAULT_MODEL=qwen3.5-plus
 ```
 
 ---
@@ -76,15 +72,22 @@ DEFAULT_MODEL=qwen-max-latest
 
 ### Chat
 ```bash
-# Send message
+# Send message (model optional - uses active model from settings)
 POST /api/chat
 POST /api/chat/completions  # OpenAI compatible
 
-# Example
+# Example with explicit model (highest priority)
 curl http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen-max-latest",
+    "model": "qwen3.5-flash",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+
+# Example without model (uses active model from bot settings)
+curl http://localhost:3264/api/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
@@ -102,6 +105,36 @@ GET /api/status
 ### File Upload
 ```bash
 POST /api/files/upload
+```
+
+---
+
+## 🎯 Model Selection Priority
+
+**Request parameter > Bot settings > .env > AvailableModels.txt**
+
+```
+1. Request "model" parameter (HIGHEST)
+   ↓ (if not specified)
+2. bot_settings.json (activeModel)
+   ↓ (if not set)
+3. .env (DEFAULT_MODEL)
+   ↓ (if not set)
+4. AvailableModels.txt (first model)
+```
+
+**Examples:**
+```bash
+# Uses qwen3.5-flash (explicit in request)
+curl ... -d '{"model":"qwen3.5-flash","messages":[...]}'
+
+# Uses active model from bot settings
+curl ... -d '{"messages":[...]}'
+```
+
+**Change via Telegram:**
+```bash
+/model qwen3.5-plus  # Sets active model for all requests without explicit model
 ```
 
 ---

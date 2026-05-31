@@ -85,9 +85,10 @@
 
 ```bash
 # Всё, что нужно -- обычный OpenAI-совместимый запрос
+# Модель будет взята из настроек бота (bot_settings.json)
 curl http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen-max-latest","messages":[{"role":"user","content":"Привет!"}]}'
+  -d '{"messages":[{"role":"user","content":"Привет!"}]}'
 ```
 
 ---
@@ -206,7 +207,7 @@ services:
       - TELEGRAM_PROXY=${TELEGRAM_PROXY:-}
       - TELEGRAM_PROXY_URL=${TELEGRAM_PROXY_URL:-}
       - TOKEN_EXPIRY_WARNING_MS=${TOKEN_EXPIRY_WARNING_MS:-3600000}
-      - DEFAULT_MODEL=${DEFAULT_MODEL:-qwen-max-latest}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-qwen3.5-plus}
     ports:
       - "${PORT:-3264}:3264"
     volumes:
@@ -454,7 +455,73 @@ Authorization: Bearer d35ab3e1-a6f9-4d00-b1c2-example-key1
 | `qwen3` | `qwen3-235b-a22b` |
 | `qwen-plus` | `qwen-plus-2025-09-11` |
 
-> Если запрошенная модель не найдена ни в списке, ни среди алиасов -- используется модель по умолчанию (`qwen-max-latest`, настраивается через `DEFAULT_MODEL`).
+> Если запрошенная модель не найдена ни в списке, ни среди алиасов -- используется активная модель из настроек бота (приоритет: `bot_settings.json` → `.env` → первая модель из `AvailableModels.txt`).
+
+### 🎯 Система выбора модели
+
+Проект использует **динамическую систему выбора модели** с централизованным управлением через настройки бота.
+
+#### Приоритет выбора модели
+
+```
+1. Запрошенная модель в запросе (параметр `model`)  ← ВЫСШИЙ ПРИОРИТЕТ
+   ↓ (если не указана)
+2. bot_settings.json (activeModel)  ← Устанавливается через /model в Telegram
+   ↓ (если не задана)
+3. .env файл (DEFAULT_MODEL)
+   ↓ (если не задана)
+4. AvailableModels.txt (первая модель) = "qwen3.5-plus"
+   ↓ (если файл недоступен)
+5. Fallback = "qwen3.5-plus"  ← НИЗШИЙ ПРИОРИТЕТ
+```
+
+#### Управление моделью
+
+**Через Telegram бота:**
+```bash
+# Установить модель
+/model qwen3.5-plus
+
+# Показать текущую модель
+/model
+
+# Сбросить на настройки по умолчанию
+/clear
+```
+
+**Через .env файл:**
+```bash
+# В файле .env
+DEFAULT_MODEL=qwen3.5-flash
+```
+
+**Программно:**
+```javascript
+// Модель берётся из настроек автоматически
+const response = await fetch('http://localhost:3264/api/chat/completions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    // model можно не указывать - будет использована активная модель
+    messages: [{ role: 'user', content: 'Привет!' }]
+  })
+});
+```
+
+#### Файл настроек
+
+Настройки хранятся в `session/bot_settings.json`:
+```json
+{
+  "activeModel": "qwen3.5-plus",
+  "llmChatEnabled": true,
+  "lastUpdated": "2026-05-31T18:59:48.000Z"
+}
+```
+
+> **💡 Преимущество:** Изменение модели через Telegram бота применяется **мгновенно** без перезапуска сервиса!
+
+---
 
 ---
 
@@ -501,7 +568,7 @@ Authorization: Bearer d35ab3e1-a6f9-4d00-b1c2-example-key1
 ```json
 {
   "message": "Текст сообщения",
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Optional - uses active model from settings
   "chatId": "идентификатор_чата",
   "parentId": "response_id_из_предыдущего_ответа"
 }
@@ -514,7 +581,7 @@ Authorization: Bearer d35ab3e1-a6f9-4d00-b1c2-example-key1
   "messages": [
     {"role": "user", "content": "Привет, как дела?"}
   ],
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Optional - uses active model from settings
   "chatId": "идентификатор_чата",
   "parentId": "response_id_из_предыдущего_ответа"
 }
@@ -574,7 +641,7 @@ const response = await fetch('/api/chat/', {
         content: "Как отсортировать список в Python?"
       }
     ],
-    model: "qwen-max-latest"
+    model: "qwen3.5-plus"  // Optional - uses active model from settings
   })
 });
 ```
@@ -705,7 +772,7 @@ POST http://localhost:3264/api/chats
   "id": "chatcmpl-1739012345678",
   "object": "chat.completion",
   "created": 1739012345,
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Or whatever model was used
   "choices": [
     {
       "index": 0,
@@ -735,7 +802,7 @@ curl -X POST http://localhost:3264/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "message": "Приведи практические примеры",
-    "model": "qwen-max-latest",
+    "model": "qwen3.5-plus",  // Or whatever model was used
     "chatId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "parentId": "f9e8d7c6-b5a4-3210-fedc-ba0987654321"
   }'
@@ -783,7 +850,7 @@ OpenAI-совместимый формат. Используйте этот эн
 curl -X POST http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen-max-latest",
+    "model": "qwen3.5-plus",  // Or whatever model was used
     "messages": [
       {"role": "system", "content": "Отвечай кратко и по существу."},
       {"role": "user", "content": "Столица Японии?"}
@@ -798,7 +865,7 @@ curl -X POST http://localhost:3264/api/chat/completions \
   "id": "chatcmpl-1739012345678",
   "object": "chat.completion",
   "created": 1739012345,
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Or whatever model was used
   "choices": [
     {
       "index": 0,
@@ -818,7 +885,7 @@ curl -X POST http://localhost:3264/api/chat/completions \
 
 ```json
 {
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Or whatever model was used
   "messages": [
     {"role": "user", "content": "Сколько будет 2+2?"}
   ],
@@ -878,7 +945,7 @@ POST /api/chat/completions
   "messages": [
     {"role": "user", "content": "Напиши длинный рассказ о космосе"}
   ],
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Or whatever model was used
   "stream": true
 }
 ```
@@ -888,7 +955,7 @@ POST /api/chat/completions
 ```json
 {
   "message": "Напиши длинный рассказ о космосе",
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Or whatever model was used
   "stream": true
 }
 ```
@@ -910,7 +977,7 @@ POST /api/chat/completions
   "messages": [
     {"role": "user", "content": "Привет!"}
   ],
-  "model": "qwen-max-latest",
+  "model": "qwen3.5-plus",  // Or whatever model was used
   "stream": true
 }
 ```
@@ -973,7 +1040,7 @@ POST /api/chat/completions
 curl -X POST http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen-max-latest",
+    "model": "qwen3.5-plus",  // Or whatever model was used
     "messages": [
       {"role": "user", "content": "Напиши хайку о программировании"}
     ],
@@ -1001,7 +1068,7 @@ data: [DONE]
 curl -X POST http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen-max-latest",
+    "model": "qwen3.5-plus",  // Or whatever model was used
     "messages": [
       {"role": "user", "content": "Теперь на тему космоса"}
     ],
@@ -1187,7 +1254,7 @@ API использует серверную историю чатов Qwen. Ка
 curl -X POST http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen-max-latest",
+    "model": "qwen3.5-plus",  // Or whatever model was used
     "messages": [{"role": "user", "content": "Что такое Docker?"}]
   }'
 ```
@@ -1207,7 +1274,7 @@ curl -X POST http://localhost:3264/api/chat/completions \
 curl -X POST http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen-max-latest",
+    "model": "qwen3.5-plus",  // Or whatever model was used
     "messages": [{"role": "user", "content": "Чем он отличается от виртуальных машин?"}],
     "chatId": "abc-123",
     "parentId": "def-456"
@@ -1229,7 +1296,7 @@ curl -X POST http://localhost:3264/api/chat/completions \
 curl -X POST http://localhost:3264/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen-max-latest",
+    "model": "qwen3.5-plus",  // Or whatever model was used
     "messages": [{"role": "user", "content": "Покажи пример Dockerfile для Node.js"}],
     "chatId": "abc-123",
     "parentId": "ghi-789"
@@ -1426,7 +1493,7 @@ python examples/python-direct/httpx_streaming.py
 |-----------|-------------|----------|
 | `PORT` | `3264` | Порт HTTP-сервера |
 | `HOST` | `0.0.0.0` | Адрес привязки |
-| `DEFAULT_MODEL` | `qwen-max-latest` | Модель, используемая если не указана в запросе |
+| `DEFAULT_MODEL` | `qwen3.5-plus` | Модель по умолчанию (если не задана в `bot_settings.json`) |
 | `ALLOW_UNSCOPED_SESSION_CHAT_RESTORE` | `false` | Разрешить legacy-восстановление контекста по IP + User-Agent, даже без `conversation_id`/`chatId` |
 
 ### Telegram бот 🤖

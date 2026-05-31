@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logInfo, logError, logWarn } from '../logger/index.js';
-import { SESSION_DIR } from '../config.js';
+import { SESSION_DIR, DEFAULT_MODEL } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -134,6 +134,47 @@ export function clearSettingsCache() {
     settingsCache = null;
     settingsCacheMTime = null;
     logInfo('🗑️ Кэш настроек очищен');
+}
+
+/**
+ * Получает активную модель из настроек бота
+ * Приоритет: activeModel из bot_settings.json > DEFAULT_MODEL из .env > первая модель из AvailableModels.txt
+ * @returns {string} название модели
+ */
+export function getActiveModel() {
+    try {
+        const settings = loadBotSettings();
+        
+        // Если есть activeModel в настройках бота - используем его
+        if (settings && settings.activeModel) {
+            return settings.activeModel;
+        }
+        
+        // Иначе используем DEFAULT_MODEL из .env
+        if (DEFAULT_MODEL) {
+            return DEFAULT_MODEL;
+        }
+        
+        // Fallback: первая модель из списка доступных
+        try {
+            const modelsFile = path.join(process.cwd(), 'src', 'AvailableModels.txt');
+            if (fs.existsSync(modelsFile)) {
+                const modelsContent = fs.readFileSync(modelsFile, 'utf8');
+                const models = modelsContent.split('\n').map(m => m.trim()).filter(m => m && !m.startsWith('#'));
+                if (models.length > 0) {
+                    return models[0];
+                }
+            }
+        } catch (e) {
+            // Если не удалось загрузить список моделей
+        }
+        
+        // Последний fallback
+        return 'qwen3.5-plus';
+    } catch (error) {
+        logError('❌ Ошибка получения активной модели', error);
+        return 'qwen3.5-plus';
+    }
 }
 
 /**

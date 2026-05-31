@@ -219,7 +219,6 @@ docker-compose logs | grep -i "archive\|extract"
 | Document | Description |
 |----------|-------------|
 | [README.md](README.md) | Main documentation |
-| [CHANGES.md](CHANGES.md) | What's new in v1.0.3 |
 | [docs/TELEGRAM_LLM_CHAT.md](docs/TELEGRAM_LLM_CHAT.md) | LLM chat guide |
 | [docs/TELEGRAM_PROXY.md](docs/TELEGRAM_PROXY.md) | Proxy setup |
 | [docs/TELEGRAM_TROUBLESHOOTING.md](docs/TELEGRAM_TROUBLESHOOTING.md) | Troubleshooting |

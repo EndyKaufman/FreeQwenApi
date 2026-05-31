@@ -28,6 +28,7 @@ export const TASK_STATUS_URL = process.env.TASK_STATUS_URL || `${QWEN_BASE_URL}/
 export const STS_TOKEN_API_URL = process.env.STS_TOKEN_API_URL || `${QWEN_BASE_URL}/api/v1/files/getstsToken`;
 export const AUTH_SIGNIN_URL = process.env.AUTH_SIGNIN_URL || `${QWEN_BASE_URL}/auth?action=signin`;
 export const OSS_SDK_URL = process.env.OSS_SDK_URL || 'https://gosspublic.alicdn.com/aliyun-oss-sdk-6.20.0.min.js';
+export const MODELS_API_URL = process.env.MODELS_API_URL || `${QWEN_BASE_URL}/api/v2/models`;
 
 // ─── Таймауты (мс) ──────────────────────────────────────────────────────────
 export const PAGE_TIMEOUT = Number(process.env.PAGE_TIMEOUT) || 120_000;
@@ -58,7 +59,8 @@ export const USER_AGENT = process.env.USER_AGENT || 'Mozilla/5.0 (Windows NT 10.
 // ─── Сервер ──────────────────────────────────────────────────────────────────
 export const PORT = Number(process.env.PORT) || 3264;
 export const HOST = process.env.HOST || '0.0.0.0';
-export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'qwen-max-latest';
+// DEFAULT_MODEL будет установлен динамически из списка моделей, если не задан в .env
+export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || null;
 export const ALLOW_UNSCOPED_SESSION_CHAT_RESTORE = toBoolean(process.env.ALLOW_UNSCOPED_SESSION_CHAT_RESTORE);
 
 // ─── Логирование ─────────────────────────────────────────────────────────────

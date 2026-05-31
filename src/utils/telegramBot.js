@@ -1,5 +1,7 @@
 import { logInfo, logError, logWarn } from '../logger/index.js';
 import { TELEGRAM_BOT_TOKEN, TELEGRAM_USER_IDS, SESSION_DIR, DEFAULT_MODEL, TELEGRAM_PROXY, TELEGRAM_PROXY_URL } from '../config.js';
+import { getDefaultModel, getAvailableModelsFromFile } from '../api/chat.js';
+import { loadBotSettings, saveBotSettings, loadChatModels, setChatModel, getChatModel } from './botSettings.js';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
@@ -17,8 +19,31 @@ let isBotRunning = false;
 // Хранилище контекста чатов для LLM
 const chatContexts = new Map();
 
-// Флаг включения LLM чата
+// Глобальная активная модель (загружается из файла)
+let activeModel = null;
+
+// Флаг включения LLM чата (загружается из файла)
 let llmChatEnabled = false;
+
+/**
+ * Загружает сохраненные настройки при старте
+ */
+function loadPersistedSettings() {
+    try {
+        // Загружаем глобальные настройки
+        const settings = loadBotSettings();
+        if (settings.activeModel) {
+            activeModel = settings.activeModel;
+            logInfo(`📝 Загружена активная модель: ${activeModel}`);
+        } else {
+            logInfo(`📝 Активная модель не установлена, используется модель по умолчанию`);
+        }
+        llmChatEnabled = settings.llmChatEnabled || false;
+        logInfo(`📝 LLM чат: ${llmChatEnabled ? 'включен' : 'выключен'}`);
+    } catch (error) {
+        logError('❌ Ошибка загрузки сохраненных настроек', error);
+    }
+}
 
 /**
  * Проверяет есть ли аккаунты с токенами
@@ -152,8 +177,11 @@ export async function processPendingArchive() {
 
 /**
  * Проверяет все подсистемы и отправляет отчет
+ * @param {boolean} botStarted - запущен ли бот
+ * @param {boolean} autoSend - автоматически отправлять отчет (по умолчанию true)
+ * @returns {Promise<Array>} массив проверок
  */
-export async function checkAllSubsystems(botStarted) {
+export async function checkAllSubsystems(botStarted, autoSend = true) {
     const checks = [];
     let allOk = true;
 
@@ -248,6 +276,17 @@ export async function checkAllSubsystems(botStarted) {
         status: botStarted,
         details: botStarted ? '✅ Работает' : '❌ Не запущен'
     });
+    
+    // 3.1. Показываем настройки бота (если загружены)
+    if (botStarted) {
+        const llmStatus = llmChatEnabled ? '✅ Включен' : '❌ Выключен';
+        const modelUsed = activeModel || getDefaultModel();
+        checks.push({
+            name: '   ⚙️ LLM режим',
+            status: llmChatEnabled,
+            details: `${llmStatus} (модель: ${modelUsed})`
+        });
+    }
 
     // 4. Проверяем прокси
     checks.push({
@@ -293,6 +332,65 @@ export async function checkAllSubsystems(botStarted) {
         allOk = false;
     }
 
+    // 8. Проверяем работу AI (только если есть токены)
+    if (tokens.length > 0) {
+        try {
+            logInfo('🧪 Тестирование AI нейросети (ping pong)...');
+            
+            // Импортируем функцию sendMessage для прямого запроса к Qwen
+            const { sendMessage } = await import('../api/chat.js');
+            const testModel = getDefaultModel();
+            
+            // Делаем запрос напрямую к Qwen API через наш модуль
+            const startTime = Date.now();
+            const result = await sendMessage('ping', testModel, null, null, null, null, null, null, 't2t', null, true, 0);
+            const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
+            
+            if (result && !result.error) {
+                const responseContent = result.choices?.[0]?.message?.content || '';
+                const usedModel = result.model || testModel;
+                
+                checks.push({
+                    name: '🧠 AI Нейросеть',
+                    status: true,
+                    details: `✅ Работает (модель: ${usedModel}, время: ${responseTime}с)`
+                });
+                
+                checks.push({
+                    name: '   📝 Ответ',
+                    status: true,
+                    details: `💬 "${responseContent.substring(0, 50)}${responseContent.length > 50 ? '...' : ''}"`
+                });
+                
+                logInfo(`✅ AI тест прошел успешно: модель=${usedModel}, время=${responseTime}с, ответ="${responseContent.substring(0, 50)}"`);
+            } else {
+                const errorMsg = result.error || 'Unknown error';
+                
+                checks.push({
+                    name: '🧠 AI Нейросеть',
+                    status: false,
+                    details: `❌ Ошибка: ${errorMsg.substring(0, 80)}`
+                });
+                
+                logError(`❌ AI тест не пройден: ${errorMsg}`);
+            }
+        } catch (error) {
+            checks.push({
+                name: '🧠 AI Нейросеть',
+                status: false,
+                details: `❌ Ошибка подключения: ${error.message.substring(0, 80)}`
+            });
+            
+            logError('❌ AI тест не пройден (ошибка подключения)', error);
+        }
+    } else {
+        checks.push({
+            name: '🧠 AI Нейросеть',
+            status: false,
+            details: '⏸️ Пропущено (нет токенов)'
+        });
+    }
+
     // Формируем отчет для логов
     logInfo('='.repeat(60));
     logInfo('🔍 ПРОВЕРКА ПОД СИСТЕМ ПРИ ЗАПУСКЕ');
@@ -324,7 +422,8 @@ export async function checkAllSubsystems(botStarted) {
     // Группа 1: Основные компоненты
     reportLines.push(`<b>🔑 Основные компоненты:</b>`);
     const mainComponents = checks.filter(c => 
-        c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') || c.name.includes('Токен ')
+        c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') || 
+        c.name.includes('Токен ') || c.name.includes('AI') || c.name.includes('Ответ')
     );
     mainComponents.forEach(check => {
         reportLines.push(`${check.name}: ${check.details}`);
@@ -369,11 +468,22 @@ export async function checkAllSubsystems(botStarted) {
     // Ссылки
     reportLines.push(`\n🌐 API: http://localhost:${process.env.PORT || 3264}`);
     reportLines.push(`📖 Docs: http://localhost:${process.env.PORT || 3264}/api`);
+    
+    // Репозиторий
+    reportLines.push(`\n📚 <b>Репозиторий:</b>`);
+    reportLines.push(`🔗 GitHub: https://github.com/EndyKaufman/FreeQwenApi`);
+    reportLines.push(`⭐ Оригинал: https://github.com/y1n7sint/FreeQwenApi`);
+    
+    // Справка
+    reportLines.push(`\n💡 <b>Справка:</b>`);
+    reportLines.push(`📝 Используйте /help для списка команд`);
+    reportLines.push(`🔍 Используйте /status для проверки состояния`);
+    reportLines.push(`🤖 Используйте /chat для включения LLM режима`);
 
     const report = reportLines.join('\n');
 
-    // Отправляем всем пользователям
-    if (botStarted) {
+    // Отправляем всем пользователям (только если autoSend = true)
+    if (autoSend && botStarted) {
         try {
             await notifyAllUsers(report);
             logInfo('📤 Отчет о запуске отправлен в Telegram');
@@ -419,6 +529,9 @@ export async function startTelegramBot() {
 
     try {
         logInfo('🤖 Запуск Telegram бота...');
+        
+        // Загружаем сохраненные настройки
+        loadPersistedSettings();
 
         // Проверяем доступность API Telegram
         const testUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`;
@@ -581,6 +694,12 @@ async function processUpdate(update) {
 async function handleCommand(chatId, text) {
     const command = text.trim().toLowerCase();
 
+    // Обработка команды /setmodel с аргументом
+    if (command.startsWith('/setmodel')) {
+        await handleSetModel(chatId, text);
+        return;
+    }
+
     switch (command) {
         case '/start':
         case '/help':
@@ -596,10 +715,18 @@ async function handleCommand(chatId, text) {
             break;
 
         case '/chat':
+            await showLLMChatStatus(chatId);
+            break;
+
+        case '/togglechat':
             await toggleLLMChat(chatId);
             break;
 
         case '/model':
+            await showModelInfo(chatId);
+            break;
+
+        case '/setmodel':
             await showModelInfo(chatId);
             break;
 
@@ -1283,9 +1410,11 @@ async function sendHelpMessage(chatId) {
     if (accountsExist) {
         helpText +=
             `🤖 <b>LLM Чат (AI ассистент):</b>\n\n` +
-            `/chat - Включить/выключить LLM чат\n` +
+            `/chat - Показать состояние LLM чата\n` +
+            `/togglechat - Включить/выключить LLM чат\n` +
             `/clear - Очистить контекст чата\n` +
-            `/model - Информация о модели\n\n` +
+            `/model - Информация о модели\n` +
+            `/setmodel &lt;название&gt; - Сменить модель\n\n` +
             `💡 Когда LLM чат включен, просто отправляйте сообщения!\n\n`;
     } else {
         helpText +=
@@ -1457,8 +1586,8 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
         const botStarted = !!telegramToken;
         
-        // Проверяем все подсистемы
-        const checks = await checkAllSubsystems(botStarted);
+        // Проверяем все подсистемы (не отправляем автоматически, так как sendStatusMessage отправит сам)
+        const checks = await checkAllSubsystems(botStarted, false);
         
         // Формируем сообщение с统一的格式
         const reportLines = [];
@@ -1481,7 +1610,8 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         // Группа 1: Основные компоненты
         reportLines.push(`<b>🔑 Основные компоненты:</b>`);
         const mainComponents = checks.filter(c => 
-            c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') || c.name.includes('Токен ')
+            c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') || 
+            c.name.includes('Токен ') || c.name.includes('AI') || c.name.includes('Ответ')
         );
         mainComponents.forEach(check => {
             reportLines.push(`${check.name}: ${check.details}`);
@@ -1529,6 +1659,17 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         // Ссылки
         reportLines.push(`\n🌐 API: http://localhost:${process.env.PORT || 3264}`);
         reportLines.push(`📖 Docs: http://localhost:${process.env.PORT || 3264}/api`);
+        
+        // Репозиторий
+        reportLines.push(`\n📚 <b>Репозиторий:</b>`);
+        reportLines.push(`🔗 GitHub: https://github.com/EndyKaufman/FreeQwenApi`);
+        reportLines.push(`⭐ Оригинал: https://github.com/y1n7sint/FreeQwenApi`);
+        
+        // Справка
+        reportLines.push(`\n💡 <b>Справка:</b>`);
+        reportLines.push(`📝 Используйте /help для списка команд`);
+        reportLines.push(`🔍 Используйте /status для проверки состояния`);
+        reportLines.push(`🤖 Используйте /chat для включения LLM режима`);
 
         const report = reportLines.join('\n');
         await sendMessage(chatId, report);
@@ -1660,6 +1801,9 @@ async function handleLLMChat(chatId, userMessage) {
         // Отправляем запрос к Qwen API
         const apiUrl = `http://localhost:${process.env.PORT || 3264}/api/chat/completions`;
 
+        // Получаем модель для этого чата
+        const model = getModelForChat(chatId);
+
         const requestBody = {
             messages: [
                 {
@@ -1668,7 +1812,7 @@ async function handleLLMChat(chatId, userMessage) {
                 },
                 ...context
             ],
-            model: DEFAULT_MODEL || 'qwen-max-latest',
+            model: model,
             stream: false
         };
 
@@ -1682,7 +1826,43 @@ async function handleLLMChat(chatId, userMessage) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Qwen API error: ${response.status} - ${errorText}`);
+            
+            // Логируем полную ошибку
+            logError(`❌ LLM Chat: Qwen API error ${response.status}`, errorText);
+            
+            // Пытаемся распарсить JSON для лучшего форматирования
+            let errorJson;
+            try {
+                errorJson = JSON.parse(errorText);
+            } catch {
+                errorJson = { error: errorText };
+            }
+            
+            // Формируем сообщение об ошибке с полным JSON
+            const escapedJson = escapeHtmlForCode(JSON.stringify(errorJson, null, 2));
+            const errorMessage = 
+                `❌ <b>Ошибка Qwen API</b>\n\n` +
+                `Статус: <code>${response.status}</code>\n\n` +
+                `<b>Полный ответ:</b>\n` +
+                `<pre>${escapedJson}</pre>\n\n` +
+                `💡 Попробуйте еще раз или используйте /clear`;
+            
+            // Отправляем ошибку (разбиваем если длинная)
+            if (errorMessage.length > 4000) {
+                const chunks = splitMessage(errorMessage, 4000);
+                for (const chunk of chunks) {
+                    await sendMessage(chatId, chunk);
+                }
+            } else {
+                await sendMessage(chatId, errorMessage);
+            }
+            
+            // Удаляем последнее сообщение пользователя из контекста (оно не было обработано)
+            if (context.length > 0) {
+                context.pop();
+            }
+            
+            return; // Выходим, не выбрасывая ошибку
         }
 
         const data = await response.json();
@@ -1708,10 +1888,31 @@ async function handleLLMChat(chatId, userMessage) {
 
     } catch (error) {
         logError('❌ LLM Chat: Ошибка', error);
-        await sendMessage(chatId,
-            `❌ Ошибка при обработке запроса:\n${error.message}\n\n` +
-            `Попробуйте еще раз или используйте /clear для очистки контекста.`
-        );
+        
+        // Формируем сообщение об ошибке с деталями
+        const escapedStack = escapeHtmlForCode(error.stack || 'Stack trace unavailable');
+        const errorMessage = 
+            `❌ <b>Ошибка при обработке запроса</b>\n\n` +
+            `<b>Тип:</b> ${error.name || 'Unknown'}\n` +
+            `<b>Сообщение:</b> ${escapeHtml(error.message)}\n\n` +
+            `<b>Стек:</b>\n` +
+            `<pre>${escapedStack}</pre>\n\n` +
+            `💡 Попробуйте еще раз или используйте /clear для очистки контекста.`;
+        
+        // Отправляем ошибку (разбиваем если длинная)
+        if (errorMessage.length > 4000) {
+            const chunks = splitMessage(errorMessage, 4000);
+            for (const chunk of chunks) {
+                await sendMessage(chatId, chunk);
+            }
+        } else {
+            await sendMessage(chatId, errorMessage);
+        }
+        
+        // Удаляем последнее сообщение пользователя из контекста
+        if (context && context.length > 0) {
+            context.pop();
+        }
     }
 }
 
@@ -1731,7 +1932,14 @@ async function toggleLLMChat(chatId) {
         return;
     }
 
+    // Если LLM уже включен - выключаем, и наоборот
     llmChatEnabled = !llmChatEnabled;
+    
+    // Сохраняем состояние LLM чата
+    saveBotSettings({
+        activeModel: activeModel,
+        llmChatEnabled: llmChatEnabled
+    });
 
     if (llmChatEnabled) {
         // Инициализируем контекст чата
@@ -1742,46 +1950,126 @@ async function toggleLLMChat(chatId) {
         await sendMessage(chatId,
             `✅ <b>LLM чат включен!</b>\n\n` +
             `🤖 Теперь я отвечаю как AI ассистент.\n` +
-            `📝 Модель: ${DEFAULT_MODEL || 'qwen-max-latest'}\n` +
-            `💬 Просто отправляйте сообщения.\n\n` +
+            `📝 Модель: ${getModelForChat(chatId)}\n` +
+            `💬 Просто отправляйте сообщения.\n` +
+            `💾 Настройка сохранена\n\n` +
             `<b>Команды:</b>\n` +
-            `/chat - Выключить LLM чат\n` +
+            `/togglechat - Выключить LLM чат\n` +
             `/clear - Очистить контекст\n` +
             `/model - Информация о модели\n` +
+            `/setmodel &lt;название&gt; - Сменить модель\n` +
             `/help - Все команды бота`
         );
 
-        logInfo(`✅ LLM Chat включен для пользователя ${chatId}`);
+        logInfo(`✅ LLM Chat включен для пользователя ${chatId} (сохранено)`);
     } else {
         await sendMessage(chatId,
             `❌ <b>LLM чат выключен</b>\n\n` +
             `🔧 Возвращен в режим управления ботом.\n` +
-            `Используйте /chat чтобы включить снова.`
+            `💾 Настройка сохранена\n` +
+            `Используйте /togglechat чтобы включить снова.`
         );
 
-        logInfo(`❌ LLM Chat выключен для пользователя ${chatId}`);
+        logInfo(`❌ LLM Chat выключен для пользователя ${chatId} (сохранено)`);
     }
+}
+
+/**
+ * Показывает текущее состояние LLM чата
+ */
+async function showLLMChatStatus(chatId) {
+    const status = llmChatEnabled ? '✅ Включен' : '❌ Выключен';
+    const model = getModelForChat(chatId);
+    const context = chatContexts.get(chatId) || [];
+    
+    await sendMessage(chatId,
+        `📊 <b>Состояние LLM чата</b>\n\n` +
+        `🔧 Статус: ${status}\n` +
+        `🤖 Модель: <code>${model}</code>\n` +
+        `💬 Сообщений в контексте: ${context.length}\n\n` +
+        `💡 Используйте /togglechat чтобы ${llmChatEnabled ? 'выключить' : 'включить'} LLM чат`
+    );
+    
+    logInfo(`📊 Проверка статуса LLM чата: ${llmChatEnabled ? 'включен' : 'выключен'}`);
+}
+
+/**
+ * Обрабатывает команду /setmodel
+ */
+async function handleSetModel(chatId, text) {
+    const parts = text.trim().split(/\s+/);
+    
+    // Если нет аргумента - показываем текущую модель
+    if (parts.length < 2) {
+        await showModelInfo(chatId);
+        return;
+    }
+    
+    const requestedModel = parts[1].trim();
+    const availableModels = getAvailableModelsFromFile();
+    
+    // Проверяем что модель существует
+    if (!availableModels.includes(requestedModel)) {
+        await sendMessage(chatId,
+            `❌ <b>Модель не найдена</b>\n\n` +
+            `Модель <code>${requestedModel}</code> не найдена в списке доступных.\n\n` +
+            `<b>Используйте /model для списка доступных моделей</b>`
+        );
+        logWarn(`❌ Пользователь ${chatId} попытался установить несуществующую модель: ${requestedModel}`);
+        return;
+    }
+    
+    // Устанавливаем глобальную активную модель
+    activeModel = requestedModel;
+    
+    // Сохраняем в файл
+    const settings = loadBotSettings();
+    settings.activeModel = requestedModel;
+    saveBotSettings(settings);
+    
+    await sendMessage(chatId,
+        `✅ <b>Модель изменена!</b>\n\n` +
+        `🤖 Новая модель: <code>${requestedModel}</code>\n` +
+        `💬 Будет использоваться во всех чатах\n` +
+        `💾 Настройка сохранена\n\n` +
+        `💡 Для сброса используйте /clear`
+    );
+    
+    logInfo(`✅ Установлена глобальная модель: ${requestedModel} (сохранено)`);
+}
+
+/**
+ * Получает активную модель
+ * Приоритет: activeModel из настроек > default из config
+ */
+function getModelForChat(chatId) {
+    // Если установлена активная модель, используем её
+    if (activeModel) {
+        return activeModel;
+    }
+    
+    // Возвращаем default модель из config
+    return getDefaultModel();
 }
 
 /**
  * Показывает информацию о модели
  */
 async function showModelInfo(chatId) {
-    const model = DEFAULT_MODEL || 'qwen-max-latest';
+    const currentModel = getModelForChat(chatId);
     const context = chatContexts.get(chatId) || [];
+    const availableModels = getAvailableModelsFromFile();
 
     const message =
         `📊 <b>Информация о модели</b>\n\n` +
-        `🤖 Модель: <code>${model}</code>\n` +
+        `🤖 Активная модель: <code>${currentModel}</code>\n` +
         `💬 Сообщений в контексте: ${context.length}\n` +
         `🔧 LLM чат: ${llmChatEnabled ? '✅ Включен' : '❌ Выключен'}\n\n` +
         `<b>Доступные модели:</b>\n` +
-        `• qwen-max-latest (по умолчанию)\n` +
-        `• qwen-plus\n` +
-        `• qwen-turbo\n` +
-        `• qwen3-max\n` +
-        `• qwen-vl-max\n\n` +
-        `💡 Для смены модели измените DEFAULT_MODEL в .env`;
+        availableModels.map(m => `<code>${m}</code>`).join(', ') +
+        `\n\n💡 Для смены модели используйте:\n` +
+        `/setmodel &lt;название_модели&gt;\n` +
+        `Например: /setmodel qwen3-max`;
 
     await sendMessage(chatId, message);
 }
@@ -1848,4 +2136,26 @@ function splitMessage(text, maxLength) {
     }
 
     return chunks;
+}
+
+/**
+ * Экранирует HTML специальные символы
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * Экранирует текст для вставки в <pre> тег (только < и &)
+ */
+function escapeHtmlForCode(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
 }

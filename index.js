@@ -3,7 +3,7 @@ import bodyParser from 'body-parser';
 
 import { initBrowser, shutdownBrowser } from './src/browser/browser.js';
 import apiRoutes from './src/api/routes.js';
-import { getAvailableModelsFromFile, getApiKeys } from './src/api/chat.js';
+import { getAvailableModelsFromFile, fetchModelsFromAPI, getDefaultModel, getApiKeys } from './src/api/chat.js';
 import { loadTokens } from './src/api/tokenManager.js';
 import { addAccountInteractive } from './src/utils/accountSetup.js';
 import { logHttpRequest, logInfo, logError, logWarn } from './src/logger/index.js';
@@ -217,7 +217,7 @@ async function startServer() {
     }
 
     try {
-        app.listen(port, host, () => {
+        app.listen(port, host, async () => {
             const displayHost = host === '0.0.0.0' ? 'localhost' : host;
             logInfo(`Сервер запущен на ${host}:${port}`);
             logInfo(`API доступен по адресу: http://${displayHost}:${port}/api`);
@@ -245,8 +245,20 @@ async function startServer() {
             logInfo('В ответе возвращаются chatId и parentId для продолжения диалога');
             logInfo('======================================================');
 
+            // Загружаем список моделей (сначала из API, потом из файла как fallback)
+            const apiModels = await fetchModelsFromAPI();
+            if (apiModels && apiModels.length > 0) {
+                logInfo(`✅ Загружено ${apiModels.length} моделей с Qwen API`);
+                // Можно сохранить в файл при необходимости
+            } else {
+                logInfo('⚠️ Используем модели из локального файла');
+                getAvailableModelsFromFile();
+            }
+            
+            const defaultModel = getDefaultModel();
+            logInfo(`🎯 Модель по умолчанию: ${defaultModel}`);
+            
             getApiKeys();
-            getAvailableModelsFromFile();
         });
     } catch (err) {
         if (err.code === 'EADDRINUSE') {

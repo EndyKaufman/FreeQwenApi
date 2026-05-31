@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL } from '../config.js';
+import { getDefaultModel } from './chat.js';
 
 const CANONICAL_MODELS = Object.freeze([
     "qwen3.5-plus",
@@ -209,8 +209,10 @@ export const MODEL_MAPPING = buildModelMapping();
  * @param {string} defaultModel - Модель по умолчанию
  * @returns {string} - Доступная модель
  */
-export function getMappedModel(requestedModel, defaultModel = DEFAULT_MODEL) {
-    if (!requestedModel) return defaultModel;
+export function getMappedModel(requestedModel, defaultModel = null) {
+    // Если defaultModel не передан, используем динамический default
+    const effectiveDefault = defaultModel || getDefaultModel();
+    if (!requestedModel) return effectiveDefault;
 
     // Проверяем точное соответствие в словаре
     if (MODEL_MAPPING[requestedModel]) {
@@ -224,5 +226,5 @@ export function getMappedModel(requestedModel, defaultModel = DEFAULT_MODEL) {
     }
 
     // Возвращаем модель по умолчанию, если соответствие не найдено
-    return defaultModel;
+    return effectiveDefault;
 } 

@@ -5,3 +5,6 @@
 !.gitkeep
 !.gitignore
 !history
+
+# Настройки бота (сохраняются в Git)
+!bot_settings.json

@@ -13,7 +13,8 @@ import {
     CHAT_API_URL, CREATE_CHAT_URL, CHAT_PAGE_URL, TASK_STATUS_URL,
     PAGE_TIMEOUT, RETRY_DELAY, PAGE_POOL_SIZE,
     DEFAULT_MODEL, MAX_RETRY_COUNT,
-    TASK_POLL_MAX_ATTEMPTS, TASK_POLL_INTERVAL, TOKEN_EXPIRY_WARNING_MS
+    TASK_POLL_MAX_ATTEMPTS, TASK_POLL_INTERVAL, TOKEN_EXPIRY_WARNING_MS,
+    MODELS_API_URL
 } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,6 +27,7 @@ let authToken = null;
 let availableModels = null;
 let authKeys = null;
 let browserTokenRateLimited = false;
+let resolvedDefaultModel = null; // Будет установлен при загрузке моделей
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -229,11 +231,61 @@ export async function extractAuthToken(context, forceRefresh = false) {
 
 // ─── Models & keys from files ────────────────────────────────────────────────
 
+export async function fetchModelsFromAPI() {
+    try {
+        logInfo('Загрузка списка моделей с Qwen API...');
+        
+        // Пробуем получить через node fetch (без браузера)
+        if (typeof fetch === 'function') {
+            const response = await fetch(MODELS_API_URL, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                timeout: 10000
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Пробуем разные форматы ответа
+                let models = [];
+                if (Array.isArray(data)) {
+                    models = data;
+                } else if (data.models && Array.isArray(data.models)) {
+                    models = data.models;
+                } else if (data.data && Array.isArray(data.data)) {
+                    models = data.data;
+                }
+                
+                // Извлекаем ID моделей
+                const modelIds = models.map(m => {
+                    if (typeof m === 'string') return m;
+                    return m.id || m.model_id || m.name;
+                }).filter(Boolean);
+                
+                if (modelIds.length > 0) {
+                    logInfo(`Загружено ${modelIds.length} моделей с API`);
+                    return modelIds;
+                }
+            } else {
+                logWarn(`API вернул статус ${response.status}, используем локальный файл`);
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        logWarn(`Не удалось загрузить модели с API: ${error.message}`);
+        return null;
+    }
+}
+
 export function getAvailableModelsFromFile() {
     try {
         if (!fs.existsSync(MODELS_FILE)) {
             logError(`Файл с моделями не найден: ${MODELS_FILE}`);
-            return [DEFAULT_MODEL];
+            return resolvedDefaultModel ? [resolvedDefaultModel] : ['qwen-max-latest'];
         }
         const models = fs.readFileSync(MODELS_FILE, 'utf8')
             .split('\n')
@@ -243,10 +295,17 @@ export function getAvailableModelsFromFile() {
         logInfo('===== ДОСТУПНЫЕ МОДЕЛИ =====');
         models.forEach(m => logInfo(`- ${m}`));
         logInfo('============================');
+        
+        // Устанавливаем default model как первую из списка, если не задана в .env
+        if (!resolvedDefaultModel && models.length > 0) {
+            resolvedDefaultModel = models[0];
+            logInfo(`Default модель установлена: ${resolvedDefaultModel} (первая из списка)`);
+        }
+        
         return models;
     } catch (error) {
         logError('Ошибка при чтении файла с моделями', error);
-        return [DEFAULT_MODEL];
+        return resolvedDefaultModel ? [resolvedDefaultModel] : ['qwen-max-latest'];
     }
 }
 
@@ -275,6 +334,11 @@ function getAuthKeysFromFile() {
 export function isValidModel(modelName) {
     if (!availableModels) availableModels = getAvailableModelsFromFile();
     return availableModels.includes(modelName);
+}
+
+export function getDefaultModel() {
+    // Приоритет: .env > первая модель из списка > fallback
+    return DEFAULT_MODEL || resolvedDefaultModel || 'qwen-max-latest';
 }
 
 export function getAllModels() {
@@ -754,9 +818,18 @@ async function executeApiRequest(page, apiUrl, payload, token, onChunk = null) {
 
 async function handleApiError(response, tokenObj, message, model, chatId, parentId, files, retryCount, chatType, size, waitForCompletion, onChunk = null) {
     logRaw(JSON.stringify(response));
-    logError(`Ошибка при получении ответа: ${response.error || response.statusText}`);
-    if (response.errorBody) logDebug(`Тело ответа с ошибкой: ${response.errorBody}`);
-
+    
+    // Улучшенная обработка ошибок с полной диагностикой
+    const errorMessage = response.error || response.statusText || response.errorBody || 'Неизвестная ошибка';
+    logError(`Ошибка при получении ответа: ${errorMessage}`);
+    
+    // Логируем дополнительную информацию для отладки
+    if (response.status) logDebug(`HTTP статус: ${response.status}`);
+    if (response.errorBody) logDebug(`Тело ответа с ошибкой: ${response.errorBody.substring(0, 500)}${response.errorBody.length > 500 ? '...' : ''}`);
+    if (response.error) logDebug(`Ошибка из response: ${response.error}`);
+    if (response.statusText) logDebug(`StatusText: ${response.statusText}`);
+    logDebug(`Полный объект ответа: ${JSON.stringify(response, null, 2).substring(0, 1000)}`);
+    
     if (response.html && response.html.includes('Verification')) {
         setAuthenticationStatus(false);
         logInfo('Обнаружена необходимость верификации, перезапуск браузера в видимом режиме...');
@@ -811,7 +884,7 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
 
 // ─── Main public API ─────────────────────────────────────────────────────────
 
-export async function sendMessage(message, model = DEFAULT_MODEL, chatId = null, parentId = null, files = null, tools = null, toolChoice = null, systemMessage = null, chatType = 't2t', size = null, waitForCompletion = true, retryCount = 0, onChunk = null) {
+export async function sendMessage(message, model = getDefaultModel(), chatId = null, parentId = null, files = null, tools = null, toolChoice = null, systemMessage = null, chatType = 't2t', size = null, waitForCompletion = true, retryCount = 0, onChunk = null) {
     if (!availableModels) availableModels = getAvailableModelsFromFile();
 
     if (!chatId) {
@@ -829,10 +902,10 @@ export async function sendMessage(message, model = DEFAULT_MODEL, chatId = null,
     const messageContent = validated.content;
 
     if (!model || model.trim() === '') {
-        model = DEFAULT_MODEL;
+        model = getDefaultModel();
     } else if (!isValidModel(model)) {
         logWarn(`Модель "${model}" не найдена в списке доступных. Используется модель по умолчанию.`);
-        model = DEFAULT_MODEL;
+        model = getDefaultModel();
     }
     logInfo(`Используемая модель: "${model}"`);
     if (chatType !== 't2t') {
@@ -989,7 +1062,7 @@ export function getAuthToken() {
 
 // ─── createChatV2 ────────────────────────────────────────────────────────────
 
-export async function createChatV2(model = DEFAULT_MODEL, title = 'Новый чат', retryCount = 0) {
+export async function createChatV2(model = getDefaultModel(), title = 'Новый чат', retryCount = 0) {
     const browserContext = getBrowserContext();
     if (!browserContext) return { error: 'Браузер не инициализирован' };
 

@@ -7,7 +7,8 @@ import { getMappedModel } from './modelMapping.js';
 import { getStsToken, uploadFileToQwen } from './fileUpload.js';
 import { loadHistory, saveHistory } from './chatHistory.js';
 import { generateImage, getAvailableImageModels, checkImageApiAvailability } from './imageGeneration.js';
-import { MAX_FILE_SIZE, UPLOADS_DIR, DEFAULT_MODEL, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE } from '../config.js';
+import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE } from '../config.js';
+import { getDefaultModel } from './chat.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -662,7 +663,7 @@ router.get('/status', async (req, res) => {
 router.post('/chats', async (req, res) => {
     try {
         const { name, model } = req.body;
-        const chatModel = model ? getMappedModel(model) : DEFAULT_MODEL;
+        const chatModel = model ? getMappedModel(model) : getDefaultModel();
         logInfo(`Создание нового чата${name ? ` с именем: ${name}` : ''}, модель: ${chatModel}`);
         const result = await createChatV2(chatModel, name || 'Новый чат');
         if (result.error) { logError(`Ошибка создания чата: ${result.error}`); return res.status(500).json({ error: result.error }); }

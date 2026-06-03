@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { logInfo, logError, logDebug } from '../logger/index.js';
 import { sendMessage } from './chat.js';
+import { uploadFileToQwen } from './fileUpload.js';
 import { IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY } from '../config.js';
 
 const DASHSCOPE_API_BASE = 'https://dashscope-intl.aliyuncs.com/api/v1';
@@ -67,6 +68,30 @@ async function generateImageViaDashScope(prompt, model = 'qwen-image-plus', opti
             }
         };
 
+        // Если есть изображение для image-to-image
+        if (options.imagePath) {
+            logInfo(`📸 Image-to-image mode: загружаем файл ${options.imagePath}`);
+            
+            // Загружаем файл в Qwen и получаем URL
+            const uploadResult = await uploadFileToQwen(options.imagePath);
+            
+            // Проверяем успешность загрузки
+            if (!uploadResult || uploadResult.success === false) {
+                const errorMsg = uploadResult?.error || 'Unknown error';
+                logError(`❌ Ошибка загрузки файла: ${errorMsg}`);
+                throw new Error(`Не удалось загрузить изображение: ${errorMsg}`);
+            }
+            
+            if (uploadResult.file_url || uploadResult.url) {
+                const fileUrl = uploadResult.file_url || uploadResult.url;
+                logInfo(`✅ Файл загружен: ${fileUrl}`);
+                payload.input.image_url = fileUrl;
+            } else {
+                logError('❌ URL файла не найден в результате загрузки:', uploadResult);
+                throw new Error('Не удалось получить URL загруженного изображения');
+            }
+        }
+
         // Асинхронный запрос для Wan моделей
         const isWanModel = model.startsWith('wan');
         const endpoint = isWanModel 
@@ -125,13 +150,39 @@ async function generateImageViaBrowser(prompt, model = 'qwen-image-plus', option
         logInfo(`🖼️ Browser mode: генерация изображения через ${model}...`);
         logDebug(`Prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
 
+        // Подготавливаем файлы если есть imagePath
+        let files = null;
+        if (options.imagePath) {
+            logInfo(`📸 Image-to-image mode: загружаем файл ${options.imagePath}`);
+            
+            // Загружаем файл в Qwen и получаем URL
+            const uploadResult = await uploadFileToQwen(options.imagePath);
+            
+            // Проверяем успешность загрузки
+            if (!uploadResult || uploadResult.success === false) {
+                const errorMsg = uploadResult?.error || 'Unknown error';
+                logError(`❌ Ошибка загрузки файла: ${errorMsg}`);
+                throw new Error(`Не удалось загрузить изображение: ${errorMsg}`);
+            }
+            
+            if (uploadResult.file_url || uploadResult.url) {
+                const fileUrl = uploadResult.file_url || uploadResult.url;
+                logInfo(`✅ Файл загружен: ${fileUrl}`);
+                // Формат файла для API: { url: '...' }
+                files = [{ url: fileUrl }];
+            } else {
+                logError('❌ URL файла не найден в результате загрузки:', uploadResult);
+                throw new Error('Не удалось получить URL загруженного изображения');
+            }
+        }
+
         // Используем sendMessage с chatType='t2i' (text-to-image)
         const result = await sendMessage(
             prompt,
             model,
             null, // chatId - будет создан автоматически
             null, // parentId
-            null, // files
+            files, // files - изображение для image-to-image
             null, // tools
             null, // toolChoice
             null, // systemMessage

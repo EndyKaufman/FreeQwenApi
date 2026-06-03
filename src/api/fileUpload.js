@@ -81,6 +81,8 @@ export async function uploadFile(filePath, stsData) {
     logInfo(`[OSS] Загрузка через браузер`);
     logInfo(`[OSS] Регион: ${stsData.region}, Бакет: ${stsData.bucketname}`);
     if (stsData.endpoint) logInfo(`[OSS] Endpoint: ${stsData.endpoint}`);
+    logInfo(`[OSS] File path: ${stsData.file_path}`);
+    logInfo(`[OSS] File URL: ${stsData.file_url}`);
 
     const fileBuffer = fs.readFileSync(filePath);
     const fileBase64 = fileBuffer.toString('base64');
@@ -92,15 +94,22 @@ export async function uploadFile(filePath, stsData) {
         const result = await page.evaluate(async (data) => {
             try {
                 if (typeof window.OSS === 'undefined') {
+                    console.log('[OSS] Загрузка OSS SDK...');
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
                         script.src = data.ossSdkUrl;
                         script.onload = resolve;
-                        script.onerror = reject;
+                        script.onerror = () => reject(new Error('Failed to load OSS SDK'));
                         document.head.appendChild(script);
                     });
+                    console.log('[OSS] SDK загружен успешно');
                 }
+                
+                console.log('[OSS] Создание Blob из файла...');
                 const blob = new Blob([Uint8Array.from(atob(data.fileBase64), c => c.charCodeAt(0))]);
+                console.log(`[OSS] Blob создан, размер: ${blob.size} байт`);
+                
+                console.log('[OSS] Создание OSS клиента...');
                 const client = new window.OSS({
                     region: data.stsData.region,
                     accessKeyId: data.stsData.access_key_id,
@@ -109,9 +118,17 @@ export async function uploadFile(filePath, stsData) {
                     bucket: data.stsData.bucketname,
                     secure: true
                 });
+                
+                console.log(`[OSS] Загрузка файла в OSS: ${data.stsData.file_path}`);
                 await client.put(data.stsData.file_path, blob);
+                console.log('[OSS] Файл успешно загружен');
+                
                 return { success: true };
-            } catch (error) { return { success: false, error: error.toString() }; }
+            } catch (error) { 
+                console.error(`[OSS Browser] Ошибка: ${error.toString()}`);
+                console.error(`[OSS Browser] Stack: ${error.stack || 'N/A'}`);
+                return { success: false, error: error.toString() }; 
+            }
         }, {
             fileBase64,
             ossSdkUrl: OSS_SDK_URL,
@@ -119,6 +136,7 @@ export async function uploadFile(filePath, stsData) {
         });
 
         if (result.success) {
+            logInfo(`[OSS] Загрузка завершена успешно`);
             return { success: true, fileName: path.basename(filePath), url: stsData.file_url, fileId: stsData.file_id, filePath: stsData.file_path };
         }
         logError(`[OSS] Ошибка загрузки: ${result.error}`);
@@ -143,12 +161,20 @@ export async function uploadFileToQwen(filePath) {
         if (IMAGE_EXTENSIONS.includes(fileExt)) fileType = IMAGE_FILE_TYPE;
         else if (DOCUMENT_EXTENSIONS.includes(fileExt)) fileType = DOCUMENT_FILE_TYPE;
 
+        logInfo(`📤 Загрузка файла в Qwen: ${fileName} (${fileSize} байт, тип: ${fileType})`);
+        
         const fileInfo = { filename: fileName, filesize: fileSize, filetype: fileType };
         const stsData = await getStsToken(fileInfo);
+        
+        logInfo(`✅ STS токен получен, начинаем загрузку в OSS`);
+        
         const uploadResult = await uploadFile(filePath, stsData);
+        
+        logInfo(`✅ Файл успешно загружен в Qwen`);
+        
         return { ...uploadResult, fileInfo, stsData };
     } catch (error) {
-        logError(`Ошибка в процессе загрузки файла: ${error.message}`, error);
+        logError(`❌ Ошибка в процессе загрузки файла: ${error.message}`, error);
         return { success: false, error: error.message };
     }
 }

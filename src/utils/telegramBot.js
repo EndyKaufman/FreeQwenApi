@@ -731,20 +731,43 @@ async function processUpdate(update) {
                 }
             }
         }
+
+        // Обработка фотографий (для генерации изображений)
+        if (message.photo) {
+            try {
+                // Получаем текст из caption
+                const caption = message.caption || '';
+                await handlePhoto(chatId, message.photo, caption);
+            } catch (error) {
+                logError('❌ Ошибка обработки фото', error);
+                try {
+                    await sendMessage(chatId, `❌ Ошибка обработки фото: ${error.message}`);
+                } catch (sendError) {
+                    // Игнорируем ошибки отправки
+                }
+            }
+        }
     }
 }
 
 /**
  * Обрабатывает генерацию изображений
+ * @param {string} chatId - ID чата
+ * @param {string} prompt - Текст запроса
+ * @param {string} imagePath - Путь к файлу изображения (опционально, для image-to-image)
  */
-async function handleImageGeneration(chatId, prompt) {
+async function handleImageGeneration(chatId, prompt, imagePath = null) {
     try {
         logInfo(`🎨 Telegram: запрошена генерация изображения: ${prompt.substring(0, 100)}...`);
+        if (imagePath) {
+            logInfo(`📸 Режим image-to-image с файлом: ${imagePath}`);
+        }
         
         // Отправляем сообщение о начале генерации
         await sendMessage(chatId, 
             `🎨 <b>Генерация изображения...</b>\n\n` +
             `📝 Запрос: ${prompt}\n` +
+            (imagePath ? `📸 Режим: Image-to-Image\n` : '') +
             `⏳ Пожалуйста, подождите...`
         );
 
@@ -756,9 +779,16 @@ async function handleImageGeneration(chatId, prompt) {
         const model = 'qwen-image-plus';
         
         const startTime = Date.now();
-        const result = await generateImage(prompt, model, {
+        const options = {
             size: '1024*1024'
-        });
+        };
+        
+        // Если есть изображение, передаем путь к файлу
+        if (imagePath) {
+            options.imagePath = imagePath;
+        }
+        
+        const result = await generateImage(prompt, model, options);
         const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
         if (result.success && result.imageUrl) {
@@ -968,7 +998,17 @@ async function handleCommand(chatId, text) {
         case '/image':
         case '/imagine':
         case '/генерация':
-            await sendMessage(chatId, '🎨 Использование: /image <описание изображения>\n\nПример: /image A beautiful sunset over the ocean');
+            await sendMessage(chatId, 
+                '🎨 <b>Генерация изображений</b>\n\n' +
+                '💬 <b>Текстовый режим:</b>\n' +
+                '/image <описание> - генерация по описанию\n\n' +
+                '📸 <b>Режим Image-to-Image:</b>\n' +
+                'Отправьте фото с подписью (caption)\n' +
+                'Или используйте /image <описание> с фото\n\n' +
+                '📝 Примеры:\n' +
+                '• /image A beautiful sunset\n' +
+                '• Отправьте фото с текстом "Улучши это"'
+            );
             break;
 
         default:
@@ -983,6 +1023,127 @@ async function handleCommand(chatId, text) {
             } else {
                 await sendMessage(chatId, '❓ Неизвестная команда. Используйте /help для списка команд');
             }
+    }
+}
+
+/**
+ * Обрабатывает фотографии для генерации изображений (image-to-image)
+ */
+async function handlePhoto(chatId, photos, caption = '') {
+    try {
+        logInfo(`📸 Получено фото с caption: "${caption.substring(0, 50)}${caption.length > 50 ? '...' : ''}"`);
+        
+        // Проверяем, есть ли команда в caption
+        let prompt = caption || 'Улучши это изображение';
+        let hasCommand = false;
+        
+        // Если caption начинается с /image, /imagine или /генерация
+        if (caption.startsWith('/image ') || caption.startsWith('/imagine ') || caption.startsWith('/генерация ')) {
+            hasCommand = true;
+            prompt = caption.substring(caption.indexOf(' ') + 1).trim();
+        }
+        
+        if (!hasCommand && !caption) {
+            // Если просто фото без caption - не обрабатываем как image-to-image
+            logInfo('📸 Фото без caption - пропускаем обработку');
+            return;
+        }
+        
+        // Telegram отправляет несколько размеров фото, берем самый большой (последний в массиве)
+        const photo = photos[photos.length - 1];
+        const fileId = photo.file_id;
+        const fileSize = photo.file_size;
+        
+        logInfo(`📸 Загрузка фото из Telegram (file_id: ${fileId}, size: ${fileSize} bytes)`);
+        
+        await sendMessage(chatId, 
+            `🎨 <b>Обработка изображения...</b>\n\n` +
+            `📝 Запрос: ${prompt}\n` +
+            `⏳ Пожалуйста, подождите...`
+        );
+        
+        // Скачиваем фото из Telegram и сохраняем во временный файл
+        const tempFilePath = await downloadTelegramFileToTemp(fileId);
+        
+        if (!tempFilePath) {
+            throw new Error('Не удалось скачать фото из Telegram');
+        }
+        
+        logInfo(`✅ Фото скачано: ${tempFilePath}`);
+        
+        // Генерируем изображение с использованием фото
+        await handleImageGeneration(chatId, prompt, tempFilePath);
+        
+        // Удаляем временный файл
+        try {
+            fs.unlinkSync(tempFilePath);
+            logInfo('🗑️ Временный файл удален');
+        } catch (e) {
+            logWarn('Не удалось удалить временный файл', e);
+        }
+        
+    } catch (error) {
+        logError('❌ Ошибка в handlePhoto', error);
+        await sendMessage(chatId,
+            `❌ <b>Ошибка обработки фото</b>\n\n` +
+            `⚠️ ${error.message}\n\n` +
+            `💡 Попробуйте позже`
+        );
+    }
+}
+
+/**
+ * Скачивает файл из Telegram и сохраняет во временный файл
+ * @param {string} fileId - ID файла в Telegram
+ * @returns {Promise<string>} - Путь к временному файлу
+ */
+async function downloadTelegramFileToTemp(fileId) {
+    try {
+        // Получаем информацию о файле
+        const fileUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`;
+        const fileResponse = await fetchWithProxy(fileUrl, undefined, true);
+        
+        if (!fileResponse.ok) {
+            throw new Error(`Не удалось получить информацию о файле: HTTP ${fileResponse.status}`);
+        }
+        
+        const fileData = await fileResponse.json();
+        
+        if (!fileData.ok) {
+            throw new Error(`Telegram API error: ${fileData.description || 'Unknown error'}`);
+        }
+        
+        const filePath = fileData.result.file_path;
+        const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`;
+        
+        logInfo(`📥 URL для скачивания файла: ${downloadUrl}`);
+        
+        // Скачиваем файл
+        const downloadResponse = await fetchWithProxy(downloadUrl, undefined, true);
+        
+        if (!downloadResponse.ok) {
+            throw new Error(`Не удалось скачать файл: HTTP ${downloadResponse.status}`);
+        }
+        
+        // Сохраняем во временный файл
+        const tempDir = path.join(process.cwd(), 'temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
+        const tempFileName = `telegram_${Date.now()}_${fileId}.jpg`;
+        const tempFilePath = path.join(tempDir, tempFileName);
+        
+        const buffer = Buffer.from(await downloadResponse.arrayBuffer());
+        fs.writeFileSync(tempFilePath, buffer);
+        
+        logInfo(`✅ Файл сохранен: ${tempFilePath} (${buffer.length} bytes)`);
+        
+        return tempFilePath;
+        
+    } catch (error) {
+        logError('❌ Ошибка скачивания файла из Telegram', error);
+        throw error;
     }
 }
 

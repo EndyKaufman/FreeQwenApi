@@ -81,3 +81,12 @@ export const TELEGRAM_PROXY_URL = process.env.TELEGRAM_PROXY_URL || null;
 
 // ─── Qwen LLM прокси ────────────────────────────────────────────────────────
 export const QWEN_PROXY = process.env.QWEN_PROXY || null;
+
+// ─── Генерация изображений ──────────────────────────────────────────────────
+// Режим генерации: 'dashscope' (по умолчанию) или 'browser'
+// 'dashscope' - использует DASHSCOPE_API_KEY напрямую через DashScope API
+// 'browser' - использует браузер (аналогично генерации текста через Qwen Chat)
+export const IMAGE_GENERATION_MODE = process.env.IMAGE_GENERATION_MODE || 'dashscope';
+
+// DashScope API ключ (требуется при IMAGE_GENERATION_MODE='dashscope')
+export const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY || null;

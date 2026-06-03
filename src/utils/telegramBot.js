@@ -545,14 +545,18 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
  */
 async function fetchWithProxy(url, options = {}, skipLog = false) {
     const fetchOptions = {
-        ...options,
-        dispatcher: proxyAgent,
-        timeout: 30000 // 30 секунд таймаут
+        ...options
     };
 
-    if (proxyConfigured && !skipLog) {
-        logInfo(`🌐 Запрос через прокси...`);
+    // Добавляем прокси агент только если он существует
+    if (proxyAgent) {
+        fetchOptions.dispatcher = proxyAgent;
+        if (proxyConfigured && !skipLog) {
+            logInfo(`🌐 Запрос через прокси...`);
+        }
     }
+
+    fetchOptions.timeout = 30000; // 30 секунд таймаут
 
     return fetch(url, fetchOptions);
 }
@@ -733,6 +737,110 @@ async function processUpdate(update) {
 }
 
 /**
+ * Обрабатывает генерацию изображений
+ */
+async function handleImageGeneration(chatId, prompt) {
+    try {
+        logInfo(`🎨 Telegram: запрошена генерация изображения: ${prompt.substring(0, 100)}...`);
+        
+        // Отправляем сообщение о начале генерации
+        await sendMessage(chatId, 
+            `🎨 <b>Генерация изображения...</b>\n\n` +
+            `📝 Запрос: ${prompt}\n` +
+            `⏳ Пожалуйста, подождите...`
+        );
+
+        // Импортируем функцию генерации
+        const { generateImage } = await import('../api/imageGeneration.js');
+        const { getActiveModel } = await import('./botSettings.js');
+        
+        // Используем модель для генерации изображений
+        const model = 'qwen-image-plus';
+        
+        const startTime = Date.now();
+        const result = await generateImage(prompt, model, {
+            size: '1024*1024'
+        });
+        const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        if (result.success && result.imageUrl) {
+            logInfo(`✅ Изображение сгенерировано за ${generationTime}с: ${result.imageUrl}`);
+            
+            // Отправляем изображение как фото
+            try {
+                await sendPhoto(chatId, result.imageUrl, prompt);
+                
+                // Отправляем дополнительную информацию
+                await sendMessage(chatId,
+                    `✅ <b>Изображение сгенерировано!</b>\n\n` +
+                    `🎨 Модель: ${result.model || model}\n` +
+                    `⏱️ Время: ${generationTime}с\n` +
+                    `📝 Prompt: ${prompt}`
+                );
+            } catch (photoError) {
+                // Если не удалось отправить как фото, отправляем как ссылку
+                logWarn('Не удалось отправить изображение как фото, отправляю ссылку');
+                await sendMessage(chatId,
+                    `✅ <b>Изображение сгенерировано!</b>\n\n` +
+                    `🖼️ <a href="${result.imageUrl}">Скачать изображение</a>\n\n` +
+                    `🎨 Модель: ${result.model || model}\n` +
+                    `⏱️ Время: ${generationTime}с\n` +
+                    `📝 Prompt: ${prompt}`
+                );
+            }
+        } else {
+            logError(`❌ Ошибка генерации изображения: ${result.error}`);
+            await sendMessage(chatId,
+                `❌ <b>Ошибка генерации изображения</b>\n\n` +
+                `⚠️ ${result.error || 'Неизвестная ошибка'}\n\n` +
+                `💡 Попробуйте другой запрос или повторите позже`
+            );
+        }
+    } catch (error) {
+        logError('❌ Ошибка в handleImageGeneration', error);
+        await sendMessage(chatId,
+            `❌ <b>Произошла ошибка</b>\n\n` +
+            `⚠️ ${error.message}\n\n` +
+            `💡 Попробуйте позже`
+        );
+    }
+}
+
+/**
+ * Отправляет фото в Telegram
+ */
+async function sendPhoto(chatId, photoUrl, caption = '') {
+    try {
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
+        
+        const body = {
+            chat_id: chatId,
+            photo: photoUrl,
+            caption: caption.substring(0, 1024) // Telegram limit for captions
+        };
+
+        const response = await fetchWithProxy(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        }, true);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.description || `HTTP ${response.status}`);
+        }
+
+        logDebug(`📸 Фото отправлено: ${photoUrl}`);
+        return true;
+    } catch (error) {
+        logError('Ошибка при отправке фото', error);
+        throw error;
+    }
+}
+
+/**
  * Обрабатывает команды
  */
 async function handleCommand(chatId, text) {
@@ -790,8 +898,24 @@ async function handleCommand(chatId, text) {
             await sendAboutMessage(chatId);
             break;
 
+        case '/image':
+        case '/imagine':
+        case '/генерация':
+            await sendMessage(chatId, '🎨 Использование: /image <описание изображения>\n\nПример: /image A beautiful sunset over the ocean');
+            break;
+
         default:
-            await sendMessage(chatId, '❓ Неизвестная команда. Используйте /help для списка команд');
+            // Проверяем, начинается ли сообщение с /image или /imagine с аргументами
+            if (text.startsWith('/image ') || text.startsWith('/imagine ') || text.startsWith('/генерация ')) {
+                const prompt = text.substring(text.indexOf(' ') + 1).trim();
+                if (prompt) {
+                    await handleImageGeneration(chatId, prompt);
+                } else {
+                    await sendMessage(chatId, '🎨 Пожалуйста, укажите описание изображения\n\nПример: /image A beautiful sunset over the ocean');
+                }
+            } else {
+                await sendMessage(chatId, '❓ Неизвестная команда. Используйте /help для списка команд');
+            }
     }
 }
 
@@ -1450,6 +1574,14 @@ async function sendHelpMessage(chatId) {
         `/status - Показать статус сервиса\n` +
         `/restart - Перезапустить сервис\n\n`;
 
+    // Команды генерации изображений
+    helpText +=
+        `🎨 <b>Генерация изображений:</b>\n\n` +
+        `/image &lt;описание&gt; - Сгенерировать изображение\n` +
+        `/imagine &lt;описание&gt; - Альтернативная команда\n` +
+        `/генерация &lt;описание&gt; - Русская версия\n\n` +
+        `💡 Пример: /image A beautiful sunset over the ocean\n\n`;
+
     // Показываем LLM команды только если есть аккаунты
     if (accountsExist) {
         helpText +=
@@ -1745,7 +1877,7 @@ async function sendScheduledStatusToAdmins() {
             return;
         }
 
-        const adminUserIds = getAdminUserIds();
+        const adminUserIds = TELEGRAM_USER_IDS;
         
         if (adminUserIds.length === 0) {
             logInfo('Нет админов для отправки плановой проверки');

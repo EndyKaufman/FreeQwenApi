@@ -7,7 +7,7 @@ import { getMappedModel } from './modelMapping.js';
 import { getStsToken, uploadFileToQwen } from './fileUpload.js';
 import { loadHistory, saveHistory } from './chatHistory.js';
 import { generateImage, getAvailableImageModels, checkImageApiAvailability } from './imageGeneration.js';
-import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE } from '../config.js';
+import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE, IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY } from '../config.js';
 import { getActiveModel } from '../utils/botSettings.js';
 import multer from 'multer';
 import path from 'path';
@@ -1404,11 +1404,10 @@ router.post('/images/generations', async (req, res) => {
         }
 
         // Проверка доступности API
-        const apiKey = process.env.DASHSCOPE_API_KEY;
-        if (!apiKey) {
+        if (IMAGE_GENERATION_MODE === 'dashscope' && !DASHSCOPE_API_KEY) {
             return res.status(503).json({
                 error: 'API генерации изображений не настроен',
-                message: 'Установите переменную окружения DASHSCOPE_API_KEY'
+                message: 'Установите переменную окружения DASHSCOPE_API_KEY или переключитесь на IMAGE_GENERATION_MODE=browser'
             });
         }
 
@@ -1491,21 +1490,188 @@ router.get('/images/models', async (req, res) => {
  */
 router.get('/images/status', async (req, res) => {
     try {
-        const apiKey = process.env.DASHSCOPE_API_KEY;
         const isAvailable = await checkImageApiAvailability();
 
         res.json({
             available: isAvailable,
-            apiKeyConfigured: !!apiKey,
-            message: isAvailable 
-                ? 'API генерации изображений доступен' 
-                : apiKey 
-                    ? 'API недоступен или неверные учётные данные'
-                    : 'API ключ DASHSCOPE_API_KEY не настроен'
+            mode: IMAGE_GENERATION_MODE,
+            apiKeyConfigured: !!DASHSCOPE_API_KEY,
+            message: IMAGE_GENERATION_MODE === 'browser'
+                ? (isAvailable ? 'Browser mode активен' : 'Браузер не инициализирован')
+                : (isAvailable 
+                    ? 'DashScope API доступен' 
+                    : DASHSCOPE_API_KEY 
+                        ? 'DashScope API недоступен или неверные учётные данные'
+                        : 'API ключ DASHSCOPE_API_KEY не настроен')
         });
     } catch (error) {
         logError('Ошибка при проверке статуса API изображений', error);
         res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+    }
+});
+
+// ============================================
+// OPENAI-COMPATIBLE V1 ENDPOINTS
+// ============================================
+
+/**
+ * GET /v1/images/generations - OpenAI-compatible image generation
+ * Полная совместимость с openai-node и openai-python SDK
+ */
+router.post('/v1/images/generations', async (req, res) => {
+    try {
+        const { prompt, model, n, size, response_format, quality, style, user } = req.body;
+
+        logInfo(`[OpenAI v1] Получен запрос на генерацию изображения`);
+        logDebug(`Prompt: ${prompt?.substring(0, 100)}${prompt?.length > 100 ? '...' : ''}`);
+
+        if (!prompt) {
+            return res.status(400).json({
+                error: {
+                    message: 'Parameter "prompt" is required',
+                    type: 'invalid_request_error',
+                    param: 'prompt',
+                    code: null
+                }
+            });
+        }
+
+        // Маппинг моделей OpenAI на Qwen Image модели
+        let imageModel = model || 'qwen-image-plus';
+        const modelMapping = {
+            'dall-e-3': 'qwen-image-max',
+            'dall-e-2': 'qwen-image-plus',
+            'qwen-image-max': 'qwen-image-max',
+            'qwen-image-plus': 'qwen-image-plus',
+            'qwen-image': 'qwen-image',
+            'wan2.6-t2i': 'wan2.6-t2i',
+            'wan2.5-t2i-preview': 'wan2.5-t2i-preview',
+            'wan2.2-t2i-flash': 'wan2.2-t2i-flash'
+        };
+        imageModel = modelMapping[model] || 'qwen-image-plus';
+
+        // Проверка доступности API
+        if (IMAGE_GENERATION_MODE === 'dashscope' && !DASHSCOPE_API_KEY) {
+            return res.status(503).json({
+                error: {
+                    message: 'Image generation API is not configured',
+                    type: 'server_error',
+                    param: null,
+                    code: 'service_unavailable'
+                }
+            });
+        }
+
+        // Преобразование размера из формата OpenAI в формат Qwen
+        let qwenSize = '1024*1024';
+        if (size) {
+            const sizeMap = {
+                '1024x1024': '1024*1024',
+                '1024x1792': '1024*1792',
+                '1792x1024': '1792*1024',
+                '512x512': '512*512',
+                '768x768': '768x768',
+                '960x960': '960*960'
+            };
+            qwenSize = sizeMap[size] || '1024*1024';
+        }
+
+        const result = await generateImage(prompt, imageModel, {
+            n: n || 1,
+            size: qwenSize,
+            promptExtend: true,
+            watermark: false
+        });
+
+        if (result.error) {
+            logError(`Ошибка генерации: ${result.error}`);
+            return res.status(500).json({
+                error: {
+                    message: `Image generation failed: ${result.error}`,
+                    type: 'server_error',
+                    param: null,
+                    code: 'generation_failed'
+                }
+            });
+        }
+
+        // Формируем ответ в формате OpenAI Images API
+        const responseData = {
+            created: Math.floor(Date.now() / 1000),
+            data: [{
+                url: result.imageUrl,
+                revised_prompt: prompt
+            }]
+        };
+
+        // Если запрошено несколько изображений (когда API поддерживает)
+        if (n > 1 && result.imageUrls) {
+            responseData.data = result.imageUrls.map(url => ({
+                url,
+                revised_prompt: prompt
+            }));
+        }
+
+        logInfo(`[OpenAI v1] Изображение сгенерировано: ${result.imageUrl}`);
+        res.json(responseData);
+
+    } catch (error) {
+        logError('[OpenAI v1] Ошибка при генерации изображения', error);
+        res.status(500).json({
+            error: {
+                message: `Internal server error: ${error.message}`,
+                type: 'server_error',
+                param: null,
+                code: null
+            }
+        });
+    }
+});
+
+/**
+ * GET /v1/models - OpenAI-compatible models list (включая image models)
+ */
+router.get('/v1/models', async (req, res) => {
+    try {
+        const chatModels = getAllModels();
+        const imageModels = getAvailableImageModels();
+        
+        const allModels = {
+            object: 'list',
+            data: [
+                // Chat models
+                ...chatModels.models.map(m => ({
+                    id: m.id || m.name || m,
+                    object: 'model',
+                    created: 0,
+                    owned_by: 'qwen',
+                    permission: [],
+                    capabilities: ['chat', 'completion']
+                })),
+                // Image generation models
+                ...imageModels.map(model => ({
+                    id: model,
+                    object: 'model',
+                    created: Date.now(),
+                    owned_by: 'qwen',
+                    permission: [],
+                    capabilities: ['image_generation']
+                }))
+            ]
+        };
+
+        logInfo(`[OpenAI v1] Возвращено ${allModels.data.length} моделей`);
+        res.json(allModels);
+    } catch (error) {
+        logError('[OpenAI v1] Ошибка при получении списка моделей', error);
+        res.status(500).json({
+            error: {
+                message: 'Internal server error',
+                type: 'server_error',
+                param: null,
+                code: null
+            }
+        });
     }
 });
 

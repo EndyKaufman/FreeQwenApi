@@ -1,6 +1,8 @@
 // imageGeneration.js - Модуль для генерации изображений через Qwen Image API
 import axios from 'axios';
 import { logInfo, logError, logDebug } from '../logger/index.js';
+import { sendMessage } from './chat.js';
+import { IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY } from '../config.js';
 
 const DASHSCOPE_API_BASE = 'https://dashscope-intl.aliyuncs.com/api/v1';
 
@@ -22,6 +24,22 @@ const IMAGE_GENERATION_MODELS = [
  * @returns {Promise<object>} - Результат генерации
  */
 export async function generateImage(prompt, model = 'qwen-image-plus', options = {}) {
+    // Определяем режим генерации
+    const mode = IMAGE_GENERATION_MODE;
+    
+    if (mode === 'browser') {
+        logInfo('🎨 Генерация изображения через browser mode...');
+        return generateImageViaBrowser(prompt, model, options);
+    } else {
+        logInfo('🎨 Генерация изображения через DashScope API...');
+        return generateImageViaDashScope(prompt, model, options);
+    }
+}
+
+/**
+ * Генерация изображения через DashScope API (прямой вызов)
+ */
+async function generateImageViaDashScope(prompt, model = 'qwen-image-plus', options = {}) {
     const apiKey = process.env.DASHSCOPE_API_KEY;
     
     if (!apiKey) {
@@ -94,6 +112,95 @@ export async function generateImage(prompt, model = 'qwen-image-plus', options =
         logError('Ошибка при генерации изображения', error);
         return {
             error: error.response?.data?.message || error.message || 'Неизвестная ошибка'
+        };
+    }
+}
+
+/**
+ * Генерация изображения через браузер (аналогично генерации текста)
+ * Использует Qwen Chat API с chat_type='t2i'
+ */
+async function generateImageViaBrowser(prompt, model = 'qwen-image-plus', options = {}) {
+    try {
+        logInfo(`🖼️ Browser mode: генерация изображения через ${model}...`);
+        logDebug(`Prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
+
+        // Используем sendMessage с chatType='t2i' (text-to-image)
+        const result = await sendMessage(
+            prompt,
+            model,
+            null, // chatId - будет создан автоматически
+            null, // parentId
+            null, // files
+            null, // tools
+            null, // toolChoice
+            null, // systemMessage
+            't2i', // chatType - text to image
+            options.size || '1024*1024', // size
+            true // waitForCompletion
+        );
+
+        // Проверяем результат
+        if (result.error) {
+            logError('❌ Ошибка генерации изображения (browser mode)', result.error);
+            return {
+                error: result.error,
+                details: result.details || 'Browser mode generation failed'
+            };
+        }
+
+        // Извлекаем URL изображения из ответа
+        let imageUrl = null;
+        
+        // Проверяем разные форматы ответа
+        if (result.imageUrl) {
+            imageUrl = result.imageUrl;
+        } else if (result.choices?.[0]?.message?.content) {
+            const content = result.choices[0].message.content;
+            // Если контент - это URL изображения
+            if (content.startsWith('http') || content.startsWith('data:')) {
+                imageUrl = content;
+            } else {
+                // Пытаемся извлечь URL из markdown или JSON
+                const urlMatch = content.match(/\[(?:Generated Image)?\]\(([^)]+)\)/);
+                if (urlMatch) {
+                    imageUrl = urlMatch[1];
+                } else {
+                    // Пробуем распарсить как JSON
+                    try {
+                        const parsed = JSON.parse(content);
+                        imageUrl = parsed.url || parsed.image_url || parsed.imageUrl;
+                    } catch {
+                        // Не JSON, используем как есть
+                        logWarn('⚠️ Ответ не содержит явного URL изображения');
+                    }
+                }
+            }
+        }
+
+        if (!imageUrl) {
+            logError('❌ URL изображения не найден в ответе');
+            logDebug('Response:', JSON.stringify(result, null, 2));
+            return {
+                error: 'Image URL not found in response',
+                rawResponse: result
+            };
+        }
+
+        logInfo(`✅ Изображение сгенерировано (browser mode): ${imageUrl}`);
+        return {
+            success: true,
+            imageUrl: imageUrl,
+            model: model,
+            prompt: prompt,
+            chatId: result.chatId,
+            parentId: result.parentId
+        };
+
+    } catch (error) {
+        logError('❌ Ошибка при генерации изображения (browser mode)', error);
+        return {
+            error: error.message || 'Unknown error in browser mode'
         };
     }
 }
@@ -173,7 +280,19 @@ export function getAvailableImageModels() {
  * @returns {Promise<boolean>} - Статус доступности
  */
 export async function checkImageApiAvailability() {
-    const apiKey = process.env.DASHSCOPE_API_KEY;
+    const mode = IMAGE_GENERATION_MODE;
+    
+    // Browser mode всегда доступен (если браузер работает)
+    if (mode === 'browser') {
+        logDebug('🖼️ Browser mode: проверка через статус браузера');
+        const { getBrowserContext, getAuthenticationStatus } = await import('../browser/browser.js');
+        const browserContext = getBrowserContext();
+        const isAuthenticated = getAuthenticationStatus();
+        return !!(browserContext && isAuthenticated);
+    }
+    
+    // DashScope mode: проверяем API ключ
+    const apiKey = DASHSCOPE_API_KEY;
     
     if (!apiKey) {
         return false;

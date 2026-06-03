@@ -790,10 +790,69 @@ async function handleImageGeneration(chatId, prompt) {
             }
         } else {
             logError(`❌ Ошибка генерации изображения: ${result.error}`);
+            
+            // Формируем детальное сообщение об ошибке
+            let errorMessage = result.error || 'Неизвестная ошибка';
+            
+            // Если есть дополнительные детали в rawResponse
+            if (result.rawResponse) {
+                // Проверяем errorBody (JSON строка)
+                if (result.rawResponse.errorBody) {
+                    try {
+                        const errorData = JSON.parse(result.rawResponse.errorBody);
+                        if (errorData.error && errorData.error.details) {
+                            errorMessage += `\n\n📋 Детали: ${errorData.error.details}`;
+                            if (errorData.error.modality) {
+                                errorMessage += `\n🔍 Проверка: ${errorData.error.modality.join(', ')}`;
+                            }
+                            if (errorData.error.stage) {
+                                errorMessage += `\n📍 Этап: ${errorData.error.stage}`;
+                            }
+                        } else if (errorData.details || errorData.detail) {
+                            errorMessage += `\n\n📋 Детали: ${errorData.details || errorData.detail}`;
+                        }
+                    } catch {
+                        // Не JSON, используем как есть
+                        if (result.rawResponse.errorBody.length < 200) {
+                            errorMessage += `\n\n📋 ${result.rawResponse.errorBody}`;
+                        }
+                    }
+                }
+                // Проверяем details (JSON строка из handleApiError)
+                else if (result.rawResponse.details && typeof result.rawResponse.details === 'string') {
+                    try {
+                        const errorData = JSON.parse(result.rawResponse.details);
+                        if (errorData.error && errorData.error.details) {
+                            errorMessage += `\n\n📋 Детали: ${errorData.error.details}`;
+                            if (errorData.error.modality) {
+                                errorMessage += `\n🔍 Проверка: ${errorData.error.modality.join(', ')}`;
+                            }
+                            if (errorData.error.stage) {
+                                errorMessage += `\n📍 Этап: ${errorData.error.stage}`;
+                            }
+                        } else if (errorData.details || errorData.detail) {
+                            errorMessage += `\n\n📋 Детали: ${errorData.details || errorData.detail}`;
+                        }
+                    } catch {
+                        // Не JSON, используем как есть
+                        if (result.rawResponse.details.length < 200) {
+                            errorMessage += `\n\n📋 ${result.rawResponse.details}`;
+                        }
+                    }
+                }
+                // Проверяем прямое поле error
+                else if (result.rawResponse.error && result.rawResponse.error.details) {
+                    errorMessage += `\n\n📋 Детали: ${result.rawResponse.error.details}`;
+                    if (result.rawResponse.error.modality) {
+                        errorMessage += `\n🔍 Проверка: ${result.rawResponse.error.modality.join(', ')}`;
+                    }
+                }
+            }
+            
             await sendMessage(chatId,
                 `❌ <b>Ошибка генерации изображения</b>\n\n` +
-                `⚠️ ${result.error || 'Неизвестная ошибка'}\n\n` +
-                `💡 Попробуйте другой запрос или повторите позже`
+                `⚠️ ${escapeHtml(errorMessage)}\n\n` +
+                `💡 Попробуйте изменить запрос или повторите позже`
             );
         }
     } catch (error) {

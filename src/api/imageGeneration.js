@@ -181,8 +181,102 @@ async function generateImageViaBrowser(prompt, model = 'qwen-image-plus', option
         if (!imageUrl) {
             logError('❌ URL изображения не найден в ответе');
             logDebug('Response:', JSON.stringify(result, null, 2));
+            
+            // Логируем структуру ошибки для отладки
+            if (result.error) logDebug('result.error exists:', JSON.stringify(result.error));
+            if (result.errorBody) logDebug('result.errorBody exists:', result.errorBody.substring(0, 200));
+            if (result.details) logDebug('result.details exists:', result.details.substring(0, 200));
+            
+            // Проверяем, есть ли в ответе реальная ошибка
+            let errorMessage = 'Image URL not found in response';
+            
+            // Проверяем формат ошибки API (прямое поле error)
+            if (result.error) {
+                // API вернул ошибку
+                if (result.error.code) {
+                    errorMessage = `API Error: ${result.error.code}`;
+                    if (result.error.details) {
+                        errorMessage += ` - ${result.error.details}`;
+                    }
+                } else if (typeof result.error === 'string') {
+                    errorMessage = result.error;
+                }
+            }
+            // Проверяем errorBody (JSON строка с ошибкой)
+            else if (result.errorBody) {
+                try {
+                    const errorData = JSON.parse(result.errorBody);
+                    if (errorData.error) {
+                        if (errorData.error.code) {
+                            errorMessage = `API Error: ${errorData.error.code}`;
+                            if (errorData.error.details) {
+                                errorMessage += ` - ${errorData.error.details}`;
+                            }
+                        } else if (typeof errorData.error === 'string') {
+                            errorMessage = errorData.error;
+                        }
+                    } else if (errorData.code) {
+                        // Код ошибки на верхнем уровне
+                        errorMessage = `API Error: ${errorData.code}`;
+                        if (errorData.detail || errorData.details) {
+                            errorMessage += ` - ${errorData.detail || errorData.details}`;
+                        }
+                    }
+                } catch {
+                    // Не JSON, используем как есть
+                    if (typeof result.errorBody === 'string') {
+                        errorMessage = result.errorBody.substring(0, 200);
+                    }
+                }
+            }
+            // Проверяем details (JSON строка с ошибкой из handleApiError)
+            else if (result.details && typeof result.details === 'string') {
+                try {
+                    const errorData = JSON.parse(result.details);
+                    if (errorData.error) {
+                        if (errorData.error.code) {
+                            errorMessage = `API Error: ${errorData.error.code}`;
+                            if (errorData.error.details) {
+                                errorMessage += ` - ${errorData.error.details}`;
+                            }
+                        } else if (typeof errorData.error === 'string') {
+                            errorMessage = errorData.error;
+                        }
+                    } else if (errorData.code) {
+                        // Код ошибки на верхнем уровне
+                        errorMessage = `API Error: ${errorData.code}`;
+                        if (errorData.detail || errorData.details) {
+                            errorMessage += ` - ${errorData.detail || errorData.details}`;
+                        }
+                    }
+                } catch {
+                    // Не JSON, используем как есть
+                    errorMessage = result.details.substring(0, 200);
+                }
+            }
+            // Проверяем формат ошибки в choices
+            else if (result.choices?.[0]?.message?.content) {
+                const content = result.choices[0].message.content;
+                // Пытаемся распарсить как JSON для поиска ошибки
+                try {
+                    const parsed = JSON.parse(content);
+                    if (parsed.error) {
+                        if (parsed.error.code) {
+                            errorMessage = `API Error: ${parsed.error.code}`;
+                            if (parsed.error.details) {
+                                errorMessage += ` - ${parsed.error.details}`;
+                            }
+                        } else if (typeof parsed.error === 'string') {
+                            errorMessage = parsed.error;
+                        }
+                    }
+                } catch {
+                    // Не JSON, оставляем стандартное сообщение
+                }
+            }
+            
             return {
-                error: 'Image URL not found in response',
+                error: errorMessage,
                 rawResponse: result
             };
         }

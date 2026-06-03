@@ -10,11 +10,12 @@ Free Qwen AI API Proxy with OpenAI compatibility and Telegram bot integration. A
 
 - **25+ Qwen Models**: qwen3-max, qwen3.5-plus, qwen3-coder-plus, qwen-vl-plus, and more
 - **OpenAI Compatible**: Works with OpenAI SDK, just change `baseURL`
-- **Telegram Bot**: Session upload, LLM chat, health monitoring
+- **Telegram Bot**: Session upload, LLM chat, health monitoring, image generation
+- **Image Generation**: Text-to-image + Image-to-image via Qwen + DashScope API
+- **LLM Proxy**: Proxy Qwen API requests through Telegram bot
 - **Streaming Support**: Server-Sent Events (SSE) for real-time responses
-- **File Upload**: Upload images and documents for analysis
-- **Image Generation**: DALL-E compatible interface via Qwen Image API
-- **Multi-Account**: Automatic rotation with rate limit handling
+- **File Upload**: Multipart upload for images and documents
+- **Multi-Account**: Automatic rotation with intelligent rate limit handling (separate for chat/media)
 - **Context Management**: Server-side chat history with chatId/parentId
 
 ## 🚀 Quick Start
@@ -22,10 +23,19 @@ Free Qwen AI API Proxy with OpenAI compatibility and Telegram bot integration. A
 ### Docker (Recommended)
 
 ```bash
-# 1. Add account locally first
-npm run auth
+# Option 1: Use pre-built image from Docker Hub
+docker run -d \
+  --name qwen-proxy \
+  --env-file .env \
+  -p 3264:3264 \
+  -v $(pwd)/session:/app/session \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/uploads:/app/uploads \
+  -v $(pwd)/temp:/app/temp \
+  endykaufman/qwen-api-proxy:1.0.8
 
-# 2. Build and run
+# Option 2: Build locally
+npm run auth  # Add account first
 docker compose build --no-cache
 docker compose up -d
 ```

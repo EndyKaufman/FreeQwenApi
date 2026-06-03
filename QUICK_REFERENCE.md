@@ -1,8 +1,34 @@
-# Quick Reference - FreeQwenApi v1.0.3
+# Quick Reference - FreeQwenApi v1.0.8
+
+## 🆕 What's New in v1.0.8
+
+- **🎨 Image Generation**: Text-to-image + Image-to-image in Telegram
+- **🔄 LLM Proxy**: Proxy Qwen API requests through Telegram bot
+- **📦 Multipart Upload**: Direct file upload via API
+- **🧠 Smart Rate Limits**: Separate limits for chat vs media
+- **🚀 Docker Hub**: Ready-to-use image `endykaufman/qwen-api-proxy:1.0.8`
 
 ## 🚀 Quick Start
 
-### Option 1: Docker (Recommended)
+### Option 1: Docker Hub (Fastest)
+```bash
+# 1. Configure
+cp .env.example .env
+nano .env  # Add your settings
+
+# 2. Run with Docker Hub image
+docker run -d \
+  --name qwen-proxy \
+  --env-file .env \
+  -p 3264:3264 \
+  -v $(pwd)/session:/app/session \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/uploads:/app/uploads \
+  -v $(pwd)/temp:/app/temp \
+  endykaufman/qwen-api-proxy:1.0.8
+```
+
+### Option 2: Docker Compose
 ```bash
 # 1. Clone
 git clone https://github.com/EndyKaufman/FreeQwenApi
@@ -17,7 +43,7 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
-### Option 2: Local Development
+### Option 3: Local Development
 ```bash
 npm install
 cp .env.example .env
@@ -29,15 +55,22 @@ npm start
 
 ## 🤖 Telegram Bot Commands
 
-### Telegram Bot Commands
+### Management Commands
 | Command | Description |
 |---------|-------------|
 | `/help` | Show all commands |
-| `/status` | Service status |
+| `/status` | Service status + token expiry |
 | `/restart` | Restart service |
 | `/model [name]` | Set/show active model |
-| `/chat` | Toggle AI chat mode |
+| `/chat` | LLM chat status |
+| `/togglechat` | Enable/disable AI chat mode |
 | `/clear` | Clear chat context |
+
+### Image Generation 🆕
+| Command | Description |
+|---------|-------------|
+| `/imagens <prompt>` | Generate image from text |
+| Send photo + caption | Transform image (image-to-image) |
 
 ### File Upload
 - Send `.zip` or `.7z` archive with `session/` folder
@@ -64,6 +97,9 @@ TOKEN_EXPIRY_WARNING_MS=3600000
 
 # Default model (if not set in bot_settings.json)
 DEFAULT_MODEL=qwen3.5-plus
+
+# Image generation API key
+DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx
 ```
 
 ---
@@ -104,7 +140,32 @@ GET /api/status
 
 ### File Upload
 ```bash
-POST /api/files/upload
+POST /api/files/upload  # Multipart form data
+POST /api/files/getstsToken  # Get STS token for direct upload
+```
+
+### Image Generation 🆕
+```bash
+POST /api/images/generations
+
+# Text-to-Image
+curl http://localhost:3264/api/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A beautiful sunset over the ocean",
+    "model": "qwen-image-plus",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+
+# Image-to-Image
+curl http://localhost:3264/api/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Make it in anime style",
+    "image_url": "https://oss-bucket.aliyuncs.com/uploads/photo.jpg",
+    "model": "qwen-image-plus"
+  }'
 ```
 
 ---

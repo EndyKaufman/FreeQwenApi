@@ -1,11 +1,20 @@
 # FreeQwenApi
 
+> **🐳 Docker Hub:** https://hub.docker.com/r/endykaufman/qwen-api-proxy  
 > **🔧 Форк:** https://github.com/EndyKaufman/FreeQwenApi  
 > **🌐 Оригинал:** https://github.com/y13sint/FreeQwenApi
 
 ## 🌟 О этом форке
 
 Это **улучшенная версия** оригинального проекта FreeQwenApi со значительными улучшениями для production использования и лучшего пользовательского опыта.
+
+### 🆕 Что нового в v1.0.8
+
+- **🎨 Генерация изображений в Telegram**: Text-to-image + Image-to-image (отправьте фото с подписью!)
+- **🔄 Проксирование LLM**: Запросы к Qwen API через Telegram бота
+- **📦 Multipart File Upload**: Загрузка файлов напрямую через API с валидацией
+- **🧠 Умные rate limits**: Отдельные лимиты для чата и генерации медиа
+- **🚀 Docker Hub образ**: Готовый образ `endykaufman/qwen-api-proxy:1.0.8`
 
 <table>
   <tr>
@@ -19,8 +28,10 @@
 
 | Функция | Оригинал | Этот форк |
 |---------|----------|-----------|
-| **Telegram бот** | ❌ Нет | ✅ Полная интеграция |
+| **Telegram бот** | ❌ Нет | ✅ Полная интеграция + генерация изображений |
 | **LLM чат** | ❌ Нет | ✅ AI ассистент через Telegram |
+| **Генерация изображений** | ❌ Нет | ✅ Text-to-image + image-to-image |
+| **Проксирование LLM** | ❌ Нет | ✅ Qwen API через Telegram |
 | **Управление сессиями** | Только вручную | ✅ Загрузка через Telegram (.zip/.7z) |
 | **Прокси поддержка** | ❌ Нет для Telegram | ✅ HTTP/HTTPS/SOCKS |
 | **Проверка здоровья** | ❌ Нет | ✅ При старте + каждые 4 часа |
@@ -38,8 +49,10 @@
    - Загрузка архивов сессий напрямую через Telegram
    - Мониторинг статуса сервиса в реальном времени
    - Чат с AI ассистентом (LLM режим)
+   - Генерация изображений через Telegram (photo-to-photo + текст)
    - Автоматический backup сессий перед обновлениями
    - Graceful перезапуски сервиса
+   - Проксирование запросов к Qwen LLM через бота
    - Команды: `/help`, `/status`, `/chat`, `/model`, `/clear`, `/restart`
 
 2. **Повышенная надёжность**
@@ -48,6 +61,7 @@
    - Комплексные проверки здоровья при запуске
    - Периодические проверки каждые 4 часа
    - Отчёты о статусе системы в Telegram
+   - Умная обработка rate limits (отдельно для чата и медиа)
 
 3. **Улучшенная безопасность**
    - Безопасная обработка credentials (никогда не логируются)
@@ -55,12 +69,14 @@
    - Контроль доступа по whitelist
    - Безопасное управление правами файлов
    - Автоматическая загрузка .env
+   - Multipart file upload с валидацией
 
 4. **Гибкость работы**
    - Работает как Telegram бот даже без токенов Qwen
    - Добавление первого аккаунта через Telegram
    - Поддержка множества прокси протоколов
    - Конфигурация через .env файл
+   - Динамический выбор модели без перезапуска
 
 ---
 
@@ -71,8 +87,10 @@
 - **Возможность загрузки файлов и получение ссылки прямо из прокси**
 - **🆕 API v2**: Обновлено на новый Qwen API с улучшенной системой контекста
 - **🔥 25+ моделей**: Поддержка всех современных моделей Qwen, включая Qwen 3.5
-- **🎨 Генерация изображений**: Поддержка Qwen Image API через DALL-E-совместимый интерфейс
+- **🎨 Генерация изображений**: Text-to-image + Image-to-image через Qwen + DashScope API
+- **📸 Multipart Upload**: Загрузка файлов напрямую через API
 - **💾 Автосохранение сессий**: Умное управление контекстом для OpenWebUI
+- **🔄 Rate Limit Intelligence**: Отдельные лимиты для чата и генерации медиа
 
 **Что можно делать:**
 
@@ -96,10 +114,11 @@ curl http://localhost:3264/api/chat/completions \
 ## Содержание
 
 1. [Быстрый старт](#быстрый-старт)
-2. [Docker](#docker)
-3. [Управление аккаунтами](#управление-аккаунтами)
-4. [Авторизация API-ключами](#авторизация-api-ключами)
-5. [API Reference](#api-reference)
+2. [Docker Hub](#docker-hub) 🆕
+3. [Docker](#docker)
+4. [Управление аккаунтами](#управление-аккаунтами)
+5. [Авторизация API-ключами](#авторизация-api-ключами)
+6. [API Reference](#api-reference)
    - [POST /api/chat](#post-apichat)
    - [POST /api/chat/completions](#post-apichatcompletions)
    - [GET /api/models](#get-apimodels)
@@ -107,13 +126,15 @@ curl http://localhost:3264/api/chat/completions \
    - [POST /api/chats](#post-apichats)
    - [POST /api/files/upload](#post-apifilesupload)
    - [POST /api/files/getstsToken](#post-apifilesgetststoken)
-6. [Работа с контекстом (API v2)](#работа-с-контекстом-api-v2)
-7. [Работа с изображениями](#работа-с-изображениями)
-8. [OpenAI SDK](#openai-sdk)
-9. [Python](#python-альтернативная-реализация)
-10. [Доступные модели](#доступные-модели)
-11. [Переменные окружения](#переменные-окружения)
-12. [Структура проекта](#структура-проекта)
+   - [POST /api/images/generations](#post-apiimagesgenerations)
+7. [Работа с контекстом (API v2)](#работа-с-контекстом-api-v2)
+8. [Работа с изображениями](#работа-с-изображениями)
+9. [Генерация изображений](#генерация-изображений) 🆕
+10. [OpenAI SDK](#openai-sdk)
+11. [Python](#python-альтернативная-реализация)
+12. [Доступные модели](#доступные-модели)
+13. [Переменные окружения](#переменные-окружения)
+14. [Структура проекта](#структура-проекта)
 
 ---
 
@@ -170,6 +191,63 @@ python main.py
 
 ---
 
+## Docker Hub
+
+Готовый Docker образ доступен на Docker Hub:
+
+**🐳 https://hub.docker.com/r/endykaufman/qwen-api-proxy**
+
+### Быстрый запуск с Docker Hub
+
+```bash
+# 1. Создаём .env файл
+cp .env.example .env
+nano .env  # Настраиваем переменные
+
+# 2. Запускаем контейнер
+docker run -d \
+  --name qwen-proxy \
+  --env-file .env \
+  -p 3264:3264 \
+  -v $(pwd)/session:/app/session \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/uploads:/app/uploads \
+  -v $(pwd)/temp:/app/temp \
+  endykaufman/qwen-api-proxy:1.0.8
+
+# 3. Смотрим логи
+docker logs -f qwen-proxy
+```
+
+### Доступные теги
+
+- `latest` - последняя стабильная версия
+- `1.0.8` - текущая версия
+- `1.0.x` - предыдущие версии
+
+> **💡 Важно:** Перед первым запуском добавьте аккаунт через `npm run auth` или загрузите сессию через Telegram бота.
+
+### Docker Compose с готовым образом
+
+```yaml
+services:
+  qwen-proxy:
+    image: endykaufman/qwen-api-proxy:1.0.8
+    container_name: qwen-proxy
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-3264}:3264"
+    volumes:
+      - ./session:/app/session
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./temp:/app/temp
+    restart: unless-stopped
+```
+
+---
+
 ## Docker
 
 Перед сборкой Docker-образа нужно добавить хотя бы один аккаунт, поскольку внутри контейнера нет GUI для интерактивного входа:
@@ -182,9 +260,20 @@ npm run auth
 cp .env.example .env
 nano .env  # Редактируем переменные
 
-# 3. Собираем и запускаем
+# 3. Собираем и запускаем (локальная сборка)
 docker compose build --no-cache
 docker compose up -d
+
+# ИЛИ используем готовый образ с Docker Hub
+docker run -d \
+  --name qwen-proxy \
+  --env-file .env \
+  -p 3264:3264 \
+  -v $(pwd)/session:/app/session \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/uploads:/app/uploads \
+  -v $(pwd)/temp:/app/temp \
+  endykaufman/qwen-api-proxy:1.0.8
 ```
 
 Файл `docker-compose.yml`:
@@ -193,7 +282,7 @@ docker compose up -d
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:1.0.3
+    image: endykaufman/qwen-api-proxy:1.0.8
     container_name: qwen-proxy
     env_file:
       - .env  # Автоматическая загрузка переменных
@@ -219,7 +308,7 @@ services:
 
 Переменная `SKIP_ACCOUNT_MENU=true` (или `NON_INTERACTIVE=true`) пропускает интерактивное меню и сразу запускает сервер, используя ранее сохранённые токены из `session/`.
 
-> **💡 Новое в v1.0.3:** Сервис может работать **только как Telegram бот** даже без токенов! Это позволяет добавить первый аккаунт через Telegram.
+> **💡 Новое в v1.0.8:** Сервис может работать **только как Telegram бот** даже без токенов! Поддержка генерации изображений (text-to-image + image-to-image), проксирование LLM запросов, умная обработка rate limits.
 
 ### Тома Docker и структура директорий
 
@@ -536,8 +625,10 @@ const response = await fetch('http://localhost:3264/api/chat/completions', {
 | `/api/chat/completions` | POST | OpenAI-совместимый эндпоинт, возвращает `chatId`/`parentId` |
 | `/api/models` | GET | Получение списка доступных моделей |
 | `/api/status` | GET | Проверка статуса авторизации и аккаунтов |
-| `/api/files/upload` | POST | Загрузка изображения для использования в запросах |
 | `/api/chats` | POST | Создание нового чата на серверах Qwen |
+| `/api/files/upload` | POST | Загрузка файла через multipart/form-data |
+| `/api/files/getstsToken` | POST | Получение STS-токена для прямой загрузки |
+| `/api/images/generations` | POST | Генерация изображений (DALL-E-совместимый) 🆕 |
 
 **⚠️ Удалённые эндпоинты (v2):**
 - `GET /api/chats` - список чатов
@@ -1232,6 +1323,92 @@ curl -X POST http://localhost:3264/api/files/getstsToken \
 
 ---
 
+### POST /api/images/generations 🆕
+
+Генерация изображений через Qwen Image API + DashScope API. DALL-E-совместимый интерфейс.
+
+**Поддерживаемые режимы:**
+- **Text-to-Image**: Генерация изображения из текстового описания
+- **Image-to-Image**: Трансформация загруженного изображения по описанию
+
+#### Text-to-Image
+
+**Запрос:**
+
+```bash
+curl -X POST http://localhost:3264/api/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Космический корабль на фоне туманности, цифровое искусство",
+    "model": "qwen-image-plus",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+**Ответ:**
+
+```json
+{
+  "created": 1234567890,
+  "data": [
+    {
+      "url": "https://example.com/generated-image.png",
+      "revised_prompt": "Космический корабль на фоне туманности, цифровое искусство"
+    }
+  ]
+}
+```
+
+#### Image-to-Image
+
+**Запрос:**
+
+```bash
+# Сначала загружаем изображение
+curl -X POST http://localhost:3264/api/files/upload \
+  -F "file=@photo.jpg"
+
+# Получаем URL и используем для генерации
+curl -X POST http://localhost:3264/api/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Сделай изображение в стиле импрессионизма",
+    "image_url": "https://oss-bucket.aliyuncs.com/uploads/photo.jpg",
+    "model": "qwen-image-plus",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+**Параметры:**
+
+| Параметр | Тип | Обязательный | Описание |
+|----------|------|-------------|----------|
+| `prompt` | string | ✅ | Текстовое описание желаемого изображения |
+| `model` | string | ❌ | Модель генерации (`qwen-image-plus`, `qwen-image-turbo`) |
+| `n` | integer | ❌ | Количество изображений (по умолчанию 1) |
+| `size` | string | ❌ | Размер: `1024x1024`, `1024x1792`, `1792x1024`, `512x512`, `768x768`, `960x960` |
+| `image_url` | string | ❌ | URL исходного изображения для image-to-image |
+
+> **⚠️ Требуется API-ключ:** Для генерации изображений необходимо установить переменную окружения `DASHSCOPE_API_KEY`.
+
+#### Генерация через Telegram бота
+
+**Text-to-Image:**
+```
+/imagens Космический корабль на фоне туманности
+```
+
+**Image-to-Image:**
+1. Отправьте фото боту
+2. Добавьте подпись с описанием желаемого результата
+3. Бот автоматически сгенерирует новое изображение
+
+> 📖 **Подробная документация:** [docs/IMAGE_GENERATION.md](docs/IMAGE_GENERATION.md), [docs/IMAGE_GENERATION_MODES.md](docs/IMAGE_GENERATION_MODES.md)
+
+---
+
 ## Работа с контекстом (API v2)
 
 API использует серверную историю чатов Qwen. Каждый ответ содержит `chatId` и `parentId`, которые нужно передать в следующий запрос для продолжения диалога.
@@ -1360,6 +1537,144 @@ curl -X POST http://localhost:3264/api/chat \
   {"type": "image", "image": "https://url-to-uploaded-image.com/image.png"}
 ]
 ```
+
+---
+
+## Генерация изображений 🆕
+
+Проект поддерживает генерацию изображений через **двойной бэкенд**: Qwen Image API + DashScope API.
+
+### 🎯 Режимы генерации
+
+#### 1. Text-to-Image (Текст → Изображение)
+
+Генерация изображения из текстового описания:
+
+**Через API:**
+```bash
+curl -X POST http://localhost:3264/api/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Красивый закат над океаном, фотореалистично",
+    "model": "qwen-image-plus",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+**Через Telegram бота:**
+```
+/imagens Красивый закат над океаном, фотореалистично
+```
+
+#### 2. Image-to-Image (Изображение → Изображение)
+
+Трансформация загруженного изображения по описанию:
+
+**Через API:**
+```bash
+# 1. Загружаем изображение
+curl -X POST http://localhost:3264/api/files/upload \
+  -F "file=@photo.jpg"
+
+# 2. Генерируем на основе загруженного
+curl -X POST http://localhost:3264/api/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Сделай в стиле аниме",
+    "image_url": "https://oss-bucket.aliyuncs.com/uploads/photo.jpg",
+    "model": "qwen-image-plus",
+    "n": 1
+  }'
+```
+
+**Через Telegram бота:**
+1. Отправьте фото боту
+2. Добавьте подпись: "Сделай в стиле аниме"
+3. Бот автоматически сгенерирует новое изображение
+
+### 🛠 Доступные модели
+
+| Модель | Описание | Скорость | Качество |
+|--------|----------|----------|----------|
+| `qwen-image-plus` | Высокое качество | Средняя | Отличное |
+| `qwen-image-turbo` | Быстрая генерация | Быстрая | Хорошее |
+
+### 📐 Поддерживаемые размеры
+
+- `1024x1024` — квадрат (по умолчанию)
+- `1024x1792` — портретный
+- `1792x1024` — ландшафтный
+- `512x512` — маленький квадрат
+- `768x768` — средний квадрат
+- `960x960` — большой квадрат
+
+### 🔧 Настройка
+
+**Требуется API-ключ:**
+```bash
+# В файле .env
+DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx
+```
+
+**Лимиты:**
+- Отдельный rate limit для генерации медиа (не влияет на чат)
+- Автоматическая ротация аккаунтов при превышении лимитов
+- Максимум 5 изображений за один запрос
+
+### 📝 Примеры использования
+
+**OpenAI SDK:**
+```javascript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+    baseURL: 'http://localhost:3264/api',
+    apiKey: 'any-string',
+});
+
+const response = await client.images.generate({
+    model: 'qwen-image-plus',
+    prompt: 'Футуристический город в неоновых огнях',
+    n: 1,
+    size: '1024x1024',
+});
+
+console.log(response.data[0].url);
+```
+
+**Python:**
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:3264/api",
+    api_key="any-string"
+)
+
+response = client.images.generate(
+    model="qwen-image-plus",
+    prompt="Космический корабль над планетой",
+    n=1,
+    size="1024x1024"
+)
+
+print(response.data[0].url)
+```
+
+### 🆚 Сравнение режимов
+
+| Функция | Text-to-Image | Image-to-Image |
+|---------|---------------|----------------|
+| **Вход** | Текстовый промпт | Изображение + промпт |
+| **API параметр** | `prompt` | `prompt` + `image_url` |
+| **Telegram** | `/imagens промпт` | Фото + подпись |
+| **Использование** | Создание с нуля | Стилизация/трансформация |
+
+> 📖 **Подробная документация:**
+> - [docs/IMAGE_GENERATION.md](docs/IMAGE_GENERATION.md) - полное руководство
+> - [docs/IMAGE_GENERATION_MODES.md](docs/IMAGE_GENERATION_MODES.md) - режимы генерации
+> - [docs/TELEGRAM_IMAGE_GENERATION.md](docs/TELEGRAM_IMAGE_GENERATION.md) - генерация в Telegram
 
 ---
 

@@ -1,6 +1,6 @@
-# Telegram Bot Session Upload Feature - Complete Implementation
+# Telegram Bot - Complete Feature Set
 
-## ✅ What Was Implemented
+## ✅ Implemented Features
 
 ### 1. Telegram Bot with File Upload Support
 - **Receive ZIP/7z archives** containing session data
@@ -8,22 +8,38 @@
 - **Service restart** after session update
 - **Access control** - only authorized users can interact
 
-### 2. Management Commands
-- `/start` or `/help` - Show available commands
-- `/status` - Display service status (accounts, tokens, etc.)
+### 2. LLM Chat & AI Assistant
+- **Direct AI conversation** through Telegram
+- **Context management** (up to 20 messages)
+- **Dynamic model selection** without restart
+- **System message support** for custom behavior
+
+### 3. Image Generation
+- **Text-to-Image**: Generate images from text prompts
+- **Image-to-Image**: Send photo with caption to transform
+- **Dual-mode backend**: Qwen Image API + DashScope API
+- **Progress notifications** during generation
+
+### 4. Qwen LLM Proxy
+- **Proxy API requests** through Telegram bot
+- **Model routing** to available Qwen models
+- **Rate limit handling** with smart fallback
+
+### 5. Management Commands
+- `/help` - Show available commands
+- `/status` - Display comprehensive service status
+- `/chat` - Show LLM chat status
+- `/togglechat` - Enable/disable LLM chat mode
+- `/model` - Show/set active model
+- `/clear` - Clear conversation context
 - `/restart` - Manually restart the service
 
-### 3. Automatic Restart Mechanism
-- Exit code 42 triggers restart
-- Startup script catches the exit code
-- 3-second delay before restart
-- Clean shutdown and restart cycle
-
-### 4. Session Archive Processing
-- Validates file format (.zip, .7z)
-- Checks file size (max 50MB)
-- Verifies archive structure (must contain `session/`)
-- Safe extraction (only session folder contents)
+### 6. Health Monitoring & Automation
+- **Startup health check** with AI ping-pong test
+- **Periodic checks** every 4 hours
+- **Token expiry warnings** with countdown
+- **Rate limit intelligence** (separate for chat vs media)
+- **Automatic account rotation** on errors
 
 ## 📁 Files Created
 

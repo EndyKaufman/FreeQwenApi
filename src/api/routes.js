@@ -9,11 +9,184 @@ import { loadHistory, saveHistory } from './chatHistory.js';
 import { generateImage, getAvailableImageModels, checkImageApiAvailability } from './imageGeneration.js';
 import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE, IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY } from '../config.js';
 import { getActiveModel } from '../utils/botSettings.js';
+import { getFileDownloadProxyAgent } from '../utils/proxy.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { listTokens, markInvalid, markRateLimited, markValid } from './tokenManager.js';
+
+// ─── Helpers: File processing ────────────────────────────────────────────────
+
+/**
+ * Обрабатывает файлы из разных форматов и возвращает формат для Qwen API
+ * Поддерживает:
+ * 1. Base64 data URLs (data:image/jpeg;base64,...)
+ * 2. HTTP/HTTPS URLs (скачивает и загружает в OSS)
+ * 3. Локальные файлы (загруженные через multer)
+ * 
+ * Возвращает массив в формате: [{type: 'image', image: 'url'}] или [{type: 'file', file: 'url'}]
+ */
+async function processFilesForQwen(files) {
+    if (!files || !Array.isArray(files) || files.length === 0) {
+        return [];
+    }
+
+    const qwenFiles = [];
+    const tempFiles = [];
+
+    try {
+        for (const file of files) {
+            let fileUrl = null;
+            
+            // Формат 1: {url: 'data:image/...;base64,...'} или {url: 'http://...'}
+            if (file.url) {
+                // Если это base64 data URL - сохраняем во временный файл и загружаем в OSS
+                if (file.url.startsWith('data:')) {
+                    const [header, base64Data] = file.url.split(',');
+                    const mimeType = header.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
+                    const ext = mimeType.split('/')[1]?.split('+')[0] || 'bin';
+                    
+                    const tempFileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`;
+                    const tempFilePath = path.join(UPLOADS_DIR, tempFileName);
+                    
+                    fs.writeFileSync(tempFilePath, Buffer.from(base64Data, 'base64'));
+                    tempFiles.push(tempFilePath);
+                    
+                    logInfo(`📁 Base64 файл сохранен: ${tempFilePath}`);
+                    
+                    // Загружаем в OSS
+                    const uploadResult = await uploadFileToQwen(tempFilePath);
+                    if (uploadResult.success) {
+                        fileUrl = uploadResult.url;
+                        logInfo(`✅ Base64 файл загружен в OSS: ${uploadResult.url}`);
+                    } else {
+                        logError(`❌ Ошибка загрузки base64 файла: ${uploadResult.error}`);
+                        continue;
+                    }
+                } else if (file.url.startsWith('http://') || file.url.startsWith('https://')) {
+                    // HTTP/HTTPS URL - скачиваем файл и загружаем в OSS
+                    logInfo(`📥 Скачивание файла: ${file.url}`);
+                    logInfo(`📥 Хост файла: ${new URL(file.url).hostname}`);
+                    
+                    try {
+                        // Получаем прокси агент если настроен
+                        const downloadProxyAgent = getFileDownloadProxyAgent();
+                        
+                        let response;
+                        
+                        if (downloadProxyAgent) {
+                            // Используем node-fetch с прокси
+                            const { default: nodeFetch } = await import('node-fetch');
+                            logInfo(`🔗 Используем прокси для скачивания: ${file.url}`);
+                            response = await nodeFetch(file.url, {
+                                agent: downloadProxyAgent,
+                                redirect: 'follow',
+                                timeout: 30000
+                            });
+                        } else {
+                            // Используем нативный fetch без прокси
+                            logWarn(`⚠️ Прокси не настроен, скачиваем напрямую: ${file.url}`);
+                            response = await fetch(file.url, {
+                                redirect: 'follow'
+                            });
+                        }
+                        
+                        if (!response.ok) {
+                            const errorBody = await response.text().catch(() => '');
+                            logError(`❌ Ошибка скачивания: ${response.status} ${response.statusText}${errorBody ? ` | Ответ: ${errorBody.substring(0, 500)}` : ''}`);
+                            continue;
+                        }
+                        
+                        // Определяем тип файла из Content-Type или расширения URL
+                        const contentType = response.headers.get('content-type') || '';
+                        const urlExt = file.url.split('.').pop()?.split('?')[0] || '';
+                        let ext = 'bin';
+                        
+                        if (contentType.includes('image/jpeg')) ext = 'jpg';
+                        else if (contentType.includes('image/png')) ext = 'png';
+                        else if (contentType.includes('image/gif')) ext = 'gif';
+                        else if (contentType.includes('image/webp')) ext = 'webp';
+                        else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'txt', 'doc', 'docx'].includes(urlExt)) {
+                            ext = urlExt;
+                        }
+                        
+                        // Скачиваем во временный файл
+                        const tempFileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`;
+                        const tempFilePath = path.join(UPLOADS_DIR, tempFileName);
+                        
+                        const buffer = Buffer.from(await response.arrayBuffer());
+                        fs.writeFileSync(tempFilePath, buffer);
+                        tempFiles.push(tempFilePath);
+                        
+                        logInfo(`📁 Файл скачан: ${tempFilePath} (${buffer.length} байт)`);
+                        
+                        // Загружаем в OSS
+                        const uploadResult = await uploadFileToQwen(tempFilePath);
+                        if (uploadResult.success) {
+                            fileUrl = uploadResult.url;
+                            logInfo(`✅ HTTP файл загружен в OSS: ${uploadResult.url}`);
+                        } else {
+                            logError(`❌ Ошибка загрузки HTTP файла: ${uploadResult.error}`);
+                            continue;
+                        }
+                    } catch (error) {
+                        logError(`❌ Ошибка при скачивании файла`, error);
+                        continue;
+                    }
+                } else {
+                    // Другие протоколы - передаем напрямую
+                    fileUrl = file.url;
+                    logInfo(`📁 URL добавлен: ${file.url}`);
+                }
+            }
+            // Формат 2: Multer file object
+            else if (file.path) {
+                const uploadResult = await uploadFileToQwen(file.path);
+                if (uploadResult.success) {
+                    fileUrl = uploadResult.url;
+                    logInfo(`✅ File uploaded to OSS: ${uploadResult.url}`);
+                } else {
+                    logError(`❌ Ошибка загрузки файла: ${uploadResult.error}`);
+                    continue;
+                }
+            }
+            
+            // Определяем тип файла и добавляем в правильном формате
+            if (fileUrl) {
+                const isImage = fileUrl.match(/\.(jpg|jpeg|png|gif|webp|bmp)(\?|$)/i);
+                if (isImage) {
+                    qwenFiles.push({type: 'image', image: fileUrl});
+                } else {
+                    qwenFiles.push({type: 'file', file: fileUrl});
+                }
+            }
+        }
+
+        // Очищаем временные файлы
+        for (const tempFile of tempFiles) {
+            try {
+                fs.unlinkSync(tempFile);
+                logDebug(`🗑️ Временный файл удален: ${tempFile}`);
+            } catch (e) {
+                logDebug(`Не удалось удалить временный файл: ${e.message}`);
+            }
+        }
+
+        return qwenFiles;
+    } catch (error) {
+        logError('Ошибка при обработке файлов', error);
+        
+        // Очищаем временные файлы при ошибке
+        for (const tempFile of tempFiles) {
+            try {
+                fs.unlinkSync(tempFile);
+            } catch (e) { /* ignore */ }
+        }
+        
+        throw error;
+    }
+}
 
 // Функция для генерирования детерминированного chatId на основе истории
 function generateChatIdFromHistory(messages) {
@@ -317,7 +490,7 @@ router.use((req, res, next) => {
 
 // ─── Helpers: message parsing ────────────────────────────────────────────────
 
-function parseOpenAIMessages(messages) {
+async function parseOpenAIMessages(messages) {
     const systemMsg = messages.find(msg => msg.role === 'system');
     const systemMessage = systemMsg ? systemMsg.content : null;
     const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
@@ -327,6 +500,7 @@ function parseOpenAIMessages(messages) {
     }
     
     let messageContent = lastUserMessage.content;
+    const extractedFiles = [];
     
     // Преобразуем OpenAI format content array во внутренний формат
     if (Array.isArray(messageContent)) {
@@ -335,13 +509,43 @@ function parseOpenAIMessages(messages) {
                 return { type: 'text', text: item.text };
             } else if (item.type === 'image_url' && item.image_url) {
                 // OpenAI format: image_url: { url: '...' }
-                return { type: 'image', image: item.image_url.url };
+                // Извлекаем для загрузки в OSS
+                extractedFiles.push({url: item.image_url.url});
+                return null; // Удаляем, файлы будут добавлены позже
             } else if (item.type === 'image') {
                 // Уже во внутреннем формате
-                return { type: 'image', image: item.image };
+                extractedFiles.push({url: item.image});
+                return null;
             }
             return item;
+        }).filter(item => item !== null); // Убираем null
+    }
+    
+    // Поддерживаем также формат: content: 'text', files: [{url: '...'}]
+    // Добавляем файлы из lastUserMessage.files в extractedFiles
+    if (lastUserMessage.files && Array.isArray(lastUserMessage.files)) {
+        lastUserMessage.files.forEach(f => {
+            if (f.url) {
+                extractedFiles.push({url: f.url});
+            }
         });
+    }
+    
+    // Используем только extractedFiles (уже содержит все файлы)
+    const rawFiles = extractedFiles;
+    
+    // Обрабатываем все файлы (base64 -> OSS, локальные -> OSS, URLs -> как есть)
+    const files = rawFiles.length > 0 ? await processFilesForQwen(rawFiles) : [];
+    
+    // Добавляем файлы в messageContent
+    if (Array.isArray(messageContent) && files.length > 0) {
+        messageContent = [...messageContent, ...files];
+    } else if (files.length > 0) {
+        // Если messageContent был строкой, превращаем в массив
+        messageContent = [
+            { type: 'text', text: messageContent },
+            ...files
+        ];
     }
     
     return { messageContent, systemMessage };
@@ -439,7 +643,7 @@ router.post('/chat', async (req, res) => {
         const isMeta = isOpenWebUiMetaRequest(messages);
 
         if (messages && Array.isArray(messages)) {
-            const parsed = parseOpenAIMessages(messages);
+            const parsed = await parseOpenAIMessages(messages);
             systemMessage = parsed.systemMessage;
             if (parsed.messageContent) messageContent = parsed.messageContent;
         }
@@ -759,22 +963,57 @@ router.post('/chat/completions', async (req, res) => {
         let messageContent = lastUserMessage.content;
         
         // Преобразуем OpenAI format content array во внутренний формат
+        const extractedFiles = []; // Files из content array
+        
         if (Array.isArray(messageContent)) {
             messageContent = messageContent.map(item => {
                 if (item.type === 'text') {
                     return { type: 'text', text: item.text };
                 } else if (item.type === 'image_url' && item.image_url) {
                     // OpenAI format: image_url: { url: '...' }
-                    return { type: 'image', image: item.image_url.url };
+                    // Извлекаем URL/base64 для загрузки в OSS
+                    extractedFiles.push({url: item.image_url.url});
+                    return { type: 'text', text: '' }; // Заменяем на пустой текст, файлы будут в files
                 } else if (item.type === 'image') {
                     // Уже во внутреннем формате
-                    return { type: 'image', image: item.image };
+                    extractedFiles.push({url: item.image});
+                    return { type: 'text', text: '' };
                 }
                 return item;
             });
+            
+            // Убираем пустые text элементы
+            messageContent = messageContent.filter(item => item.type !== 'text' || item.text.trim());
         }
         
-        const files = lastUserMessage.files || []; // ← ИЗВЛЕКАЕМ FILES
+        // Поддерживаем также формат: content: 'text', files: [{url: '...'}]
+        // Добавляем файлы из lastUserMessage.files в extractedFiles
+        if (lastUserMessage.files && Array.isArray(lastUserMessage.files)) {
+            lastUserMessage.files.forEach(f => {
+                if (f.url) {
+                    extractedFiles.push({url: f.url});
+                }
+            });
+        }
+        
+        // Используем только extractedFiles (уже содержит все файлы)
+        const rawFiles = extractedFiles;
+        
+        // Обрабатываем все файлы (base64 -> OSS, локальные -> OSS, URLs -> как есть)
+        const files = rawFiles.length > 0 ? await processFilesForQwen(rawFiles) : [];
+        
+        // Добавляем файлы в messageContent
+        if (Array.isArray(messageContent) && files.length > 0) {
+            messageContent = [...messageContent, ...files];
+        } else if (files.length > 0) {
+            messageContent = [
+                { type: 'text', text: messageContent },
+                ...files
+            ];
+        }
+
+        // Файлы уже встроены в messageContent, не передаем отдельно чтобы избежать дублирования
+        const filesForSend = null;
 
         if (isMeta) {
             effectiveChatId = null;
@@ -842,7 +1081,7 @@ router.post('/chat/completions', async (req, res) => {
                     mappedModel,
                     qwenChatId,
                     effectiveParentId,
-                    files, // ← ПЕРЕДАЁМ FILES
+                    filesForSend, // ← Файлы уже в messageContent, не передаем отдельно
                     combinedTools,
                     tool_choice,
                     systemMessage,
@@ -1058,22 +1297,57 @@ router.post('/v1/chat/completions', async (req, res) => {
         let messageContent = lastUserMessage.content;
         
         // Преобразуем OpenAI format content array во внутренний формат
+        const extractedFiles = []; // Files из content array
+        
         if (Array.isArray(messageContent)) {
             messageContent = messageContent.map(item => {
                 if (item.type === 'text') {
                     return { type: 'text', text: item.text };
                 } else if (item.type === 'image_url' && item.image_url) {
                     // OpenAI format: image_url: { url: '...' }
-                    return { type: 'image', image: item.image_url.url };
+                    // Извлекаем URL/base64 для загрузки в OSS
+                    extractedFiles.push({url: item.image_url.url});
+                    return { type: 'text', text: '' }; // Заменяем на пустой текст, файлы будут в files
                 } else if (item.type === 'image') {
                     // Уже во внутреннем формате
-                    return { type: 'image', image: item.image };
+                    extractedFiles.push({url: item.image});
+                    return { type: 'text', text: '' };
                 }
                 return item;
             });
+            
+            // Убираем пустые text элементы
+            messageContent = messageContent.filter(item => item.type !== 'text' || item.text.trim());
         }
         
-        const files = lastUserMessage.files || []; // ← ИЗВЛЕКАЕМ FILES
+        // Поддерживаем также формат: content: 'text', files: [{url: '...'}]
+        // Добавляем файлы из lastUserMessage.files в extractedFiles
+        if (lastUserMessage.files && Array.isArray(lastUserMessage.files)) {
+            lastUserMessage.files.forEach(f => {
+                if (f.url) {
+                    extractedFiles.push({url: f.url});
+                }
+            });
+        }
+        
+        // Используем только extractedFiles (уже содержит все файлы)
+        const rawFiles = extractedFiles;
+        
+        // Обрабатываем все файлы (base64 -> OSS, локальные -> OSS, URLs -> как есть)
+        const files = rawFiles.length > 0 ? await processFilesForQwen(rawFiles) : [];
+        
+        // Добавляем файлы в messageContent
+        if (Array.isArray(messageContent) && files.length > 0) {
+            messageContent = [...messageContent, ...files];
+        } else if (files.length > 0) {
+            messageContent = [
+                { type: 'text', text: messageContent },
+                ...files
+            ];
+        }
+
+        // Файлы уже встроены в messageContent, не передаем отдельно чтобы избежать дублирования
+        const filesForSend = null;
 
         if (isMeta) {
             effectiveChatId = null;
@@ -1139,7 +1413,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                     mappedModel,
                     qwenChatId,
                     effectiveParentId,
-                    files, // ← ИЗВЛЕКАЕМ FILES
+                    filesForSend, // ← Файлы уже в messageContent, не передаем отдельно
                     combinedTools,
                     tool_choice,
                     systemMessage,
@@ -1209,7 +1483,7 @@ router.post('/v1/chat/completions', async (req, res) => {
             const combinedTools = tools || (functions ? functions.map(fn => ({ type: 'function', function: fn })) : null);
             const qwenChatId = await resolveQwenChatId(effectiveChatId, mappedModel);
 
-            const result = await sendMessage(messageContent, mappedModel, qwenChatId, effectiveParentId, files, combinedTools, tool_choice, systemMessage);
+            const result = await sendMessage(messageContent, mappedModel, qwenChatId, effectiveParentId, filesForSend, combinedTools, tool_choice, systemMessage);
 
             // Сохраняем chatId в сессии для следующих запросов
             if (!isMeta && result.chatId) {
@@ -1329,6 +1603,196 @@ router.post('/files/upload', upload.single('file'), async (req, res) => {
         logError('Ошибка при загрузке файла', error);
         if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch { /* ignore */ } }
         res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+    }
+});
+
+// ─── Multipart Chat Endpoint (OpenAI-compatible with files) ─────────────────
+
+/**
+ * POST /api/chat/multipart - Chat with file uploads via multipart/form-data
+ * OpenAI-compatible endpoint that supports both JSON and file uploads
+ * 
+ * Fields:
+ * - message: Text message (required)
+ * - model: Model name (optional)
+ * - stream: Enable streaming (optional, boolean)
+ * - files[]: Multiple files (optional, up to 5 files, max 10MB each)
+ */
+router.post('/chat/multipart', upload.array('files', 5), async (req, res) => {
+    try {
+        const { message, model, stream } = req.body;
+        const uploadedFiles = req.files || [];
+
+        if (!message) {
+            logError('Запрос без сообщения');
+            return res.status(400).json({ error: 'Сообщение не указано' });
+        }
+
+        logInfo(`Получен multipart запрос: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
+        if (uploadedFiles.length > 0) {
+            logInfo(`Прикреплено файлов: ${uploadedFiles.length}`);
+        }
+
+        let mappedModel = model || getActiveModel();
+        if (model) {
+            mappedModel = getMappedModel(model);
+            if (mappedModel !== model) {
+                logInfo(`Модель "${model}" заменена на "${mappedModel}"`);
+            }
+        }
+        logInfo(`Используется модель: ${mappedModel}`);
+
+        // Обрабатываем загруженные файлы
+        const files = uploadedFiles.length > 0 ? await processFilesForQwen(uploadedFiles) : [];
+        
+        // Встраиваем файлы в messageContent как в test 2
+        let messageContent = message;
+        if (files.length > 0) {
+            messageContent = [
+                { type: 'text', text: message },
+                ...files
+            ];
+        }
+
+        // Подготовка streaming если нужно
+        if (stream === 'true' || stream === '1' || stream === true) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no');
+            res.setHeader('Transfer-Encoding', 'chunked');
+
+            const writeSse = (payload) => {
+                res.write('data: ' + JSON.stringify(payload) + '\n\n');
+            };
+
+            try {
+                writeSse({
+                    id: 'chatcmpl-stream',
+                    object: 'chat.completion.chunk',
+                    created: Math.floor(Date.now() / 1000),
+                    model: mappedModel,
+                    choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }]
+                });
+
+                let streamingCallback = null;
+                let hasStreamedChunks = false;
+                streamingCallback = (chunk) => {
+                    hasStreamedChunks = true;
+                    writeSse({
+                        id: 'chatcmpl-stream',
+                        object: 'chat.completion.chunk',
+                        created: Math.floor(Date.now() / 1000),
+                        model: mappedModel,
+                        choices: [{ index: 0, delta: { content: chunk }, finish_reason: null }]
+                    });
+                };
+
+                const result = await sendMessage(
+                    messageContent,
+                    mappedModel,
+                    null, // chatId
+                    null, // parentId
+                    null, // files - теперь в messageContent
+                    null, // tools
+                    null, // toolChoice
+                    null, // systemMessage
+                    't2t',
+                    null,
+                    true,
+                    0,
+                    streamingCallback
+                );
+
+                if (result.error) {
+                    writeSse({
+                        id: 'chatcmpl-stream',
+                        object: 'chat.completion.chunk',
+                        created: Math.floor(Date.now() / 1000),
+                        model: mappedModel,
+                        choices: [{ index: 0, delta: { content: `Error: ${result.error}` }, finish_reason: 'stop' }]
+                    });
+                } else if (!hasStreamedChunks && result.choices?.[0]?.message?.content) {
+                    const content = result.choices[0].message.content;
+                    if (typeof streamingCallback === 'function') {
+                        streamingCallback(content);
+                    }
+                }
+
+                writeSse({
+                    id: 'chatcmpl-stream',
+                    object: 'chat.completion.chunk',
+                    created: Math.floor(Date.now() / 1000),
+                    model: mappedModel,
+                    choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+                });
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+            } catch (error) {
+                logError('Ошибка при обработке потокового multipart запроса', error);
+                writeSse({
+                    id: 'chatcmpl-stream',
+                    object: 'chat.completion.chunk',
+                    created: Math.floor(Date.now() / 1000),
+                    model: mappedModel,
+                    choices: [{ index: 0, delta: { content: 'Internal server error' }, finish_reason: 'stop' }]
+                });
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+            }
+        } else {
+            // Non-streaming response
+            const result = await sendMessage(
+                messageContent,
+                mappedModel,
+                null,
+                null,
+                null, // files - теперь в messageContent
+                null,
+                null,
+                null,
+                't2t',
+                null,
+                true
+            );
+
+            if (result.error) {
+                return res.status(500).json({
+                    error: { message: result.error, type: 'server_error' }
+                });
+            }
+
+            const openaiResponse = {
+                id: result.id || 'chatcmpl-' + Date.now(),
+                object: 'chat.completion',
+                created: Math.floor(Date.now() / 1000),
+                model: result.model || mappedModel,
+                choices: result.choices || [{
+                    index: 0,
+                    message: {
+                        role: 'assistant',
+                        content: result.choices?.[0]?.message?.content || ''
+                    },
+                    finish_reason: 'stop'
+                }],
+                usage: result.usage || {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0
+                },
+                chatId: result.chatId,
+                parentId: result.parentId
+            };
+
+            res.json(openaiResponse);
+        }
+    } catch (error) {
+        logError('Ошибка при обработке multipart запроса', error);
+        res.status(500).json({ error: { message: 'Внутренняя ошибка сервера', type: 'server_error' } });
     }
 });
 

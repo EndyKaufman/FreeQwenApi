@@ -174,8 +174,7 @@ export async function configureProxy() {
             });
             logInfo('✅ Соединение с прокси установлено');
         } catch (error) {
-            logError('❌ Ошибка создания прокси агента');
-            logError(`Проверьте формат URL прокси: ${error.message}`);
+            logError('❌ Ошибка создания прокси агента', error);
         }
     }
 }
@@ -532,7 +531,7 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
             await notifyAllUsers(report);
             logInfo('📤 Отчет о запуске отправлен в Telegram');
         } catch (e) {
-            logError('❌ Не удалось отправить отчет в Telegram:', e.message);
+            logError('❌ Не удалось отправить отчет в Telegram', e);
         }
     }
     
@@ -586,7 +585,7 @@ export async function startTelegramBot() {
         const response = await fetchWithProxy(testUrl);
 
         if (!response.ok) {
-            logError('❌ Не удалось подключиться к Telegram API');
+            logError(`❌ Не удалось подключиться к Telegram API: HTTP ${response.status}`);
             return false;
         }
 
@@ -600,7 +599,6 @@ export async function startTelegramBot() {
 
         return true;
     } catch (error) {
-        console.log(error)
         // Определяем тип ошибки для лучшего сообщения
         let errorMessage = 'Ошибка при запуске Telegram бота';
 
@@ -616,8 +614,7 @@ export async function startTelegramBot() {
             errorMessage = '❌ Таймаут подключения. Проверьте соединение и настройки прокси.';
         }
 
-        logError(errorMessage);
-        logError(`Детали: ${String(error.message)}`);
+        logError(errorMessage, error);
         return false;
     }
 }
@@ -656,7 +653,8 @@ async function startPolling() {
             const response = await fetchWithProxy(updatesUrl, undefined, true);
 
             if (!response.ok) {
-                logError('Ошибка получения обновлений Telegram');
+                const errorText = await response.text().catch(() => '');
+                logError(`Ошибка получения обновлений Telegram: HTTP ${response.status}${errorText ? ` | Ответ: ${errorText.substring(0, 500)}` : ''}`);
                 await new Promise(resolve => setTimeout(resolve, 5000));
                 continue;
             }
@@ -887,8 +885,18 @@ async function sendPhoto(chatId, photoUrl, caption = '') {
         }, true);
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.description || `HTTP ${response.status}`);
+            const errorText = await response.text().catch(() => '');
+            let errorDescription = `HTTP ${response.status}`;
+            try {
+                const errorData = JSON.parse(errorText);
+                errorDescription = errorData.description || errorDescription;
+            } catch {
+                // Если не JSON, используем текст ответа
+                if (errorText) {
+                    errorDescription = errorText.substring(0, 500);
+                }
+            }
+            throw new Error(errorDescription);
         }
 
         logDebug(`📸 Фото отправлено: ${photoUrl}`);

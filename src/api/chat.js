@@ -414,7 +414,7 @@ export async function ensureModelsLoaded() {
             logDebug(`loadModelsFromFile вернул: ${fileModels ? fileModels.length + ' моделей' : 'null'}`);
             return fileModels;
         } catch (error) {
-            logError(`❌ Ошибка загрузки моделей из API: ${error.message}`);
+            logError(`❌ Ошибка загрузки моделей из API`, error);
             logWarn('⚠️ Используем резервный список из AvailableModels.txt');
             const fileModels = loadModelsFromFile();
             logDebug(`loadModelsFromFile (catch) вернул: ${fileModels ? fileModels.length + ' моделей' : 'null'}`);
@@ -471,7 +471,7 @@ function loadModelsFromFile() {
 
         return models;
     } catch (error) {
-        logError(`❌ Ошибка при чтении файла с моделями: ${error.message}`);
+        logError(`❌ Ошибка при чтении файла с моделями`, error);
         const fallback = resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
         logDebug(`Fallback модели после ошибки: ${fallback.join(', ')}`);
         return fallback;

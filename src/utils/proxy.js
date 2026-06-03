@@ -1,12 +1,14 @@
 import { ProxyAgent } from 'proxy-agent';
-import { TELEGRAM_PROXY, QWEN_PROXY } from '../config.js';
+import { TELEGRAM_PROXY, QWEN_PROXY, FILE_DOWNLOAD_PROXY } from '../config.js';
 import { logInfo, logWarn, logDebug } from '../logger/index.js';
 
 // Кэш прокси агентов (создаются один раз)
 let telegramProxyAgent = null;
 let qwenProxyAgent = null;
+let fileDownloadProxyAgent = null;
 let telegramProxyInitialized = false;
 let qwenProxyInitialized = false;
+let fileDownloadProxyInitialized = false;
 
 /**
  * Получить ProxyAgent для Telegram
@@ -64,6 +66,38 @@ function getQwenProxyAgent() {
         logWarn(`❌ Ошибка инициализации прокси для Qwen LLM: ${error.message}`);
         qwenProxyInitialized = true;
         qwenProxyAgent = null;
+        return null;
+    }
+}
+
+/**
+ * Получить ProxyAgent для скачивания файлов
+ * Агент кэшируется для повторного использования
+ * @returns {ProxyAgent|null} - ProxyAgent или null если прокси не настроен
+ */
+export function getFileDownloadProxyAgent() {
+    if (fileDownloadProxyInitialized) {
+        logDebug(`📥 getFileDownloadProxyAgent: возвращаем кэшированный агент (${fileDownloadProxyAgent ? 'есть' : 'null'})`);
+        return fileDownloadProxyAgent;
+    }
+
+    if (!FILE_DOWNLOAD_PROXY) {
+        logWarn('⚠️ FILE_DOWNLOAD_PROXY не настроен в .env');
+        fileDownloadProxyInitialized = true;
+        fileDownloadProxyAgent = null;
+        return null;
+    }
+
+    try {
+        logInfo(`📥 Инициализация прокси для скачивания файлов: ${maskProxyUrl(FILE_DOWNLOAD_PROXY)}`);
+        fileDownloadProxyAgent = new ProxyAgent(FILE_DOWNLOAD_PROXY);
+        fileDownloadProxyInitialized = true;
+        logInfo('✅ Прокси для скачивания файлов успешно инициализирован');
+        return fileDownloadProxyAgent;
+    } catch (error) {
+        logError(`❌ Ошибка инициализации прокси для скачивания файлов`, error);
+        fileDownloadProxyInitialized = true;
+        fileDownloadProxyAgent = null;
         return null;
     }
 }
@@ -211,6 +245,11 @@ export function getProxyInfo() {
             configured: !!QWEN_PROXY,
             url: maskProxyUrl(QWEN_PROXY),
             active: qwenProxyInitialized && qwenProxyAgent !== null
+        },
+        fileDownload: {
+            configured: !!FILE_DOWNLOAD_PROXY,
+            url: maskProxyUrl(FILE_DOWNLOAD_PROXY),
+            active: fileDownloadProxyInitialized && fileDownloadProxyAgent !== null
         }
     };
 }

@@ -58,8 +58,9 @@ export async function getStsToken(fileInfo) {
             logInfo(`STS токен успешно получен для файла: ${fileInfo.filename}`);
             return result.data;
         }
-        logError(`Ошибка при получении STS токена: status=${result.status}, error=${result.errorBody || result.error}`);
-        throw new Error(`Ошибка получения STS токена: ${result.statusText || result.error}`);
+        const errorMsg = result.errorBody || result.error || result.statusText || 'Unknown error';
+        logError(`Ошибка при получении STS токена: status=${result.status}, error=${errorMsg}`);
+        throw new Error(`Ошибка получения STS токена: ${result.statusText || ''} ${errorMsg}`);
     } catch (error) {
         logError(`Ошибка при получении STS токена: ${error.message}`, error);
         throw error;

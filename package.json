@@ -1,6 +1,6 @@
 {
     "name": "qwen-api-proxy",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "description": "Прокси-сервер для доступа к Qwen API через эмуляцию браузера",
     "license": "MIT",
     "repository": {

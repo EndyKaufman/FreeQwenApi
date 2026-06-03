@@ -819,6 +819,19 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
         } else {
             logError(`❌ Ошибка генерации изображения: ${result.error}`);
             
+            // Проверяем, это rate limit?
+            if (result.rateLimit) {
+                const hours = result.rateLimitHours || 24;
+                await sendMessage(chatId,
+                    `⏳ <b>Лимит генерации изображений достигнут</b>\n\n` +
+                    `⚠️ API Qwen ограничивает количество генераций в день\n` +
+                    `⏰ Попробуйте через ${hours}ч\n\n` +
+                    `💡 Совет: используйте другой аккаунт с токеном\n` +
+                    `📝 Или подождите сброса лимита`
+                );
+                return;
+            }
+            
             // Формируем детальное сообщение об ошибке
             let errorMessage = result.error || 'Неизвестная ошибка';
             

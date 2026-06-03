@@ -1044,7 +1044,14 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
             hours = Number(rateInfo.num) || 24;
         } catch { /* errorBody might not be valid JSON */ }
 
-        if (tokenObj?.id === 'browser') {
+        // Для генерации изображений/видео не помечаем токен как rate-limited
+        // это отдельный лимит API, не связанный с текстовыми запросами
+        const isMediaGeneration = chatType === 't2i' || chatType === 't2v';
+        
+        if (isMediaGeneration) {
+            logWarn(`⚠️ Rate limit для генерации медиа (${chatType}). НЕ помечаем токен - это отдельный лимит.`);
+            logWarn(`⏳ Нужно подождать ${hours}ч или использовать другой аккаунт`);
+        } else if (tokenObj?.id === 'browser') {
             browserTokenRateLimited = true;
             logWarn(`Browser-токен достиг лимита. Помечаем на ${hours}ч.`);
         } else if (tokenObj?.id) {
@@ -1053,6 +1060,18 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
         }
 
         authToken = null;
+        
+        // Для медиа-генерации не пытаемся retry с другим токеном
+        // так как лимит общий для всех аккаунтов
+        if (isMediaGeneration) {
+            return { 
+                error: `Rate limit для генерации изображений. Попробуйте через ${hours}ч`, 
+                chatId,
+                rateLimit: true,
+                rateLimitHours: hours
+            };
+        }
+        
         const { hasValidTokens } = await import('./tokenManager.js');
         if (hasValidTokens() && retryCount < MAX_RETRY_COUNT) {
             return sendMessage(message, model, chatId, parentId, files, null, null, null, chatType, size, waitForCompletion, retryCount + 1, onChunk);

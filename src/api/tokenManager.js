@@ -77,7 +77,12 @@ export function saveTokens(tokens) {
     try {
         fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
     } catch (e) {
-        logError('TokenManager: ошибка сохранения tokens.json', e);
+        // Не логируем EACCES как ошибку - это предупреждение
+        if (e.code === 'EACCES') {
+            logWarn('⚠️ Нет прав на записи tokens.json. Запустите: sudo chown -R $USER:$USER session/');
+        } else {
+            logError('TokenManager: ошибка сохранения tokens.json', e);
+        }
     }
 }
 

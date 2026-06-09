@@ -1014,10 +1014,10 @@ async function handleCommand(chatId, text) {
             await sendMessage(chatId, 
                 '🎨 <b>Генерация изображений</b>\n\n' +
                 '💬 <b>Текстовый режим:</b>\n' +
-                '/image <описание> - генерация по описанию\n\n' +
+                '/image &lt;описание&gt; - генерация по описанию\n\n' +
                 '📸 <b>Режим Image-to-Image:</b>\n' +
                 'Отправьте фото с подписью (caption)\n' +
-                'Или используйте /image <описание> с фото\n\n' +
+                'Или используйте /image &lt;описание&gt; с фото\n\n' +
                 '📝 Примеры:\n' +
                 '• /image A beautiful sunset\n' +
                 '• Отправьте фото с текстом "Улучши это"'
@@ -1430,7 +1430,7 @@ async function createSessionBackup(sessionPath, chatId) {
 
         logInfo(`✅ session_backup успешно создан: ${backupDir}`);
         try {
-            await sendMessage(chatId, `✅ session_backup создан: \`session_backup/${timestamp}\``);
+            await sendMessage(chatId, `✅ session_backup создан: <code>session_backup/${timestamp}</code>`);
         } catch (sendError) {
             // Игнорируем ошибки отправки сообщений
         }
@@ -1865,36 +1865,36 @@ async function sendSetupMessage(chatId) {
         `🛠️ <b>Создание сессии авторизации</b>\n\n` +
         `<b>Способ 1: Локальная установка (Node.js)</b>\n\n` +
         `<b>Linux/macOS:</b>\n` +
-        `1. \`git clone https://github.com/EndyKaufman/FreeQwenApi\`\n` +
-        `2. \`cd FreeQwenApi\`\n` +
-        `3. \`npm install\`\n` +
-        `4. \`npm start\`\n` +
-        `5. Выберите \`1\` - добавить аккаунт\n` +
+        `1. <code>git clone https://github.com/EndyKaufman/FreeQwenApi</code>\n` +
+        `2. <code>cd FreeQwenApi</code>\n` +
+        `3. <code>npm install</code>\n` +
+        `4. <code>npm start</code>\n` +
+        `5. Выберите <code>1</code> - добавить аккаунт\n` +
         `6. Войдите в аккаунт Qwen в браузере\n` +
         `7. Токен сохранится автоматически\n\n` +
         `<b>Windows:</b>\n` +
-        `1. \`git clone https://github.com/EndyKaufman/FreeQwenApi\`\n` +
-        `2. \`cd FreeQwenApi\`\n` +
-        `3. \`npm install\`\n` +
-        `4. \`npm start\`\n` +
-        `5. Выберите \`1\` - добавить аккаунт\n` +
+        `1. <code>git clone https://github.com/EndyKaufman/FreeQwenApi</code>\n` +
+        `2. <code>cd FreeQwenApi</code>\n` +
+        `3. <code>npm install</code>\n` +
+        `4. <code>npm start</code>\n` +
+        `5. Выберите <code>1</code> - добавить аккаунт\n` +
         `6. Войдите в аккаунт Qwen в браузере\n` +
         `7. Токен сохранится автоматически\n\n` +
         `<b>Способ 2: Docker</b>\n\n` +
         `1. Сначала создайте сессию локально:\n` +
-        `   \`npm run auth\` (или \`npm start\` → \`1\`)\n` +
+        `   <code>npm run auth</code> (или <code>npm start</code> → <code>1</code>)\n` +
         `2. Затем соберите Docker:\n` +
-        `   \`docker compose build --no-cache\`\n` +
+        `   <code>docker compose build --no-cache</code>\n` +
         `3. Запустите:\n` +
-        `   \`docker compose up -d\`\n\n` +
+        `   <code>docker compose up -d</code>\n\n` +
         `<b>Структура папки session:</b>\n` +
-        `\`session/\`\n` +
-        `├── \`accounts/\`\n` +
-        `│   ├── \`acc_123456/\`\n` +
-        `│   │   └── \`token.txt\`\n` +
-        `│   └── \`acc_789012/\`\n` +
-        `│       └── \`token.txt\`\n` +
-        `└── \`tokens.json\`\n\n` +
+        `<code>session/</code>\n` +
+        `├── <code>accounts/</code>\n` +
+        `│   ├── <code>acc_123456/</code>\n` +
+        `│   │   └── <code>token.txt</code>\n` +
+        `│   └── <code>acc_789012/</code>\n` +
+        `│       └── <code>token.txt</code>\n` +
+        `└── <code>tokens.json</code>\n\n` +
         `📖 Подробнее: https://github.com/EndyKaufman/FreeQwenApi`;
     
     await sendMessage(chatId, setupText);
@@ -2236,10 +2236,13 @@ async function handleLLMChat(chatId, userMessage) {
             stream: false
         };
 
+        // Используем chatId Telegram как x-chat-id header для изоляции диалогов
+        // Это позволяет API управлять контекстом вместо локального chatContexts
         const response = await fetchWithQwenProxy(apiUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'x-chat-id': `telegram-${chatId}`  // Уникальный ID для каждого Telegram чата
             },
             body: JSON.stringify(requestBody)
         });

@@ -63,6 +63,11 @@ export const HOST = process.env.HOST || '0.0.0.0';
 export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || null;
 export const ALLOW_UNSCOPED_SESSION_CHAT_RESTORE = toBoolean(process.env.ALLOW_UNSCOPED_SESSION_CHAT_RESTORE);
 
+// ─── Режим сессий чата ──────────────────────────────────────────────────────
+// FORCE_NEW_CHAT_PER_REQUEST=true: каждый запрос создает новый диалог (как OpenAI API)
+// FORCE_NEW_CHAT_PER_REQUEST=false (по умолчанию): восстанавливает предыдущий диалог
+export const FORCE_NEW_CHAT_PER_REQUEST = toBoolean(process.env.FORCE_NEW_CHAT_PER_REQUEST);
+
 // ─── Логирование ─────────────────────────────────────────────────────────────
 export const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 export const LOG_MAX_SIZE = Number(process.env.LOG_MAX_SIZE) || 5_242_880; // 5 MB

@@ -7,7 +7,7 @@ import { getMappedModel } from './modelMapping.js';
 import { getStsToken, uploadFileToQwen } from './fileUpload.js';
 import { loadHistory, saveHistory } from './chatHistory.js';
 import { generateImage, getAvailableImageModels, checkImageApiAvailability } from './imageGeneration.js';
-import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE, IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY } from '../config.js';
+import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE, IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY, FORCE_NEW_CHAT_PER_REQUEST } from '../config.js';
 import { getActiveModel } from '../utils/botSettings.js';
 import { getFileDownloadProxyAgent } from '../utils/proxy.js';
 import multer from 'multer';
@@ -304,6 +304,11 @@ function isTruthyFlag(value) {
 
 function shouldForceNewChat(req) {
     const body = req.body || {};
+
+    // Если включен режим FORCE_NEW_CHAT_PER_REQUEST - всегда создаем новый чат
+    if (FORCE_NEW_CHAT_PER_REQUEST) {
+        return true;
+    }
 
     return [
         body.newChat,

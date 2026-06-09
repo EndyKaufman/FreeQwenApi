@@ -835,7 +835,20 @@ router.get('/status', async (req, res) => {
     try {
         logInfo('Запрос статуса авторизации');
         const tokens = listTokens();
-        const accounts = await Promise.all(tokens.map(async t => {
+        const now = Date.now();
+        
+        // Фильтруем только действительные токены с cookies
+        const validTokens = tokens.filter(t => {
+            if (t.invalid) return false;
+            if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
+            if (t.expiryTime && t.expiryTime <= now) return false;
+            // Проверяем наличие cookies.json
+            const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', t.id, 'cookies.json');
+            if (!fs.existsSync(cookiesPath)) return false;
+            return true;
+        });
+        
+        const accounts = await Promise.all(validTokens.map(async t => {
             const accInfo = { id: t.id, status: 'UNKNOWN', resetAt: t.resetAt || null };
 
             if (t.resetAt) {

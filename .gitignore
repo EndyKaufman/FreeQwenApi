@@ -39,3 +39,4 @@ src/Authorization.txt
 .pending_archive
 .last_telegram_update
 temp
+session_backup_*

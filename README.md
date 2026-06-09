@@ -8,13 +8,6 @@
 
 Это **улучшенная версия** оригинального проекта FreeQwenApi со значительными улучшениями для production использования и лучшего пользовательского опыта.
 
-### 🆕 Что нового в v1.0.8
-
-- **🎨 Генерация изображений в Telegram**: Text-to-image + Image-to-image (отправьте фото с подписью!)
-- **🔄 Проксирование LLM**: Запросы к Qwen API через Telegram бота
-- **📦 Multipart File Upload**: Загрузка файлов напрямую через API с валидацией
-- **🧠 Умные rate limits**: Отдельные лимиты для чата и генерации медиа
-- **🚀 Docker Hub образ**: Готовый образ `endykaufman/qwen-api-proxy:1.0.8`
 
 <table>
   <tr>
@@ -35,6 +28,7 @@
 | **Управление сессиями** | Только вручную | ✅ Загрузка через Telegram (.zip/.7z) |
 | **Прокси поддержка** | ❌ Нет для Telegram | ✅ HTTP/HTTPS/SOCKS |
 | **Проверка здоровья** | ❌ Нет | ✅ При старте + каждые 4 часа |
+| **Проверка прав доступа** | ❌ Нет | ✅ Автоматическая при старте |
 | **Система логов** | Базовая консоль | ✅ Winston с ротацией |
 | **Распаковка архивов** | Вручную | ✅ Автоматически с backup |
 | **Обработка ошибок** | Базовая | ✅ Fault-tolerant extraction |
@@ -62,6 +56,7 @@
    - Периодические проверки каждые 4 часа
    - Отчёты о статусе системы в Telegram
    - Умная обработка rate limits (отдельно для чата и медиа)
+   - **Автоматическая проверка прав доступа** при старте с командами для исправления
 
 3. **Улучшенная безопасность**
    - Безопасная обработка credentials (никогда не логируются)
@@ -213,7 +208,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.8
+  endykaufman/qwen-api-proxy:1.0.9
 
 # 3. Смотрим логи
 docker logs -f qwen-proxy
@@ -222,7 +217,7 @@ docker logs -f qwen-proxy
 ### Доступные теги
 
 - `latest` - последняя стабильная версия
-- `1.0.8` - текущая версия
+- `1.0.9` - текущая версия
 - `1.0.x` - предыдущие версии
 
 > **💡 Важно:** Перед первым запуском добавьте аккаунт через `npm run auth` или загрузите сессию через Telegram бота.
@@ -232,7 +227,7 @@ docker logs -f qwen-proxy
 ```yaml
 services:
   qwen-proxy:
-    image: endykaufman/qwen-api-proxy:1.0.8
+    image: endykaufman/qwen-api-proxy:1.0.9
     container_name: qwen-proxy
     env_file:
       - .env
@@ -273,7 +268,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.8
+  endykaufman/qwen-api-proxy:1.0.9
 ```
 
 Файл `docker-compose.yml`:
@@ -282,7 +277,7 @@ docker run -d \
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:1.0.8
+    image: endykaufman/qwen-api-proxy:1.0.9
     container_name: qwen-proxy
     env_file:
       - .env  # Автоматическая загрузка переменных
@@ -308,7 +303,7 @@ services:
 
 Переменная `SKIP_ACCOUNT_MENU=true` (или `NON_INTERACTIVE=true`) пропускает интерактивное меню и сразу запускает сервер, используя ранее сохранённые токены из `session/`.
 
-> **💡 Новое в v1.0.8:** Сервис может работать **только как Telegram бот** даже без токенов! Поддержка генерации изображений (text-to-image + image-to-image), проксирование LLM запросов, умная обработка rate limits.
+> **💡 Новое в v1.0.9:** Сервис может работать **только как Telegram бот** даже без токенов! Поддержка генерации изображений (text-to-image + image-to-image), проксирование LLM запросов, умная обработка rate limits.
 
 ### Тома Docker и структура директорий
 
@@ -410,6 +405,49 @@ cp -r logs/ logs_backup_$(date +%Y%m%d)/
 # Восстановление
 cp -r session_backup_20260510/ session/
 ```
+
+**5. Автоматическая проверка прав доступа**
+
+При запуске сервер автоматически проверяет права доступа ко всем директориям и файлам:
+
+```bash
+# При запуске
+npm start
+
+# Вывод:
+# 🔍 Проверка прав доступа к директориям и файлам...
+# ✅ Все директории и файлы доступны для записи
+```
+
+Если обнаружены проблемы:
+
+```bash
+# ❌ Обнаружены проблемы с правами доступа (3):
+# 📁 session/accounts (directory)
+#    Ошибка: EACCES: permission denied
+#    Решение:
+#    sudo chown -R $USER:$USER /path/to/session/accounts
+#    sudo chmod -R 755 /path/to/session/accounts
+#
+# 🔧 Быстрое решение:
+# sudo chown -R $USER:$USER session uploads logs temp session_backup
+# sudo chmod -R 755 session uploads logs temp session_backup
+```
+
+**Ручная проверка и исправление:**
+
+```bash
+# Проверить права
+npm run check-permissions
+
+# Автоматически исправить все проблемы
+npm run fix-permissions
+
+# Или вручную
+bash fix-permissions.sh
+```
+
+📖 **Полная документация:** [PERMISSION_CHECKING.md](PERMISSION_CHECKING.md)
 
 ---
 

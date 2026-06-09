@@ -2,9 +2,11 @@
 
 ## ✅ What Was Implemented
 
-### 1. Token Expiry Checking Before LLM Requests
-- **Before each request**, the system now checks if the token will expire within 1 hour
-- If a token is expiring soon or already expired, it's **skipped automatically**
+### 1. Dual Token Expiry Checking Before LLM Requests
+- **Before each request**, the system now checks TWO types of expiry:
+  - **JWT Token Expiry**: Decoded from the JWT's `exp` claim (actual token expiration)
+  - **Rate Limit Reset**: When rate limit will be reset (from HTTP 429 responses)
+- If a token is expiring soon or already expired (either type), it's **skipped automatically**
 - The system rotates to the next available healthy session
 
 ### 2. Telegram Notifications
@@ -12,10 +14,12 @@
 - Notifications include detailed status of each token
 - Users are alerted to take action (re-authenticate)
 
-### 3. Smart Token Selection
-- **Priority 1**: Use tokens that won't expire within the warning threshold
-- **Priority 2**: If all tokens are expiring, send Telegram notification and try anyway
+### 3. Smart Token Selection with Dual Checks
+- **Priority 1**: Use tokens where BOTH JWT and rate limit are OK
+- **Priority 2**: If all tokens have issues, send Telegram notification and try anyway
 - **Priority 3**: Skip invalid/expired tokens and try the next one
+- **JWT Expiry Checking**: Automatically decodes JWT tokens to check real expiration time
+- **Rate Limit Awareness**: Respects rate limit reset times
 
 ## 📁 Files Created/Modified
 
@@ -78,10 +82,18 @@ If No Tokens Available → Return Error ❌
 
 | State | Description | Action |
 |-------|-------------|--------|
-| ✅ Active | Valid, not expiring soon | Used normally |
-| ⏰ Expiring Soon | < 1 hour until expiry | Avoided, warning logged |
-| ❌ Expired | Already expired | Skipped |
+| ✅ Active | Valid JWT, no rate limit | Used normally |
+| ⏰ JWT Expiring | JWT expires within warning threshold | Avoided, use next token |
+| ⏰ Rate Limited | Hit rate limit, reset in future | Avoided until reset |
+| ❌ JWT Expired | JWT token already expired | Skipped, needs re-auth |
 | 🚫 Invalid | Marked invalid (401 errors) | Skipped |
+
+### Expiry Type Detection
+
+The system now detects and reports the type of expiry:
+
+- **`expiredType: 'jwt'`**: JWT token itself expired → Need to re-authenticate
+- **`expiredType: 'rate_limit'`**: Rate limit active → Wait for reset
 
 ## 🧪 Testing
 

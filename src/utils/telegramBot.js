@@ -297,10 +297,23 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
 
     // 2. Проверяем токены
     const tokens = loadTokens();
-    const validTokens = tokens.filter(t => !t.invalid && (!t.resetAt || new Date(t.resetAt).getTime() <= Date.now()));
+    const now = Date.now();
+    
+    // Фильтруем только действительные токены (не invalid, не rate-limited, не истекшие, с cookies)
+    const validTokens = tokens.filter(t => {
+        if (t.invalid) return false;
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
+        if (t.expiryTime && t.expiryTime <= now) return false;
+        // Проверяем наличие cookies.json
+        const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', t.id, 'cookies.json');
+        if (!fs.existsSync(cookiesPath)) return false;
+        return true;
+    });
 
     // Проверка оставшегося времени для токенов
     if (tokens.length > 0) {
+        const filteredCount = tokens.length - validTokens.length;
+        
         const expirySummary = validTokens.reduce((acc, token) => {
             const now = Date.now();
             
@@ -336,27 +349,41 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
             return acc;
         }, { expired: 0, tokens: [] });
         
-        let tokenDetails = `✅ Всего: ${tokens.length}, Доступно: ${validTokens.length}`;
-        if (expirySummary.expired > 0) {
-            tokenDetails += `, Протухло: ${expirySummary.expired}`;
+        let tokenDetails = `✅ Доступно: ${validTokens.length}`;
+        if (filteredCount > 0) {
+            tokenDetails += ` (пропущено ${filteredCount} истекших)`;
         }
         
         checks.push({
             name: '🎫 Токены',
-            status: tokens.length > 0,
+            status: validTokens.length > 0,
             details: tokenDetails
         });
         
-        // Добавляем отдельную строку с временем жизни каждого токена
+        // Показываем только действительные токены
         if (expirySummary.tokens.length > 0) {
             expirySummary.tokens.forEach((token, index) => {
+                // Проверяем наличие cookies
+                const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', token.id, 'cookies.json');
+                const hasCookies = fs.existsSync(cookiesPath);
+                const cookieStatus = hasCookies ? '✅' : '❌';
+                
                 checks.push({
                     name: `   Токен ${index + 1}`,
-                    status: token.hasExpiry,
+                    status: token.hasExpiry && hasCookies,
                     details: token.hasExpiry 
-                        ? `⏱️ Осталось: ${token.timeStr}`
-                        : `⚠️ Время истечения: ${token.timeStr}`
+                        ? `${cookieStatus} ${token.id}\n      ⏱️ Осталось: ${token.timeStr}`
+                        : `${cookieStatus} ${token.id}\n      ⚠️ Время истечения: ${token.timeStr}`
                 });
+            });
+        }
+        
+        // Если все токены истекли, показываем предупреждение
+        if (validTokens.length === 0) {
+            checks.push({
+                name: '⚠️ Внимание',
+                status: false,
+                details: `Все ${tokens.length} токенов истекли. Создайте новые сессии.`
             });
         }
     } else {
@@ -1006,6 +1033,18 @@ async function handleCommand(chatId, text) {
 
         case '/about':
             await sendAboutMessage(chatId);
+            break;
+
+        case '/extend':
+            // 🔧 ВРЕМЕННО ОТКЛЮЧЕНО
+            await sendMessage(chatId,
+                `🔧 <b>Команда /extend временно отключена</b>\n\n` +
+                `Функция продления сессий находится на техническом обслуживании.\n\n` +
+                `📦 <b>Что делать:</b>\n` +
+                `1. Создайте новую сессию: <code>npm run create-session-archive</code>\n` +
+                `2. Отправьте архив через бота\n\n` +
+                `⏳ Функция будет доступна в ближайшее время.`
+            );
             break;
 
         case '/image':
@@ -1813,7 +1852,8 @@ async function sendHelpMessage(chatId) {
         `📋 <b>Команды управления:</b>\n\n` +
         `/help - Показать это сообщение\n` +
         `/status - Показать статус сервиса\n` +
-        `/restart - Перезапустить сервис\n\n`;
+        `/restart - Перезапустить сервис\n` +
+        `~~/extend~~ - 🔧 Временно отключено\n\n`;
 
     // Команды генерации изображений
     helpText +=
@@ -2106,6 +2146,220 @@ async function handleRestart(chatId) {
     await sendMessage(chatId, '🔄 Перезапуск сервиса...');
     await new Promise(resolve => setTimeout(resolve, 2000));
     await gracefulRestart(chatId);
+}
+
+/**
+ * Обрабатывает команду продления сессии
+ */
+async function handleExtendSession(chatId) {
+    try {
+        // Импортируем функции для продления сессии
+        const { initBrowser, shutdownBrowser, getBrowserContext } = await import('../browser/browser.js');
+        const { extractAuthToken } = await import('../api/chat.js');
+        const { loadSession, saveAuthToken } = await import('../browser/session.js');
+        const { loadTokens, saveTokens } = await import('../api/tokenManager.js');
+        const { CHAT_PAGE_URL } = await import('../config.js');
+        
+        const tokens = loadTokens();
+        
+        if (tokens.length === 0) {
+            await sendMessage(chatId, 
+                '⚠️ <b>Нет аккаунтов</b>\n\n' +
+                'Сначала создайте сессию:\n' +
+                '1. Запустите <code>npm run create-session-archive</code>\n' +
+                '2. Или отправьте архив через бота'
+            );
+            return;
+        }
+
+        // Фильтруем только действительные токены для продления
+        const now = Date.now();
+        const validTokens = tokens.filter(t => {
+            if (t.invalid) return false;
+            if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
+            if (t.expiryTime && t.expiryTime <= now) return false;
+            // Проверяем наличие cookies.json
+            const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', t.id, 'cookies.json');
+            if (!fs.existsSync(cookiesPath)) return false;
+            return true;
+        });
+
+        const expiredCount = tokens.length - validTokens.length;
+
+        if (validTokens.length === 0) {
+            await sendMessage(chatId, 
+                `⚠️ <b>Нет действительных токенов</b>\n\n` +
+                `Все ${tokens.length} токенов истекли.\n\n` +
+                'Создайте новые сессии:\n' +
+                '1. Запустите <code>npm run create-session-archive</code>\n' +
+                '2. Или отправьте архив через бота'
+            );
+            return;
+        }
+
+        let startMessage = `🔄 <b>Продление сессий...</b>\n\n` +
+            `📊 Найдено аккаунтов: ${validTokens.length}`;
+        
+        if (expiredCount > 0) {
+            startMessage += ` (пропущено ${expiredCount} истекших)`;
+        }
+        
+        startMessage += `\n⏳ Это может занять несколько минут...\n` +
+            `🕐 Примерное время: ~2-4 минуты на аккаунт`;
+
+        await sendMessage(chatId, startMessage);
+
+        let successCount = 0;
+        let failCount = 0;
+        const results = [];
+
+        for (const token of validTokens) {
+            try {
+                // Показываем прогресс
+                const currentNum = results.length + 1;
+                await sendMessage(chatId, 
+                    `🔄 Обрабатываю аккаунт ${currentNum}/${tokens.length}...\n` +
+                    `👤 ${token.id}`
+                );
+
+                // Пропускаем недействительные токены
+                if (token.invalid) {
+                    results.push(`⏭️ ${token.id} - пропущен (недействителен)`);
+                    failCount++;
+                    continue;
+                }
+
+                // Загружаем cookies для аккаунта
+                const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', token.id, 'cookies.json');
+                
+                if (!fs.existsSync(cookiesPath)) {
+                    results.push(`❌ ${token.id} - нет cookies`);
+                    failCount++;
+                    logWarn(`Session extension failed for ${token.id}: cookies.json not found`);
+                    continue;
+                }
+
+                const cookiesData = fs.readFileSync(cookiesPath, 'utf8');
+                const cookies = JSON.parse(cookiesData);
+
+                // Открываем браузер в headless режиме
+                const browserOk = await initBrowser(false, true);
+                
+                if (!browserOk) {
+                    throw new Error('Не удалось открыть браузер');
+                }
+
+                const ctx = getBrowserContext();
+                
+                // Загружаем cookies
+                if (ctx && typeof ctx.setCookie === 'function') {
+                    await ctx.setCookie(...cookies);
+                }
+
+                // Переходим на Qwen для обновления сессии (3 минуты таймаут)
+                await ctx.goto(CHAT_PAGE_URL, { 
+                    waitUntil: 'domcontentloaded', 
+                    timeout: 180000 // 3 минуты
+                });
+
+                // Ждем загрузки страницы (1 минута для полной загрузки)
+                await new Promise(resolve => setTimeout(resolve, 60000));
+
+                // Извлекаем новый токен
+                const newToken = await extractAuthToken(ctx, true);
+
+                if (!newToken) {
+                    results.push(`❌ ${token.id} - не удалось получить токен`);
+                    failCount++;
+                    await shutdownBrowser();
+                    continue;
+                }
+
+                // Сохраняем новый токен
+                const tokenFile = path.join(process.cwd(), SESSION_DIR, 'accounts', token.id, 'token.txt');
+                fs.writeFileSync(tokenFile, newToken, 'utf8');
+                saveAuthToken(newToken);
+
+                // Обновляем tokens.json
+                const tokenIndex = tokens.findIndex(t => t.id === token.id);
+                if (tokenIndex !== -1) {
+                    tokens[tokenIndex].token = newToken;
+                    tokens[tokenIndex].resetAt = null;
+                    tokens[tokenIndex].invalid = false;
+                    tokens[tokenIndex].lastExtended = new Date().toISOString();
+                    saveTokens(tokens);
+                }
+
+                // Сохраняем обновленные cookies
+                const newCookies = await ctx.cookies();
+                fs.writeFileSync(cookiesPath, JSON.stringify(newCookies, null, 2));
+
+                // Закрываем браузер
+                await shutdownBrowser();
+
+                results.push(`✅ ${token.id} - продлен`);
+                successCount++;
+
+                // Небольшая задержка между аккаунтами
+                if (successCount < tokens.length) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+
+            } catch (error) {
+                logError(`Ошибка продления ${token.id}`, error);
+                results.push(`❌ ${token.id} - ${error.message}`);
+                failCount++;
+                
+                // Убеждаемся что браузер закрыт
+                try {
+                    await shutdownBrowser();
+                } catch (e) {
+                    // ignore
+                }
+            }
+        }
+
+        // Формируем отчет
+        let report = `📋 <b>Результат продления сессий</b>\n\n`;
+        report += `✅ Успешно: ${successCount}\n`;
+        report += `❌ Ошибки: ${failCount}\n\n`;
+        report += `<b>Детали:</b>\n`;
+        report += results.join('\n');
+
+        if (successCount > 0) {
+            report += `\n\n🎉 Сессии продлены!`;
+        }
+
+        if (failCount > 0 && successCount === 0) {
+            report += `\n\n⚠️ Все сессии не удалось продлить.\n`;
+            
+            // Check if the issue is missing cookies
+            const missingCookiesCount = results.filter(r => r.includes('нет cookies')).length;
+            
+            if (missingCookiesCount > 0) {
+                report += `\n📦 <b>Причина: отсутствуют cookies.json</b>\n`;
+                report += `\nДля создания новой сессии с cookies:\n`;
+                report += `1. Запустите: <code>npm run create-session-archive</code>\n`;
+                report += `2. Войдите в систему в браузере\n`;
+                report += `3. Бот автоматически сохранит cookies и токен\n`;
+                report += `\n💡 Или отправьте архив с сессиями через бота`;
+            } else {
+                report += `\nВыполните: <code>npm run create-session-archive</code>`;
+            }
+        }
+
+        await sendMessage(chatId, report);
+
+    } catch (error) {
+        logError('Ошибка при продлении сессий', error);
+        await sendMessage(chatId, 
+            `❌ <b>Ошибка продления сессий</b>\n\n` +
+            `Ошибка: ${error.message}\n\n` +
+            `Попробуйте:\n` +
+            `1. <code>npm run create-session-archive</code>\n` +
+            `2. Или отправьте архив с сессиями`
+        );
+    }
 }
 
 /**

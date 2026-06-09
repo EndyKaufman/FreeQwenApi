@@ -4,11 +4,13 @@
 
 ### User Actions:
 ```
-1. Create archive:     zip -r session.zip session/
-2. Open Telegram bot
-3. Send archive file
-4. Wait 5 seconds
-5. Done! ✅
+1. Check permissions:  npm run check-permissions
+2. Fix if needed:      npm run fix-permissions
+3. Create archive:     zip -r session.zip session/
+4. Open Telegram bot
+5. Send archive file
+6. Wait 5 seconds
+7. Done! ✅
 ```
 
 ### Bot Responses:

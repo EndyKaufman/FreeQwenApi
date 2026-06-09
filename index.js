@@ -11,6 +11,7 @@ import { prompt } from './src/utils/prompt.js';
 import { PORT, HOST } from './src/config.js';
 import { startTelegramBot, stopTelegramBot, notifyAllUsers, configureProxy, processPendingArchive, checkAllSubsystems, startPeriodicHealthCheck } from './src/utils/telegramBot.js';
 import { getProxyInfo } from './src/utils/proxy.js';
+import { checkPermissions } from './src/utils/permissionChecker.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -116,6 +117,13 @@ async function startServer() {
 `);
 
     logInfo('Запуск сервера...');
+
+    // ПЕРВЫМ ДЕЛОМ: Проверяем права доступа ко всем директориям и файлам
+    const permissionsOk = await checkPermissions();
+    if (!permissionsOk) {
+        logError('⛔ НЕВОЗМОЖНО ЗАПУСТИТЬСЯ: Исправьте права доступа и перезапустите сервер');
+        process.exit(1);
+    }
 
     await configureProxy();
 

@@ -1047,7 +1047,7 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
         // Для генерации изображений/видео не помечаем токен как rate-limited
         // это отдельный лимит API, не связанный с текстовыми запросами
         const isMediaGeneration = chatType === 't2i' || chatType === 't2v';
-        
+
         if (isMediaGeneration) {
             logWarn(`⚠️ Rate limit для генерации медиа (${chatType}). НЕ помечаем токен - это отдельный лимит.`);
             logWarn(`⏳ Нужно подождать ${hours}ч или использовать другой аккаунт`);
@@ -1060,18 +1060,18 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
         }
 
         authToken = null;
-        
+
         // Для медиа-генерации не пытаемся retry с другим токеном
         // так как лимит общий для всех аккаунтов
         if (isMediaGeneration) {
-            return { 
-                error: `Rate limit для генерации изображений. Попробуйте через ${hours}ч`, 
+            return {
+                error: `Rate limit для генерации изображений. Попробуйте через ${hours}ч`,
                 chatId,
                 rateLimit: true,
                 rateLimitHours: hours
             };
         }
-        
+
         const { hasValidTokens } = await import('./tokenManager.js');
         if (hasValidTokens() && retryCount < MAX_RETRY_COUNT) {
             return sendMessage(message, model, chatId, parentId, files, null, null, null, chatType, size, waitForCompletion, retryCount + 1, onChunk);
@@ -1089,7 +1089,9 @@ export async function sendMessage(message, model = null, chatId = null, parentId
 
     if (!chatId) {
         const newChatResult = await createChatV2(model);
-        if (newChatResult.error) return { error: 'Не удалось создать чат: ' + newChatResult.error };
+        if (newChatResult.error) {
+            return { error: 'Не удалось создать чат: ' + newChatResult.error };
+        };
         chatId = newChatResult.chatId;
         logInfo(`Создан новый чат v2 с ID: ${chatId}`);
     }

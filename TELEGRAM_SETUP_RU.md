@@ -40,6 +40,18 @@ TELEGRAM_USER_IDS=123456789
 TOKEN_EXPIRY_WARNING_MS=3600000
 ```
 
+3. **Проверьте права доступа** (важно!):
+
+```bash
+# Проверить права на все директории
+npm run check-permissions
+
+# Если есть проблемы - исправить автоматически
+npm run fix-permissions
+```
+
+> ⚠️ **Важно:** При запуске сервер автоматически проверяет права доступа. Если обнаружены проблемы, сервер не запустится и покажет команды для исправления.
+
 ## ✅ Шаг 4: Проверьте работу
 
 Запустите тест:
@@ -130,12 +142,27 @@ tail -f logs/combined.log | grep "Telegram"
 
 # Предупреждения об истечении
 tail -f logs/combined.log | grep "истекает"
+
+# Проверка прав доступа
+tail -f logs/combined.log | grep "Проверка прав"
 ```
 
 ## ❓ Частые вопросы
 
 ### Q: Что если я не настрою Telegram?
 A: Система будет работать как раньше - проверять токены и пропускать истекающие, просто без уведомлений.
+
+### Q: Сервер не запускается, пишет "НЕВОЗМОЖНО ЗАПУСТИТЬСЯ"?
+A: Это означает проблемы с правами доступа. Выполните:
+```bash
+npm run fix-permissions
+# или
+sudo chown -R $USER:$USER session uploads logs temp session_backup
+sudo chmod -R 755 session uploads logs temp session_backup
+```
+
+### Q: Что такое проверка прав доступа?
+A: При запуске сервер проверяет, что все директории (session, uploads, logs и др.) доступны для записи. Это предотвращает ошибки EACCES во время работы.
 
 ### Q: Можно добавить несколько ботов?
 A: Нет, используется один бот для отправки уведомлений нескольким пользователям.
@@ -174,11 +201,25 @@ ls -la test_token_expiry.js
 NODE_ENV=development node test_token_expiry.js
 ```
 
+### Ошибка EACCES: permission denied:
+```bash
+# Проверить права
+npm run check-permissions
+
+# Автоматически исправить
+npm run fix-permissions
+
+# Или вручную
+sudo chown -R $USER:$USER session uploads logs temp session_backup
+sudo chmod -R 755 session uploads logs temp session_backup
+```
+
 ## 📚 Документация
 
 Полная документация:
 - `docs/TOKEN_EXPIRY_CHECKING.md` - Полное руководство (English)
 - `TOKEN_EXPIRY_FEATURE.md` - Обзор функционала (English)
+- `PERMISSION_CHECKING.md` - Проверка прав доступа (Русский/English)
 
 ## ✨ Готово!
 
@@ -187,5 +228,7 @@ NODE_ENV=development node test_token_expiry.js
 - ✅ Пропускать истекающие токены (менее 1 часа)
 - ✅ Отправлять уведомления в Telegram когда все токены недоступны
 - ✅ Интеллектуально выбирать самую здоровую сессию
+- ✅ **Проверять права доступа при запуске** и предотвращать ошибки EACCES
+- ✅ **Предоставлять команды для исправления** проблем с правами
 
 **Успехов! 🚀**

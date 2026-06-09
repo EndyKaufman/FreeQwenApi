@@ -1,6 +1,6 @@
 {
     "name": "qwen-api-proxy",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "description": "Прокси-сервер для доступа к Qwen API через эмуляцию браузера",
     "license": "MIT",
     "repository": {
@@ -16,6 +16,9 @@
     "scripts": {
         "start": "node index.js",
         "test": "echo \"Error: no test specified\" && exit 1",
+        "check-permissions": "node scripts/checkPermissions.js",
+        "fix-permissions": "bash fix-permissions.sh",
+        "rebuild-tokens": "node scripts/rebuildTokens.js",
         "example:stream": "node examples/openai-sdk/streaming.js",
         "example:simple": "node examples/openai-sdk/simple.js",
         "example:system": "node examples/openai-sdk/system-message.js",
@@ -26,7 +29,10 @@
         "example:axios": "node examples/direct-api/axios-example.js",
         "example:file-upload": "node examples/file-upload/upload-example.js",
         "example:streaming-test": "node examples/streaming-test.js",
-        "auth": "node scripts/auth.js"
+        "auth": "node scripts/auth.js",
+        "create-session-archive": "node scripts/createSessionArchive.js",
+        "extend-session": "node scripts/extendSession.js",
+        "check-sessions": "node scripts/checkSessions.js"
     },
     "dependencies": {
         "adm-zip": "^0.5.10",

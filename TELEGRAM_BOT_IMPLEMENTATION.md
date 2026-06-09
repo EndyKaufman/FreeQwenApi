@@ -33,6 +33,7 @@
 - `/model` - Show/set active model
 - `/clear` - Clear conversation context
 - `/restart` - Manually restart the service
+- `/permissions` - Check and display permission issues (NEW)
 
 ### 6. Health Monitoring & Automation
 - **Startup health check** with AI ping-pong test
@@ -40,6 +41,16 @@
 - **Token expiry warnings** with countdown
 - **Rate limit intelligence** (separate for chat vs media)
 - **Automatic account rotation** on errors
+- **Permission validation** at startup with auto-fix commands
+
+### 7. Permission Management
+- **Automatic permission check** before server startup
+- **Validates all directories**: session, uploads, logs, temp, session_backup
+- **Tests write access** with temporary files
+- **Provides exact fix commands** when permissions are wrong
+- **Prevents runtime errors** by catching issues early
+- **Manual check script**: `npm run check-permissions`
+- **Auto-fix script**: `npm run fix-permissions`
 
 ## 📁 Files Created
 
@@ -252,6 +263,28 @@ docker-compose logs -f | grep -i "архив\|extract"
 ```
 
 ## 🐛 Troubleshooting
+
+### Permission Denied Errors:
+
+**Error: "EACCES: permission denied, mkdir '/app/session/accounts/...'"**
+
+**Fix:**
+```bash
+# Check permissions
+npm run check-permissions
+
+# Auto-fix all issues
+npm run fix-permissions
+
+# Or manually
+sudo chown -R $USER:$USER session uploads logs temp session_backup
+sudo chmod -R 755 session uploads logs temp session_backup
+```
+
+**Prevention:**
+- Always run permission check after Docker operations
+- Use `fix-permissions.sh` after moving session files
+- Check permissions before starting server
 
 ### Bot Not Starting:
 

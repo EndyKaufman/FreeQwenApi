@@ -1,12 +1,4 @@
-# Quick Reference - FreeQwenApi v1.0.8
-
-## 🆕 What's New in v1.0.8
-
-- **🎨 Image Generation**: Text-to-image + Image-to-image in Telegram
-- **🔄 LLM Proxy**: Proxy Qwen API requests through Telegram bot
-- **📦 Multipart Upload**: Direct file upload via API
-- **🧠 Smart Rate Limits**: Separate limits for chat vs media
-- **🚀 Docker Hub**: Ready-to-use image `endykaufman/qwen-api-proxy:1.0.8`
+# Quick Reference - FreeQwenApi v1.0.9
 
 ## 🚀 Quick Start
 
@@ -25,7 +17,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.8
+  endykaufman/qwen-api-proxy:1.0.9
 ```
 
 ### Option 2: Docker Compose

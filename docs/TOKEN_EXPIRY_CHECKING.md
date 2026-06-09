@@ -50,6 +50,22 @@ TOKEN_EXPIRY_WARNING_MS=3600000
 3. **Expiring tokens** (less than 1 hour left) are marked and avoided
 4. **Expired/invalid tokens** are skipped automatically
 
+### Dual Expiry Checking
+
+The system now checks **TWO** types of token expiry:
+
+1. **JWT Token Expiry** (`expiryTime` field)
+   - Decoded from the JWT token's `exp` claim
+   - Represents the actual token expiration time from Qwen
+   - Tokens expiring within the warning threshold are avoided
+
+2. **Rate Limit Reset** (`resetAt` field)
+   - Set when a token hits rate limits (HTTP 429)
+   - Represents when the rate limit will be reset
+   - Tokens with reset time in the future are avoided
+
+**Both checks must pass** for a token to be considered "safe" to use.
+
 ### Notification Triggers
 
 Telegram notifications are sent when:
@@ -58,10 +74,26 @@ Telegram notifications are sent when:
 
 ### Token States
 
-- ✅ **Active**: Token is valid and not expiring soon
-- ⏰ **Expiring Soon**: Token will expire within the warning threshold (default: 1 hour)
-- ❌ **Expired**: Token has already expired
+- ✅ **Active**: Token is valid and not expiring soon (both JWT and rate limit OK)
+- ⏰ **JWT Expiring**: JWT token will expire within warning threshold
+- ⏰ **Rate Limited**: Token hit rate limit, waiting for reset
+- ❌ **JWT Expired**: JWT token has already expired (needs re-authentication)
+- ❌ **Rate Limit Expired**: Rate limit reset time has passed
 - 🚫 **Invalid**: Token is marked as invalid (401 errors)
+
+### Expiry Types
+
+The system now distinguishes between two types of expiry:
+
+1. **JWT Expiry** (`expiredType: 'jwt'`)
+   - The JWT token itself has expired
+   - Decoded from the JWT's `exp` claim
+   - **Solution**: Re-authenticate to get a new token
+
+2. **Rate Limit** (`expiredType: 'rate_limit'`)
+   - Token hit rate limits (HTTP 429)
+   - Must wait for reset time
+   - **Solution**: Wait or use another token
 
 ## API Functions
 

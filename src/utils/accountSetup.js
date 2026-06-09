@@ -112,18 +112,35 @@ export async function removeAccountInteractive() {
         return;
     }
 
+    const now = Date.now();
+    const validTokens = tokens.filter(t => {
+        if (t.invalid) return false;
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
+        if (t.expiryTime && t.expiryTime <= now) return false;
+        // Проверяем наличие cookies.json
+        const cookiesPath = path.resolve(__dirname, '..', '..', SESSION_DIR, ACCOUNTS_DIR, t.id, 'cookies.json');
+        if (!fs.existsSync(cookiesPath)) return false;
+        return true;
+    });
+
+    if (validTokens.length === 0) {
+        console.log('Нет действительных аккаунтов.');
+        await prompt('ENTER чтобы вернуться...');
+        return;
+    }
+
     console.log('\nДоступные аккаунты:');
-    tokens.forEach((t, idx) => console.log(`${idx + 1} - ${t.id}`));
+    validTokens.forEach((t, idx) => console.log(`${idx + 1} - ${t.id}`));
     const choice = await prompt('Номер аккаунта, который нужно удалить (или ENTER для отмены): ');
     if (!choice) return;
     const num = parseInt(choice, 10);
-    if (isNaN(num) || num < 1 || num > tokens.length) {
+    if (isNaN(num) || num < 1 || num > validTokens.length) {
         console.log('Неверный выбор.');
         await prompt('ENTER чтобы вернуться...');
         return;
     }
 
-    const acc = tokens[num - 1];
+    const acc = validTokens[num - 1];
     const confirm = await prompt(`Точно удалить ${acc.id}? (y/N): `);
     if (confirm.toLowerCase() !== 'y') return;
 

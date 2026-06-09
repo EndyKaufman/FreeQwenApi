@@ -18,6 +18,16 @@ function ensureSessionDir() {
 }
 
 /**
+ * Проверяет наличие cookies.json для аккаунта
+ * @param {string} accountId - ID аккаунта
+ * @returns {boolean} - true если cookies.json существует
+ */
+export function hasCookies(accountId) {
+    const cookiesPath = path.join(ACCOUNTS_PATH, accountId, 'cookies.json');
+    return fs.existsSync(cookiesPath);
+}
+
+/**
  * Декодирует JWT токен и извлекает время истечения
  * @param {string} token - JWT токен
  * @returns {number|null} - Время истечения в миллисекундах или null
@@ -89,7 +99,24 @@ export function saveTokens(tokens) {
 export async function getAvailableToken() {
     const tokens = loadTokens();
     const now = Date.now();
-    const valid = tokens.filter(t => (!t.resetAt || new Date(t.resetAt).getTime() <= now) && !t.invalid);
+    
+    // Фильтруем токены: не rate-limited, не invalid, JWT не истёк, и есть cookies
+    const valid = tokens.filter(t => {
+        // Пропускаем недействительные токены
+        if (t.invalid) return false;
+        
+        // Пропускаем токены с rate limit в будущем
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
+        
+        // Пропускаем токены с истёкшим JWT
+        if (t.expiryTime && t.expiryTime <= now) return false;
+        
+        // Пропускаем токены без cookies.json
+        if (!hasCookies(t.id)) return false;
+        
+        return true;
+    });
+    
     if (!valid.length) return null;
     const token = valid[pointer % valid.length];
     pointer = (pointer + 1) % valid.length;
@@ -99,7 +126,23 @@ export async function getAvailableToken() {
 export function hasValidTokens() {
     const tokens = loadTokens();
     const now = Date.now();
-    return tokens.some(t => (!t.resetAt || new Date(t.resetAt).getTime() <= now) && !t.invalid);
+    
+    // Проверяем, есть ли хотя бы один валидный токен с cookies
+    return tokens.some(t => {
+        // Пропускаем недействительные токены
+        if (t.invalid) return false;
+        
+        // Пропускаем токены с rate limit в будущем
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
+        
+        // Пропускаем токены с истёкшим JWT
+        if (t.expiryTime && t.expiryTime <= now) return false;
+        
+        // Пропускаем токены без cookies.json
+        if (!hasCookies(t.id)) return false;
+        
+        return true;
+    });
 }
 
 export function markRateLimited(id, hours = 24) {
@@ -139,7 +182,33 @@ export function listTokens() {
 }
 
 /**
+ * Получает только действительные токены (не истекшие, не invalid, не rate-limited, с cookies)
+ * @returns {Array} - Массив действительных токенов
+ */
+export function getValidTokens() {
+    const tokens = loadTokens();
+    const now = Date.now();
+    
+    return tokens.filter(t => {
+        // Пропускаем недействительные токены
+        if (t.invalid) return false;
+        
+        // Пропускаем токены с rate limit в будущем
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
+        
+        // Пропускаем токены с истёкшим JWT
+        if (t.expiryTime && t.expiryTime <= now) return false;
+        
+        // Пропускаем токены без cookies.json
+        if (!hasCookies(t.id)) return false;
+        
+        return true;
+    });
+}
+
+/**
  * Проверяет, истекает ли токен в ближайшее время
+ * Проверяет оба параметра: resetAt (rate limit) и expiryTime (JWT expiry)
  * @param {string} tokenId - ID токена
  * @param {number} warningMs - Время предупреждения в мс (по умолчанию 1 час)
  * @returns {object} - {willExpireSoon: boolean, expiresAt: Date|null, timeLeft: number|null}
@@ -159,6 +228,35 @@ export function checkTokenExpiry(tokenId, warningMs = TOKEN_EXPIRY_WARNING_MS) {
         return { willExpireSoon: true, expiresAt: null, timeLeft: null, tokenFound: true, isInvalid: true };
     }
 
+    // Проверяем JWT expiry time (если есть)
+    if (token.expiryTime) {
+        const jwtTimeLeft = token.expiryTime - now;
+        
+        // Если JWT уже истёк
+        if (jwtTimeLeft <= 0) {
+            return { 
+                willExpireSoon: true, 
+                expiresAt: new Date(token.expiryTime), 
+                timeLeft: 0, 
+                tokenFound: true, 
+                isExpired: true,
+                expiredType: 'jwt'
+            };
+        }
+        
+        // Если JWT истекает в ближайшее время
+        if (jwtTimeLeft <= warningMs) {
+            return { 
+                willExpireSoon: true, 
+                expiresAt: new Date(token.expiryTime), 
+                timeLeft: jwtTimeLeft, 
+                tokenFound: true,
+                isExpiringSoon: true,
+                expiredType: 'jwt'
+            };
+        }
+    }
+
     // Если есть время сброса лимита
     if (token.resetAt) {
         const resetTime = new Date(token.resetAt).getTime();
@@ -171,7 +269,8 @@ export function checkTokenExpiry(tokenId, warningMs = TOKEN_EXPIRY_WARNING_MS) {
                 expiresAt: new Date(token.resetAt), 
                 timeLeft: 0, 
                 tokenFound: true, 
-                isExpired: true 
+                isExpired: true,
+                expiredType: 'rate_limit'
             };
         }
         
@@ -181,7 +280,8 @@ export function checkTokenExpiry(tokenId, warningMs = TOKEN_EXPIRY_WARNING_MS) {
                 expiresAt: new Date(token.resetAt), 
                 timeLeft, 
                 tokenFound: true,
-                isExpiringSoon: true
+                isExpiringSoon: true,
+                expiredType: 'rate_limit'
             };
         }
         
@@ -232,6 +332,8 @@ export function checkAllTokensExpiry(warningMs = TOKEN_EXPIRY_WARNING_MS) {
 
 /**
  * Получает токен, который не истекает в ближайшее время
+ * Проверяет оба параметра: resetAt (rate limit) и expiryTime (JWT expiry)
+ * Требует наличия cookies.json
  * @param {number} warningMs - Время предупреждения в мс
  * @returns {object|null} - Токен или null
  */
@@ -239,13 +341,33 @@ export async function getSafeToken(warningMs = TOKEN_EXPIRY_WARNING_MS) {
     const tokens = loadTokens();
     const now = Date.now();
     
-    // Фильтруем токены, которые не истекают в ближайшее время
+    // Фильтруем токены, которые не истекают в ближайшее время и имеют cookies
     const safeTokens = tokens.filter(t => {
+        // Пропускаем недействительные токены
         if (t.invalid) return false;
-        if (!t.resetAt) return true;
         
-        const resetTime = new Date(t.resetAt).getTime();
-        return resetTime <= now || (resetTime - now) > warningMs;
+        // Пропускаем токены без cookies.json
+        if (!hasCookies(t.id)) return false;
+        
+        // Проверяем rate limit reset time
+        if (t.resetAt) {
+            const resetTime = new Date(t.resetAt).getTime();
+            // Если reset time в будущем и меньше warningMs - токен небезопасен
+            if (resetTime > now && (resetTime - now) <= warningMs) {
+                return false;
+            }
+        }
+        
+        // Проверяем JWT expiry time (если есть)
+        if (t.expiryTime) {
+            const jwtTimeLeft = t.expiryTime - now;
+            // Если JWT истекает в ближайшее время - токен небезопасен
+            if (jwtTimeLeft <= warningMs) {
+                return false;
+            }
+        }
+        
+        return true;
     });
 
     if (safeTokens.length === 0) {

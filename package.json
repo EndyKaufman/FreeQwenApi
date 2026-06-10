@@ -1,6 +1,6 @@
 {
     "name": "qwen-api-proxy",
-    "version": "1.0.15",
+    "version": "1.0.16",
     "description": "Proxy server for accessing Qwen API through browser emulation with OpenAI-compatible API and Telegram bot",
     "license": "MIT",
     "author": {

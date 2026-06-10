@@ -32,7 +32,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.15
+  endykaufman/qwen-api-proxy:1.0.16
 
 # Option 2: Build locally
 npm run auth  # Add account first

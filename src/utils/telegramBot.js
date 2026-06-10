@@ -9,7 +9,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import AdmZip from 'adm-zip';
 import { ProxyAgent } from 'undici';
-import { loadTokens } from '../api/tokenManager.js';
+import { loadTokens, saveTokens } from '../api/tokenManager.js';
 
 // Use global fetch (available in Node 18+) instead of undici's fetch
 const globalFetch = globalThis.fetch;
@@ -245,6 +245,10 @@ export async function processPendingArchive() {
         }
 
         logInfo('✅ Архив успешно распакован');
+
+        // Восстанавливаем token.txt из cookies.json для всех аккаунтов
+        logInfo('🔍 Восстановление токенов из cookies.json...');
+        await restoreTokensFromCookies(sessionPath);
 
         // Удаляем флаг и архив
         try {
@@ -1500,65 +1504,6 @@ async function createSessionBackup(sessionPath, chatId) {
 }
 
 /**
- * Распаковывает архив в папку session
- */
-async function extractArchive(filePath, chatId, ext) {
-    const sessionPath = path.join(process.cwd(), SESSION_DIR);
-
-    try {
-        // Создаем session_backup текущей session папки
-        const backupSuccess = await createSessionBackup(sessionPath, chatId);
-
-        // Если backup не удался, не продолжаем распаковку и НЕ перезапускаем сервер
-        if (!backupSuccess) {
-            logWarn('⛔ Распаковка отменена из-за ошибки backup');
-            await sendMessage(chatId,
-                '⚠️ <b>Распаковка отменена</b>\n\n' +
-                '❌ Не удалось создать backup текущей session\n' +
-                '🔒 Файлы не были изменены для безопасности\n' +
-                '💡 Проверьте права доступа и попробуйте снова'
-            );
-            return; // Выходим без перезапуска
-        }
-
-        let result;
-        if (ext === '.zip') {
-            result = await extractZip(filePath, sessionPath, chatId);
-        } else if (ext === '.7z') {
-            await extract7z(filePath, sessionPath, chatId);
-            result = { successCount: 'все', errorCount: 0 };
-        }
-
-        let statusMessage =
-            '✅ <b>Архив успешно распакован!</b>\n\n' +
-            '📂 Папка session обновлена\n' +
-            '💾 Старая версия сохранена в session_backup\n';
-
-        if (result && result.successCount !== 'все') {
-            statusMessage += `📊 Распаковано: ${result.successCount} файлов\n`;
-            if (result.errorCount > 0) {
-                statusMessage += `⚠️ Ошибок: ${result.errorCount} (пропущены)\n`;
-            }
-        }
-
-        statusMessage += '🔄 Сервис будет перезапущен...';
-
-        await sendMessage(chatId, statusMessage);
-
-        // Ждем 2 секунды чтобы сообщение дошло
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        // Запускаем перезапуск только если backup был успешен
-        logInfo('✅ Backup успешен, запускаем перезапуск сервера');
-        await gracefulRestart(chatId);
-
-    } catch (error) {
-        logError('Ошибка при распаковке архива', error);
-        await sendMessage(chatId, `❌ Ошибка распаковки: ${error.message}`);
-    }
-}
-
-/**
  * Распаковывает ZIP архив
  */
 async function extractZip(zipPath, sessionPath, chatId) {
@@ -1673,6 +1618,108 @@ async function extractZip(zipPath, sessionPath, chatId) {
             reject(error);
         }
     });
+}
+
+/**
+ * Восстанавливает token.txt из cookies.json для всех аккаунтов после распаковки
+ * @param {string} sessionPath - путь к папке session
+ */
+async function restoreTokensFromCookies(sessionPath) {
+    try {
+        const accountsPath = path.join(sessionPath, 'accounts');
+        if (!fs.existsSync(accountsPath)) {
+            logWarn('⚠️ Папка accounts не найдена, восстановление токенов пропущено');
+            return;
+        }
+
+        const accounts = fs.readdirSync(accountsPath).filter((dir) => {
+            return fs.statSync(path.join(accountsPath, dir)).isDirectory();
+        });
+
+        if (accounts.length === 0) {
+            return;
+        }
+
+        logInfo(`🔍 Проверка токенов для ${accounts.length} аккаунтов...`);
+
+        let restoredCount = 0;
+        let skippedCount = 0;
+
+        for (const accountId of accounts) {
+            const accountDir = path.join(accountsPath, accountId);
+            const tokenPath = path.join(accountDir, 'token.txt');
+            const cookiesPath = path.join(accountDir, 'cookies.json');
+
+            // Пропускаем если token.txt уже существует
+            if (fs.existsSync(tokenPath)) {
+                skippedCount++;
+                continue;
+            }
+
+            // Пытаемся извлечь токен из cookies.json
+            if (!fs.existsSync(cookiesPath)) {
+                logWarn(`⚠️ ${accountId}: Нет cookies.json`);
+                continue;
+            }
+
+            try {
+                const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf8'));
+                const tokenCookie = cookies.find((cookie) => cookie.name === 'token');
+
+                if (tokenCookie && tokenCookie.value) {
+                    fs.writeFileSync(tokenPath, tokenCookie.value, 'utf8');
+                    logInfo(`✅ ${accountId}: Токен восстановлен из cookies.json`);
+                    restoredCount++;
+                } else {
+                    logWarn(`⚠️ ${accountId}: Нет токена в cookies.json`);
+                }
+            } catch (error) {
+                logWarn(`⚠️ ${accountId}: Ошибка чтения cookies: ${error.message}`);
+            }
+        }
+
+        if (restoredCount > 0) {
+            logInfo(`✅ Восстановлено ${restoredCount} токенов из cookies.json`);
+
+            // Теперь обновим tokens.json
+            try {
+                const tokensFile = path.join(sessionPath, 'tokens.json');
+                let tokens = [];
+
+                if (fs.existsSync(tokensFile)) {
+                    tokens = JSON.parse(fs.readFileSync(tokensFile, 'utf8'));
+                }
+
+                // Добавляем новые аккаунты
+                for (const accountId of accounts) {
+                    const exists = tokens.find((t) => t.id === accountId);
+                    if (!exists) {
+                        const tokenPath = path.join(accountsPath, accountId, 'token.txt');
+                        if (fs.existsSync(tokenPath)) {
+                            const token = fs.readFileSync(tokenPath, 'utf8').trim();
+                            if (token && !token.startsWith('PLACEHOLDER_')) {
+                                tokens.push({
+                                    id: accountId,
+                                    token: token,
+                                    resetAt: null,
+                                    invalid: false
+                                });
+                                logInfo(`📝 ${accountId}: Добавлен в tokens.json`);
+                            }
+                        }
+                    }
+                }
+
+                // Сохраняем обновленный tokens.json
+                saveTokens(tokens);
+                logInfo(`✅ tokens.json обновлен: ${tokens.length} аккаунтов`);
+            } catch (error) {
+                logWarn(`⚠️ Ошибка обновления tokens.json: ${error.message}`);
+            }
+        }
+    } catch (error) {
+        logWarn(`⚠️ Ошибка восстановления токенов: ${error.message}`);
+    }
 }
 
 /**
@@ -1819,6 +1866,10 @@ async function extract7z(sevenZPath, sessionPath, chatId) {
         if (successCount === 0) {
             throw new Error('Не удалось скопировать ни одного файла из архива');
         }
+
+        // Восстанавливаем token.txt из cookies.json для всех аккаунтов
+        logInfo('🔍 Восстановление токенов из cookies.json...');
+        await restoreTokensFromCookies(sessionPathFinal);
 
         // Очищаем временную папку
         try {

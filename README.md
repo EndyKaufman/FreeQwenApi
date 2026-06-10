@@ -311,7 +311,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.15
+  endykaufman/qwen-api-proxy:1.0.16
 
 # 3. Смотрим логи
 docker logs -f qwen-proxy
@@ -320,7 +320,7 @@ docker logs -f qwen-proxy
 ### Доступные теги
 
 - `latest` - последняя стабильная версия
-- `1.0.15` - текущая версия
+- `1.0.16` - текущая версия
 - `1.0.x` - предыдущие версии
 
 > **💡 Важно:** Перед первым запуском добавьте аккаунт через `npm run auth` или загрузите сессию через Telegram бота.
@@ -341,7 +341,7 @@ docker logs -f qwen-proxy
 ```yaml
 services:
   qwen-proxy:
-    image: endykaufman/qwen-api-proxy:1.0.15
+    image: endykaufman/qwen-api-proxy:1.0.16
     container_name: qwen-proxy
     env_file:
       - .env
@@ -396,7 +396,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.15
+  endykaufman/qwen-api-proxy:1.0.16
 ```
 
 Файл `docker-compose.yml`:
@@ -405,7 +405,7 @@ docker run -d \
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:1.0.15
+    image: endykaufman/qwen-api-proxy:1.0.16
     container_name: qwen-proxy
     env_file:
       - .env  # Автоматическая загрузка переменных

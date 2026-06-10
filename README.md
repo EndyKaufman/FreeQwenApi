@@ -1848,6 +1848,7 @@ python examples/python-direct/httpx_streaming.py
 | `HOST` | `0.0.0.0` | Адрес привязки |
 | `DEFAULT_MODEL` | `qwen3.5-plus` | Модель по умолчанию (если не задана в `bot_settings.json`) |
 | `ALLOW_UNSCOPED_SESSION_CHAT_RESTORE` | `false` | Разрешить legacy-восстановление контекста по IP + User-Agent, даже без `conversation_id`/`chatId` |
+| `FORCE_NEW_CHAT_PER_REQUEST` | `false` | Создавать новый диалог для каждого запроса (как OpenAI API). `true` = всегда новый чат, `false` = восстанавливать предыдущий |
 
 ### Telegram бот 🤖
 
@@ -1877,6 +1878,19 @@ TELEGRAM_PROXY=http://user:pass@proxy.example.com:8080
 ```bash
 # Предупреждать за 2 часа до истечения
 TOKEN_EXPIRY_WARNING_MS=7200000
+```
+
+### Прокси
+
+| Переменная | По умолчанию | Описание |
+|-----------|-------------|----------|
+| `QWEN_PROXY` | *(нет)* | Прокси для Qwen API (HTTP/HTTPS/SOCKS) |
+| `FILE_DOWNLOAD_PROXY` | *(нет)* | Прокси для скачивания файлов по HTTP/HTTPS |
+
+**Пример:**
+```bash
+QWEN_PROXY=http://user:pass@proxy.example.com:8080
+FILE_DOWNLOAD_PROXY=socks5://proxy.example.com:1080
 ```
 
 ### Режимы запуска
@@ -1937,8 +1951,31 @@ TOKEN_EXPIRY_WARNING_MS=7200000
 | `QWEN_BASE_URL` | `https://chat.qwen.ai` | Базовый URL Qwen |
 | `CHAT_API_URL` | `{base}/api/v2/chat/completions` | URL API чата |
 | `CREATE_CHAT_URL` | `{base}/api/v2/chats/new` | URL создания чата |
+| `CHAT_PAGE_URL` | `{base}/` | URL главной страницы чата |
+| `TASK_STATUS_URL` | `{base}/api/v1/tasks/status` | URL статуса задач |
 | `STS_TOKEN_API_URL` | `{base}/api/v1/files/getstsToken` | URL получения STS-токена |
 | `AUTH_SIGNIN_URL` | `{base}/auth?action=signin` | URL страницы авторизации |
+| `OSS_SDK_URL` | `https://gosspublic.alicdn.com/aliyun-oss-sdk-6.20.0.min.js` | URL Aliyun OSS SDK |
+| `MODELS_API_URL` | `{base}/api/v2/models` | URL API моделей |
+
+### Генерация изображений 🎨
+
+| Переменная | По умолчанию | Описание |
+|-----------|-------------|----------|
+| `IMAGE_GENERATION_MODE` | `dashscope` | Режим генерации: `dashscope` (через API ключ) или `browser` (через браузер) |
+| `DASHSCOPE_API_KEY` | *(нет)* | API ключ DashScope (требуется при `IMAGE_GENERATION_MODE=dashscope`) |
+
+**Пример:**
+```bash
+# Режим браузера (не требует API ключа)
+IMAGE_GENERATION_MODE=browser
+
+# Или режим DashScope (требует API ключ)
+IMAGE_GENERATION_MODE=dashscope
+DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx
+```
+
+📖 **Документация:** [docs/IMAGE_GENERATION.md](docs/IMAGE_GENERATION.md), [docs/IMAGE_GENERATION_MODES.md](docs/IMAGE_GENERATION_MODES.md)
 
 ---
 

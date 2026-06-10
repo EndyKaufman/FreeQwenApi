@@ -90,8 +90,19 @@ export async function checkDockerVersion() {
             return null;
         }
 
-        // Ищем последний стабильный тег (не latest)
-        const stableTags = data.results.filter((tag) => tag.name !== 'latest');
+        // Ищем последний стабильный тег (не latest и не SHA-хеши)
+        const stableTags = data.results.filter((tag) => {
+            // Исключаем тег 'latest'
+            if (tag.name === 'latest') {
+                return false;
+            }
+            // Исключаем SHA-хеши (начинаются с 'sha-' или содержат только hex-символы)
+            if (tag.name.startsWith('sha-') || /^[a-f0-9]{7,}$/i.test(tag.name)) {
+                return false;
+            }
+            // Принимаем только теги, которые выглядят как версии (содержат цифры)
+            return /\d/.test(tag.name);
+        });
 
         if (stableTags.length === 0) {
             logDebug('Не найдено стабильных тегов Docker Hub');

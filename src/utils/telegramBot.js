@@ -74,6 +74,16 @@ async function universalTelegramFetch(url, options = {}, proxyAgent = null) {
         return response;
     } catch (error) {
         clearTimeout(timeoutId);
+
+        // Добавляем дополнительную информацию к ошибке
+        if (error.code === 'ECONNABORTED' || error.name === 'AbortError') {
+            error.message = `fetch timeout after ${timeout}ms: ${error.message}`;
+        } else if (error.cause) {
+            // Для network-level ошибок извлекаем причину
+            const causeMsg = error.cause.message || error.cause.code || String(error.cause);
+            error.message = `fetch failed (cause: ${causeMsg}): ${error.message}`;
+        }
+
         throw error;
     }
 }
@@ -238,7 +248,14 @@ export async function configureProxy() {
             await universalTelegramFetch(testUrl, { agent: proxyAgent }, proxyAgent);
             logInfo('✅ Соединение с прокси установлено');
         } catch (error) {
-            logError('❌ Ошибка создания прокси агента', error);
+            logError(`❌ Ошибка тестирования прокси: ${error.message}`);
+            logError(`   Код ошибки: ${error.code || 'N/A'}`);
+            if (error.cause) {
+                logError(`   Причина: ${error.cause.message || error.cause.code || String(error.cause)}`);
+            }
+            logWarn('⚠️ Прокси настроен, но соединение не удалось. Проверьте настройки прокси.');
+            logWarn('⚠️ Бот продолжит работу, но polling может завершаться с ошибками');
+            // Не сбрасываем proxyConfigured, позволяем попытки подключения
         }
     }
 }
@@ -742,6 +759,7 @@ async function startPolling() {
     // Загружаем последний обработанный update_id
     const lastUpdatePath = path.join(process.cwd(), '.last_telegram_update');
     let offset = 0;
+    let consecutiveErrors = 0; // Счетчик последовательных ошибок для экспоненциальной задержки
 
     if (fs.existsSync(lastUpdatePath)) {
         try {
@@ -781,9 +799,45 @@ async function startPolling() {
                     await processUpdate(update);
                 }
             }
+
+            // Сбрасываем счетчик ошибок при успешном запросе
+            consecutiveErrors = 0;
         } catch (error) {
-            logError('Ошибка в polling Telegram', error);
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+            // Детальная диагностика ошибки
+            const errorDetails = {
+                message: error.message,
+                code: error.code,
+                cause: error.cause ? error.cause.message : null,
+                type: error.type, // Для node-fetch ошибок
+                errno: error.errno,
+                syscall: error.syscall
+            };
+
+            logError(`Ошибка в polling Telegram: ${error.message}`);
+            logError(`  Код: ${errorDetails.code || 'N/A'}`);
+            if (errorDetails.cause) {
+                logError(`  Причина: ${errorDetails.cause}`);
+            }
+            if (errorDetails.errno) {
+                logError(`  errno: ${errorDetails.errno}`);
+            }
+            if (errorDetails.syscall) {
+                logError(`  syscall: ${errorDetails.syscall}`);
+            }
+
+            // Показываем статус прокси при ошибке
+            if (proxyConfigured) {
+                logError(`  Прокси: настроен (${TELEGRAM_PROXY_URL || TELEGRAM_PROXY})`);
+            } else {
+                logError('  Прокси: не настроен (прямое соединение)');
+            }
+
+            // Экспоненциальная задержка при повторных ошибках
+            const retryDelay = Math.min(5000 * Math.pow(2, Math.min(consecutiveErrors, 5)), 60000);
+            logWarn(`Повторная попытка через ${retryDelay / 1000} секунд...`);
+            consecutiveErrors++;
+
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
         }
     }
 }

@@ -301,7 +301,7 @@ NON_INTERACTIVE=1 npx qwen-api-proxy
 
 ## Understanding the Workflow
 
-### Smart Workflow (v1.0.14+)
+### Smart Workflow (v1.0.15+)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -412,4 +412,4 @@ If you encounter issues:
 
 ## Version
 
-This guide applies to: **qwen-api-proxy v1.0.14+**
+This guide applies to: **qwen-api-proxy v1.0.15+**

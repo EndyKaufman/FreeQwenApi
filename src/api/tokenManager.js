@@ -28,6 +28,60 @@ export function hasCookies(accountId) {
 }
 
 /**
+ * Извлекает JWT токен из cookies.json
+ * @param {string} accountId - ID аккаунта
+ * @returns {string|null} - JWT токен или null
+ */
+function extractTokenFromCookies(accountId) {
+    try {
+        const cookiesPath = path.join(ACCOUNTS_PATH, accountId, 'cookies.json');
+        if (!fs.existsSync(cookiesPath)) {return null;}
+
+        const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf8'));
+
+        // Ищем cookie с именем 'token'
+        const tokenCookie = cookies.find((cookie) => cookie.name === 'token');
+
+        if (tokenCookie && tokenCookie.value) {
+            return tokenCookie.value;
+        }
+
+        return null;
+    } catch (error) {
+        // Тихо возвращаем null - это не критичная операция
+        return null;
+    }
+}
+
+/**
+ * Восстанавливает token.txt из cookies.json если token.txt отсутствует
+ * @param {string} accountId - ID аккаунта
+ * @returns {boolean} - true если токен был восстановлен
+ */
+function restoreTokenFromFile(accountId) {
+    const tokenPath = path.join(ACCOUNTS_PATH, accountId, 'token.txt');
+
+    // Если token.txt уже существует, ничего не делаем
+    if (fs.existsSync(tokenPath)) {return false;}
+
+    // Пытаемся извлечь токен из cookies.json
+    const token = extractTokenFromCookies(accountId);
+
+    if (token) {
+        try {
+            fs.writeFileSync(tokenPath, token, 'utf8');
+            logInfo(`✅ ${accountId}: Токен восстановлен из cookies.json`);
+            return true;
+        } catch (error) {
+            logWarn(`⚠️ ${accountId}: Не удалось создать token.txt: ${error.message}`);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Декодирует JWT токен и извлекает время истечения
  * @param {string} token - JWT токен
  * @returns {number|null} - Время истечения в миллисекундах или null
@@ -68,6 +122,13 @@ export function loadTokens() {
     if (!fs.existsSync(TOKENS_FILE)) {return [];}
     try {
         const tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8'));
+
+        // Автоматически восстанавливаем token.txt из cookies.json если нужно
+        tokens.forEach((token) => {
+            if (token.id) {
+                restoreTokenFromFile(token.id);
+            }
+        });
 
         // Добавляем expiryTime для каждого токена, если его нет
         return tokens.map((token) => {

@@ -1570,7 +1570,7 @@ async function extractZip(zipPath, sessionPath, chatId) {
             // Нормализуем пути: заменяем обратные слеши на прямые (Windows -> Unix)
             const normalizedEntries = zipEntries.map((entry) => ({
                 ...entry,
-                normalizedPath: entry.entryName.replace(/\\/g, '/'),
+                normalizedPath: entry.entryName.replace(/\\/g, '/')
             }));
 
             // Для отладки: показываем первые несколько записей в архиве
@@ -1586,9 +1586,9 @@ async function extractZip(zipPath, sessionPath, chatId) {
             const hasSessionFolder = normalizedEntries.some((entry) => {
                 const p = entry.normalizedPath;
                 // Точное совпадение "session" или "session/"
-                if (p === 'session' || p === 'session/') return true;
+                if (p === 'session' || p === 'session/') {return true;}
                 // Начинается с "session/"
-                if (p.startsWith('session/')) return true;
+                if (p.startsWith('session/')) {return true;}
                 // Для ZIP созданных на Windows может быть "session\" который уже нормализован
                 return false;
             });

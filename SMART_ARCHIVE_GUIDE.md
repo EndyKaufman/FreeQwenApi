@@ -275,7 +275,7 @@ npm run archive
 ```json
 {
   "name": "qwen-api-proxy",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "bin": {
     "qwen-api-proxy": "./bin/qwen-api-proxy.js"  // CLI entry point
   },
@@ -332,7 +332,7 @@ npm run archive
 ### For Docker
 ```bash
 docker run -v $(pwd)/session:/app/session \
-           qwen-api-proxy:1.0.17 \
+           qwen-api-proxy:1.0.18 \
            node index.js archive
 ```
 

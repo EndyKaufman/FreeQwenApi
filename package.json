@@ -1,6 +1,6 @@
 {
     "name": "qwen-api-proxy",
-    "version": "1.0.17",
+    "version": "1.0.18",
     "description": "Proxy server for accessing Qwen API through browser emulation with OpenAI-compatible API and Telegram bot",
     "license": "MIT",
     "author": {
@@ -86,6 +86,7 @@
         "winston": "^3.17.0"
     },
     "devDependencies": {
+        "@stylistic/eslint-plugin": "^5.10.0",
         "eslint": "^9.39.4",
         "eslint-plugin-import": "^2.32.0"
     }

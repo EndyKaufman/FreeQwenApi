@@ -4,6 +4,7 @@ import { logInfo, logError, logDebug, logWarn } from '../logger/index.js';
 import { sendMessage } from './chat.js';
 import { uploadFileToQwen } from './fileUpload.js';
 import { IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY } from '../config.js';
+import { getBrowserContext, getAuthenticationStatus } from '../browser/browser.js';
 
 const DASHSCOPE_API_BASE = 'https://dashscope-intl.aliyuncs.com/api/v1';
 
@@ -430,7 +431,6 @@ export async function checkImageApiAvailability() {
     // Browser mode всегда доступен (если браузер работает)
     if (mode === 'browser') {
         logDebug('🖼️ Browser mode: проверка через статус браузера');
-        const { getBrowserContext, getAuthenticationStatus } = await import('../browser/browser.js');
         const browserContext = getBrowserContext();
         const isAuthenticated = getAuthenticationStatus();
         return !!(browserContext && isAuthenticated);

@@ -14,6 +14,8 @@ const SETTINGS_FILE = path.join(process.cwd(), SESSION_DIR, 'bot_settings.json')
 let settingsCache = null;
 let settingsCacheMTime = null; // Время последнего изменения файла
 
+let localActiveModel = null;
+
 /**
  * Проверяет изменился ли файл с момента последнего чтения
  */
@@ -87,6 +89,9 @@ export function loadBotSettings() {
  * Сохраняет настройки бота в файл и обновляет кэш
  */
 export function saveBotSettings(settings) {
+    if (settings && settings.activeModel) {
+        localActiveModel = settings.activeModel;
+    }
     try {
         // Создаем директорию session если не существует
         const sessionPath = path.join(process.cwd(), SESSION_DIR);
@@ -142,6 +147,9 @@ export function clearSettingsCache() {
  * @returns {string} название модели
  */
 export function getActiveModel() {
+    if (localActiveModel) {
+        return localActiveModel;
+    }
     try {
         const settings = loadBotSettings();
 

@@ -107,6 +107,9 @@ export const QWEN_PROXY = process.env.QWEN_PROXY || null;
 // ─── Прокси для скачивания файлов ───────────────────────────────────────────
 export const FILE_DOWNLOAD_PROXY = process.env.FILE_DOWNLOAD_PROXY || null;
 
+// ─── Прокси для проверки обновлений ─────────────────────────────────────────
+export const VERSION_CHECK_PROXY = process.env.VERSION_CHECK_PROXY || null;
+
 // ─── Генерация изображений ──────────────────────────────────────────────────
 // Режим генерации: 'dashscope' (по умолчанию) или 'browser'
 // 'dashscope' - использует DASHSCOPE_API_KEY напрямую через DashScope API
@@ -115,3 +118,8 @@ export const IMAGE_GENERATION_MODE = process.env.IMAGE_GENERATION_MODE || 'dashs
 
 // DashScope API ключ (требуется при IMAGE_GENERATION_MODE='dashscope')
 export const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY || null;
+
+// ─── Проверка обновлений ────────────────────────────────────────────────────
+// ENABLE_VERSION_CHECK=true (по умолчанию): автоматически проверять обновления (Docker Hub, npm, GitHub)
+// ENABLE_VERSION_CHECK=false: проверка отключена
+export const ENABLE_VERSION_CHECK = toBoolean(process.env.ENABLE_VERSION_CHECK) !== false;

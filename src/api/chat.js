@@ -2,7 +2,7 @@ import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus } f
 import { checkAuthentication, checkVerification } from '../browser/auth.js';
 import { shutdownBrowser, initBrowser } from '../browser/browser.js';
 import { saveAuthToken } from '../browser/session.js';
-import { getAvailableToken, markRateLimited, removeInvalidToken, checkTokenExpiry, checkAllTokensExpiry, getSafeToken } from './tokenManager.js';
+import { getAvailableToken, markRateLimited, removeInvalidToken, checkTokenExpiry, checkAllTokensExpiry, getSafeToken, markInvalid, hasValidTokens } from './tokenManager.js';
 import { sendTelegramNotification, formatTokenExpiryMessage } from '../utils/telegramNotifier.js';
 import { getActiveModel } from '../utils/botSettings.js';
 import { fetchWithQwenProxy } from '../utils/proxy.js';
@@ -31,7 +31,6 @@ let modelsLoadedFromAPI = false; // Флаг: загружены ли модел
 let modelsFetchPromise = null; // Промис для предотвращения параллельных запросов
 let authKeys = null;
 let browserTokenRateLimited = false;
-let resolvedDefaultModel = null; // Будет установлен при загрузке моделей
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -399,12 +398,6 @@ export async function ensureModelsLoaded() {
                 apiModels.forEach((m) => logInfo(`- ${m}`));
                 logInfo('===================================');
 
-                // Устанавливаем default model как первую из API, если не задана в .env
-                if (!resolvedDefaultModel && apiModels.length > 0) {
-                    resolvedDefaultModel = apiModels[0];
-                    logInfo(`Default модель установлена: ${resolvedDefaultModel} (первая из API)`);
-                }
-
                 return availableModels;
             }
 
@@ -437,7 +430,7 @@ function loadModelsFromFile() {
 
         if (!fs.existsSync(MODELS_FILE)) {
             logError(`❌ Файл с моделями не найден: ${MODELS_FILE}`);
-            const fallback = resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
+            const fallback = [getActiveModel()];
             logDebug(`Fallback модели: ${fallback.join(', ')}`);
             return fallback;
         }
@@ -459,12 +452,6 @@ function loadModelsFromFile() {
             logInfo('===== ДОСТУПНЫЕ МОДЕЛИ (ФАЙЛ) =====');
             models.forEach((m) => logInfo(`- ${m}`));
             logInfo('====================================');
-
-            // Устанавливаем default model как первую из файла, если не задана в .env
-            if (!resolvedDefaultModel && models.length > 0) {
-                resolvedDefaultModel = models[0];
-                logInfo(`Default модель установлена: ${resolvedDefaultModel} (первая из файла)`);
-            }
         } else {
             logWarn('⚠️ Файл существует, но не содержит моделей');
         }
@@ -472,7 +459,7 @@ function loadModelsFromFile() {
         return models;
     } catch (error) {
         logError('❌ Ошибка при чтении файла с моделями', error);
-        const fallback = resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
+        const fallback = [getActiveModel()];
         logDebug(`Fallback модели после ошибки: ${fallback.join(', ')}`);
         return fallback;
     }
@@ -601,7 +588,7 @@ async function resolveAuthToken(browserContext) {
                 if (tokenObj.id !== 'browser') {
                     markRateLimited(tokenObj.id, 1); // 1 час
                 }
-                return resolveAuthToken(browserContext); // Рекурсивно пробуем другой
+                return await resolveAuthToken(browserContext); // Рекурсивно пробуем другой
             } else if (timeLeftMin <= 60) {
                 logWarn(`⚠️ Токен ${tokenObj.id} истекает через ${timeLeftMin} мин. Используем с осторожностью.`);
             }
@@ -1026,12 +1013,10 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
         authToken = null;
         browserTokenRateLimited = false;
         if (tokenObj?.id && tokenObj.id !== 'browser') {
-            const { markInvalid } = await import('./tokenManager.js');
             markInvalid(tokenObj.id);
         }
-        const { hasValidTokens } = await import('./tokenManager.js');
         if (hasValidTokens() && retryCount < MAX_RETRY_COUNT) {
-            return sendMessage(message, model, chatId, parentId, files, null, null, null, chatType, size, waitForCompletion, retryCount + 1, onChunk);
+            return await sendMessage(message, model, chatId, parentId, files, null, null, null, chatType, size, waitForCompletion, retryCount + 1, onChunk);
         }
         logError('Не осталось валидных токенов или исчерпаны попытки.');
         return { error: 'Все токены недействительны (401). Требуется повторная авторизация.', chatId };
@@ -1072,9 +1057,8 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
             };
         }
 
-        const { hasValidTokens } = await import('./tokenManager.js');
         if (hasValidTokens() && retryCount < MAX_RETRY_COUNT) {
-            return sendMessage(message, model, chatId, parentId, files, null, null, null, chatType, size, waitForCompletion, retryCount + 1, onChunk);
+            return await sendMessage(message, model, chatId, parentId, files, null, null, null, chatType, size, waitForCompletion, retryCount + 1, onChunk);
         }
         return { error: `Все токены заблокированы по лимиту (${hours}ч)`, chatId };
     }
@@ -1087,13 +1071,21 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
 export async function sendMessage(message, model = null, chatId = null, parentId = null, files = null, tools = null, toolChoice = null, systemMessage = null, chatType = 't2t', size = null, waitForCompletion = true, retryCount = 0, onChunk = null) {
     if (!availableModels) {availableModels = getAvailableModelsFromFile();}
 
+    let chatWasJustCreated = false;
     if (!chatId) {
         const newChatResult = await createChatV2(model);
         if (newChatResult.error) {
             return { error: 'Не удалось создать чат: ' + newChatResult.error };
         };
         chatId = newChatResult.chatId;
+        chatWasJustCreated = true;
         logInfo(`Создан новый чат v2 с ID: ${chatId}`);
+
+        // Даем Qwen время на инициализацию чата на сервере
+        // Без этой задержки первый запрос может упасть с "chat is not exist"
+        const CHAT_INIT_DELAY = 1000; // 1 секунда
+        logDebug(`⏳ Ждем ${CHAT_INIT_DELAY}мс для инициализации чата на сервере Qwen...`);
+        await delay(CHAT_INIT_DELAY);
     }
 
     const validated = validateAndPrepareMessage(message);
@@ -1121,8 +1113,15 @@ export async function sendMessage(message, model = null, chatId = null, parentId
     const browserContext = getBrowserContext();
     if (!browserContext) {return { error: 'Браузер не инициализирован', chatId };}
 
-    const tokenObj = await resolveAuthToken(browserContext);
-    if (!tokenObj) {return { error: 'Ошибка авторизации: не удалось получить токен', chatId };}
+    // Если чат только что был создан, authToken уже установлен createChatV2
+    // Не вызываем resolveAuthToken, чтобы не переключить на другой аккаунт
+    let tokenObj = null;
+    if (!chatWasJustCreated) {
+        tokenObj = await resolveAuthToken(browserContext);
+        if (!tokenObj) {return { error: 'Ошибка авторизации: не удалось получить токен', chatId };}
+    } else {
+        logDebug(`🔑 Используем токен от createChatV2: ${authToken?.substring(0, 20)}...`);
+    }
 
     let page = null;
     try {
@@ -1140,7 +1139,7 @@ export async function sendMessage(message, model = null, chatId = null, parentId
             saveAuthToken(authToken);
         }
 
-        logInfo('Отправка запроса к API v2...');
+        logInfo('Отправка запроса к API v2...' + chatId);
 
         const payload = buildPayloadV2(messageContent, model, chatId, parentId, files, systemMessage, tools, toolChoice, chatType, size);
         logDebug('=== PAYLOAD V2 ===\n' + JSON.stringify(payload, null, 2));
@@ -1230,7 +1229,7 @@ export async function sendMessage(message, model = null, chatId = null, parentId
             return response.data;
         }
 
-        return handleApiError(response, tokenObj, message, model, chatId, parentId, files, retryCount, chatType, size, waitForCompletion, onChunk);
+        return await handleApiError(response, tokenObj, message, model, chatId, parentId, files, retryCount, chatType, size, waitForCompletion, onChunk);
     } catch (error) {
         logError('Ошибка при отправке сообщения', error);
         return { error: error.toString(), chatId };
@@ -1272,7 +1271,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
     if (!browserContext) {return { error: 'Браузер не инициализирован' };}
 
     // Используем безопасный токен
-    const tokenObj = await getSafeToken(TOKEN_EXPIRY_WARNING_MS);
+    const tokenObj = getSafeToken(TOKEN_EXPIRY_WARNING_MS);
     if (tokenObj?.token) {
         authToken = tokenObj.token;
         logInfo(`Используется аккаунт для создания чата: ${tokenObj.id}`);
@@ -1284,7 +1283,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
             if (tokenObj.id !== 'browser') {
                 markRateLimited(tokenObj.id, 1);
             }
-            return createChatV2(model, title, retryCount);
+            return await createChatV2(model, title, retryCount);
         }
     }
 
@@ -1327,7 +1326,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
         if (isTransient && retryCount < MAX_RETRY_COUNT) {
             logWarn(`Создание чата: ${result.status}, ретрай ${retryCount + 1}/${MAX_RETRY_COUNT} через ${RETRY_DELAY}мс...`);
             await delay(RETRY_DELAY);
-            return createChatV2(model, title, retryCount + 1);
+            return await createChatV2(model, title, retryCount + 1);
         }
 
         const cleanError = isTransient

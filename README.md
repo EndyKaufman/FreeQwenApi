@@ -34,6 +34,7 @@
 | **Прокси поддержка** | ❌ Нет для Telegram | ✅ HTTP/HTTPS/SOCKS |
 | **Проверка здоровья** | ❌ Нет | ✅ При старте + каждые 4 часа |
 | **Проверка прав доступа** | ❌ Нет | ✅ Автоматическая при старте |
+| **Проверка обновлений** | ❌ Нет | ✅ Автоматическая (Docker/npm/Git) + Telegram уведомления |
 | **Система логов** | Базовая консоль | ✅ Winston с ротацией |
 | **Распаковка архивов** | Вручную | ✅ Автоматически с backup |
 | **Обработка ошибок** | Базовая | ✅ Fault-tolerant extraction |
@@ -62,6 +63,7 @@
    - Отчёты о статусе системы в Telegram
    - Умная обработка rate limits (отдельно для чата и медиа)
    - **Автоматическая проверка прав доступа** при старте с командами для исправления
+   - **Автоматическая проверка обновлений** с уведомлениями в Telegram
 
 3. **Улучшенная безопасность**
    - Безопасная обработка credentials (никогда не логируются)
@@ -311,7 +313,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.17
+  endykaufman/qwen-api-proxy:1.0.18
 
 # 3. Смотрим логи
 docker logs -f qwen-proxy
@@ -320,7 +322,7 @@ docker logs -f qwen-proxy
 ### Доступные теги
 
 - `latest` - последняя стабильная версия
-- `1.0.17` - текущая версия
+- `1.0.18` - текущая версия
 - `1.0.x` - предыдущие версии
 
 > **💡 Важно:** Перед первым запуском добавьте аккаунт через `npm run auth` или загрузите сессию через Telegram бота.
@@ -341,7 +343,7 @@ docker logs -f qwen-proxy
 ```yaml
 services:
   qwen-proxy:
-    image: endykaufman/qwen-api-proxy:1.0.17
+    image: endykaufman/qwen-api-proxy:1.0.18
     container_name: qwen-proxy
     env_file:
       - .env
@@ -396,7 +398,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.17
+  endykaufman/qwen-api-proxy:1.0.18
 ```
 
 Файл `docker-compose.yml`:
@@ -405,7 +407,7 @@ docker run -d \
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:1.0.17
+    image: endykaufman/qwen-api-proxy:1.0.18
     container_name: qwen-proxy
     env_file:
       - .env  # Автоматическая загрузка переменных
@@ -2013,6 +2015,7 @@ TOKEN_EXPIRY_WARNING_MS=7200000
 |-----------|-------------|----------|
 | `QWEN_PROXY` | *(нет)* | Прокси для Qwen API (HTTP/HTTPS/SOCKS) |
 | `FILE_DOWNLOAD_PROXY` | *(нет)* | Прокси для скачивания файлов по HTTP/HTTPS |
+| `VERSION_CHECK_PROXY` | *(нет)* | Прокси для проверки обновлений (Docker Hub, npm, GitHub) |
 
 **Пример:**
 ```bash
@@ -2103,6 +2106,43 @@ DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx
 ```
 
 📖 **Документация:** [docs/IMAGE_GENERATION.md](docs/IMAGE_GENERATION.md), [docs/IMAGE_GENERATION_MODES.md](docs/IMAGE_GENERATION_MODES.md)
+
+### Проверка обновлений 🔄
+
+| Переменная | По умолчанию | Описание |
+|-----------|-------------|----------|
+| `ENABLE_VERSION_CHECK` | `true` | Автоматическая проверка обновлений (Docker Hub, npm, GitHub) |
+
+**Пример:**
+```bash
+# Отключить проверку обновлений
+ENABLE_VERSION_CHECK=false
+```
+
+**Как это работает:**
+- **Проверка**: Каждый час (60 минут)
+- **Telegram уведомления**: Раз в сутки в дневное время (10:00 - 18:00)
+- **Консоль**: При каждом обнаружении обновления
+- **Режимы**: Автоматически определяет Docker/npm/Git и проверяет соответствующий источник
+
+**Пример вывода в консоли:**
+```
+🚀 Сервис запущен! v1.0.18 (доступна v1.0.18)
+```
+
+**Пример уведомления в Telegram:**
+```
+📦 Доступно обновление!
+
+🔹 Текущая версия: 1.0.18
+🔹 Новая версия: 1.0.18
+📅 Опубликована: 10.06.2026, 14:30
+🕐 2 ч. назад
+
+🔗 Режим запуска: docker
+```
+
+📖 **Документация:** [docs/VERSION_CHECKING.md](docs/VERSION_CHECKING.md)
 
 ---
 

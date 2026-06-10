@@ -1,7 +1,7 @@
 import { ProxyAgent as UndiciProxyAgent } from 'undici';
 import { ProxyAgent as ProxyAgentPackage } from 'proxy-agent';
 import nodeFetch from 'node-fetch';
-import { TELEGRAM_PROXY, QWEN_PROXY, FILE_DOWNLOAD_PROXY } from '../config.js';
+import { TELEGRAM_PROXY, QWEN_PROXY, FILE_DOWNLOAD_PROXY, VERSION_CHECK_PROXY } from '../config.js';
 import { logInfo, logWarn, logDebug, logError } from '../logger/index.js';
 
 // Compatibility layer for Node.js 18-24
@@ -67,9 +67,11 @@ async function universalFetch(url, options = {}, proxyAgent = null) {
 let telegramProxyAgent = null;
 let qwenProxyAgent = null;
 let fileDownloadProxyAgent = null;
+let versionCheckProxyAgent = null;
 let telegramProxyInitialized = false;
 let qwenProxyInitialized = false;
 let fileDownloadProxyInitialized = false;
+let versionCheckProxyInitialized = false;
 
 /**
  * Получить ProxyAgent для Telegram
@@ -164,6 +166,38 @@ export function getFileDownloadProxyAgent() {
 }
 
 /**
+ * Получить ProxyAgent для проверки обновлений
+ * Агент кэшируется для повторного использования
+ * @returns {Object|null} - ProxyAgent или null если прокси не настроен
+ */
+export function getVersionCheckProxyAgent() {
+    if (versionCheckProxyInitialized) {
+        logDebug(`🔍 getVersionCheckProxyAgent: возвращаем кэшированный агент (${versionCheckProxyAgent ? 'есть' : 'null'})`);
+        return versionCheckProxyAgent;
+    }
+
+    if (!VERSION_CHECK_PROXY) {
+        logDebug('⚠️ VERSION_CHECK_PROXY не настроен в .env');
+        versionCheckProxyInitialized = true;
+        versionCheckProxyAgent = null;
+        return null;
+    }
+
+    try {
+        logInfo(`🔍 Инициализация прокси для проверки обновлений: ${maskProxyUrl(VERSION_CHECK_PROXY)}`);
+        versionCheckProxyAgent = createProxyAgent(VERSION_CHECK_PROXY);
+        versionCheckProxyInitialized = true;
+        logInfo('✅ Прокси для проверки обновлений успешно инициализирован');
+        return versionCheckProxyAgent;
+    } catch (error) {
+        logError('❌ Ошибка инициализации прокси для проверки обновлений', error);
+        versionCheckProxyInitialized = true;
+        versionCheckProxyAgent = null;
+        return null;
+    }
+}
+
+/**
  * Замаскировать URL прокси для логирования (скрыть credentials)
  * @param {string} url - URL прокси
  * @returns {string} - Замаскированный URL
@@ -191,7 +225,7 @@ function maskProxyUrl(url) {
  */
 export async function fetchWithTelegramProxy(url, options = {}, timeout = 30000) {
     const proxyAgent = getTelegramProxyAgent();
-    return universalFetch(url, { ...options, timeout }, proxyAgent);
+    return await universalFetch(url, { ...options, timeout }, proxyAgent);
 }
 
 /**
@@ -204,7 +238,20 @@ export async function fetchWithTelegramProxy(url, options = {}, timeout = 30000)
  */
 export async function fetchWithQwenProxy(url, options = {}, timeout = 30000) {
     const proxyAgent = getQwenProxyAgent();
-    return universalFetch(url, { ...options, timeout }, proxyAgent);
+    return await universalFetch(url, { ...options, timeout }, proxyAgent);
+}
+
+/**
+ * Выполнить fetch запрос для проверки обновлений через прокси (если настроен)
+ * Совместимо с Node.js 18-24
+ * @param {string} url - URL для запроса
+ * @param {Object} options - Опции fetch
+ * @param {number} timeout - Таймаут в мс (по умолчанию 30000)
+ * @returns {Promise<Response>} - Response от fetch
+ */
+export async function fetchWithVersionCheckProxy(url, options = {}, timeout = 30000) {
+    const proxyAgent = getVersionCheckProxyAgent();
+    return await universalFetch(url, { ...options, timeout }, proxyAgent);
 }
 
 /**
@@ -279,6 +326,11 @@ export function getProxyInfo() {
             configured: !!FILE_DOWNLOAD_PROXY,
             url: maskProxyUrl(FILE_DOWNLOAD_PROXY),
             active: fileDownloadProxyInitialized && fileDownloadProxyAgent !== null
+        },
+        versionCheck: {
+            configured: !!VERSION_CHECK_PROXY,
+            url: maskProxyUrl(VERSION_CHECK_PROXY),
+            active: versionCheckProxyInitialized && versionCheckProxyAgent !== null
         }
     };
 }

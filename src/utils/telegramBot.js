@@ -3,6 +3,14 @@ import { TELEGRAM_BOT_TOKEN, TELEGRAM_USER_IDS, SESSION_DIR, DEFAULT_MODEL, TELE
 import { getActiveModel as getBotSettingsModel } from './botSettings.js';
 import { loadBotSettings, saveBotSettings, loadChatModels, setChatModel, getChatModel } from './botSettings.js';
 import { fetchWithQwenProxy } from './proxy.js';
+import { generateImage } from '../api/imageGeneration.js';
+import { getVersionInfo } from './versionChecker.js';
+import { initBrowser, shutdownBrowser, getBrowserContext } from '../browser/browser.js';
+import { extractAuthToken, sendMessage as sendQwenMessage } from '../api/chat.js';
+import { loadSession, saveAuthToken } from '../browser/session.js';
+import { loadTokens, saveTokens } from '../api/tokenManager.js';
+import { CHAT_PAGE_URL } from '../config.js';
+import { getAvailableModelsFromFile } from '../api/chat.js';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
@@ -10,7 +18,6 @@ import { promisify } from 'util';
 import AdmZip from 'adm-zip';
 import { ProxyAgent as UndiciProxyAgent } from 'undici';
 import nodeFetch from 'node-fetch';
-import { loadTokens, saveTokens } from '../api/tokenManager.js';
 
 // Compatibility layer for Node.js 18-24
 // Native fetch (Node.js 18+) uses undici's dispatcher
@@ -132,13 +139,12 @@ async function checkAIHealth(tokens) {
     try {
         logInfo('🧪 Тестирование AI нейросети (ping pong)...');
 
-        // Импортируем функцию sendMessage для прямого запроса к Qwen
-        const { sendMessage } = await import('../api/chat.js');
+        // Используем функцию sendMessage для прямого запроса к Qwen
         const testModel = getBotSettingsModel();
 
         // Делаем запрос напрямую к Qwen API через наш модуль
         const startTime = Date.now();
-        const result = await sendMessage('ping', testModel, null, null, null, null, null, null, 't2t', null, true, 0);
+        const result = await sendQwenMessage('ping', testModel, null, null, null, null, null, null, 't2t', null, true, 0);
         const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
         if (result && !result.error) {
@@ -187,8 +193,8 @@ async function checkAIHealth(tokens) {
             }
         } else {
             // Ошибка от API
-            const errorMsg = result.error || 'Unknown error';
-            const fullResponse = JSON.stringify(result, null, 2);
+            const errorMsg = result?.error || (result === undefined ? 'Result is undefined' : 'Unknown error');
+            const fullResponse = result ? JSON.stringify(result, null, 2) : 'No response';
 
             logError(`❌ AI тест не пройден: ${errorMsg}`);
             logDebug(`Полный JSON ошибки: ${fullResponse.substring(0, 1000)}`);
@@ -228,7 +234,7 @@ export async function configureProxy() {
             // Тестируем соединение с прокси через universalTelegramFetch (совместимо с Node.js 18-24)
             logInfo('🔍 Тестирование соединения с прокси...');
             const testUrl = 'https://api.telegram.org/bot';
-            
+
             await universalTelegramFetch(testUrl, { agent: proxyAgent }, proxyAgent);
             logInfo('✅ Соединение с прокси установлено');
         } catch (error) {
@@ -547,8 +553,23 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
     // Формируем отчет для Telegram с группировкой
     const reportLines = [];
 
+    // Получаем информацию о версии
+    let versionInfo = null;
+    try {
+        versionInfo = await getVersionInfo();
+    } catch (error) {
+        // Игнорируем ошибки при получении информации о версии
+    }
+
     // Заголовок
-    reportLines.push('🚀 <b>Сервис запущен!</b>\n');
+    let header = '🚀 <b>Сервис запущен!</b>';
+    if (versionInfo) {
+        header += ` v${versionInfo.currentVersion}`;
+        if (versionInfo.hasUpdate) {
+            header += ` (доступна v${versionInfo.latestVersion})`;
+        }
+    }
+    reportLines.push(header + '\n');
 
     // Группа 1: Основные компоненты
     reportLines.push('<b>🔑 Основные компоненты:</b>');
@@ -638,11 +659,11 @@ async function fetchWithProxy(url, options = {}, skipLog = false) {
             logInfo('🌐 Запрос через прокси...');
         }
         // Используем universalTelegramFetch для прокси (совместимо с Node.js 18-24)
-        return universalTelegramFetch(url, options, proxyAgent);
+        return await universalTelegramFetch(url, options, proxyAgent);
     }
 
     // Без прокси тоже используем universalTelegramFetch для консистентности
-    return universalTelegramFetch(url, options, null);
+    return await universalTelegramFetch(url, options, null);
 }
 
 /**
@@ -856,11 +877,7 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
             '⏳ Пожалуйста, подождите...'
         );
 
-        // Импортируем функцию генерации
-        const { generateImage } = await import('../api/imageGeneration.js');
-        const { getActiveModel } = await import('./botSettings.js');
-
-        // Используем модель для генерации изображений
+        // Используем функцию генерации и модель
         const model = 'qwen-image-plus';
 
         const startTime = Date.now();
@@ -2304,6 +2321,14 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         // Проверяем все подсистемы (не отправляем автоматически, так как sendStatusMessage отправит сам)
         const checks = await checkAllSubsystems(botStarted, false);
 
+        // Получаем информацию о версии
+        let versionInfo = null;
+        try {
+            versionInfo = await getVersionInfo();
+        } catch (error) {
+            // Игнорируем ошибки при получении информации о версии
+        }
+
         // Формируем сообщение с统一的格式
         const reportLines = [];
 
@@ -2319,7 +2344,14 @@ async function sendStatusMessage(chatId, isScheduled = false) {
             });
             reportLines.push(`⏰ <b>Плановая проверка</b> (${timeStr})\n`);
         } else {
-            reportLines.push('🚀 <b>Сервис запущен!</b>\n');
+            let header = '🚀 <b>Сервис запущен!</b>';
+            if (versionInfo) {
+                header += ` v${versionInfo.currentVersion}`;
+                if (versionInfo.hasUpdate) {
+                    header += ` (доступна v${versionInfo.latestVersion})`;
+                }
+            }
+            reportLines.push(header + '\n');
         }
 
         // Группа 1: Основные компоненты
@@ -2331,6 +2363,25 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         mainComponents.forEach((check) => {
             reportLines.push(`${check.name}: ${check.details}`);
         });
+
+        // Добавляем информацию о версии если есть
+        if (versionInfo) {
+            reportLines.push('\n📦 <b>Версия:</b>');
+            reportLines.push(`Текущая: v${versionInfo.currentVersion}`);
+            reportLines.push(`Режим: ${versionInfo.runMode}`);
+            if (versionInfo.hasUpdate) {
+                const publishedStr = versionInfo.publishedDate?.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }) || 'неизвестно';
+                reportLines.push(`Доступна: v${versionInfo.latestVersion} (опубликована: ${publishedStr})`);
+            } else {
+                reportLines.push('Статус: ✅ последняя версия');
+            }
+        }
 
         reportLines.push('');
 
@@ -2409,12 +2460,7 @@ async function handleRestart(chatId) {
  */
 async function handleExtendSession(chatId) {
     try {
-        // Импортируем функции для продления сессии
-        const { initBrowser, shutdownBrowser, getBrowserContext } = await import('../browser/browser.js');
-        const { extractAuthToken } = await import('../api/chat.js');
-        const { loadSession, saveAuthToken } = await import('../browser/session.js');
-        const { loadTokens, saveTokens } = await import('../api/tokenManager.js');
-        const { CHAT_PAGE_URL } = await import('../config.js');
+        // Используем функции для продления сессии
 
         const tokens = loadTokens();
 
@@ -2941,7 +2987,6 @@ async function handleSetModel(chatId, text) {
     }
 
     const requestedModel = parts[1].trim();
-    const { getAvailableModelsFromFile } = await import('../api/chat.js');
     const availableModels = getAvailableModelsFromFile();
 
     // Проверяем что модель существует
@@ -3003,7 +3048,6 @@ export function getActiveModel() {
 async function showModelInfo(chatId) {
     const currentModel = getModelForChat(chatId);
     const context = chatContexts.get(chatId) || [];
-    const { getAvailableModelsFromFile } = await import('../api/chat.js');
     const availableModels = getAvailableModelsFromFile();
 
     const message =

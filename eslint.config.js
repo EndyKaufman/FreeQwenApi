@@ -1,4 +1,6 @@
 import importPlugin from 'eslint-plugin-import';
+import stylistic from '@stylistic/eslint-plugin';
+import returnAwaitAsync from './.eslint-rules/return-await-async.js';
 
 export default [
     {
@@ -12,7 +14,13 @@ export default [
             'temp/**'
         ],
         plugins: {
-            import: importPlugin
+            import: importPlugin,
+            '@stylistic': stylistic,
+            'custom': {
+                rules: {
+                    'return-await-async': returnAwaitAsync
+                }
+            }
         },
         languageOptions: {
             ecmaVersion: 2022,
@@ -129,6 +137,7 @@ export default [
 
             // === POTENTIAL BUGS ===
             'require-await': 'warn', // async without await (downgraded)
+            'custom/return-await-async': 'error', // Require await when returning async function calls
             'no-promise-executor-return': 'warn', // Return in Promise executor (downgraded)
             'no-unmodified-loop-condition': 'warn', // Loop condition never changes
             'no-unreachable-loop': 'warn', // Loop that only runs once

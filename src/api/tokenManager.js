@@ -398,7 +398,7 @@ export function checkAllTokensExpiry(warningMs = TOKEN_EXPIRY_WARNING_MS) {
  * @param {number} warningMs - Время предупреждения в мс
  * @returns {object|null} - Токен или null
  */
-export async function getSafeToken(warningMs = TOKEN_EXPIRY_WARNING_MS) {
+export function getSafeToken(warningMs = TOKEN_EXPIRY_WARNING_MS) {
     const tokens = loadTokens();
     const now = Date.now();
 

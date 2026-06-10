@@ -5,13 +5,15 @@ import { initBrowser, shutdownBrowser } from './src/browser/browser.js';
 import apiRoutes from './src/api/routes.js';
 import { getAvailableModelsFromFile, fetchModelsFromAPI, getDefaultModel, getApiKeys } from './src/api/chat.js';
 import { loadTokens } from './src/api/tokenManager.js';
-import { addAccountInteractive } from './src/utils/accountSetup.js';
+import { addAccountInteractive, reloginAccountInteractive, removeAccountInteractive } from './src/utils/accountSetup.js';
 import { logHttpRequest, logInfo, logError, logWarn, logDebug } from './src/logger/index.js';
 import { prompt } from './src/utils/prompt.js';
 import { PORT, HOST } from './src/config.js';
 import { startTelegramBot, stopTelegramBot, notifyAllUsers, configureProxy, processPendingArchive, checkAllSubsystems, startPeriodicHealthCheck } from './src/utils/telegramBot.js';
 import { getProxyInfo } from './src/utils/proxy.js';
 import { checkPermissions } from './src/utils/permissionChecker.js';
+import { checkForUpdates, getVersionInfo, startPeriodicVersionCheck, getCurrentVersion } from './src/utils/versionChecker.js';
+import { ENABLE_VERSION_CHECK } from './src/config.js';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -289,7 +291,6 @@ async function handleCLICommand() {
                 console.log('🔹 Вариант 2: Отправить файл сессии через Telegram бота');
                 console.log('🔹 Вариант 3: Выйти и запустить вручную: npx qwen-api-proxy\n');
 
-                const { prompt } = await import('./src/utils/prompt.js');
                 const choice = await prompt('Ваш выбор (1/2/3, Enter = 1): ');
 
                 if (choice === '2') {
@@ -306,7 +307,6 @@ async function handleCLICommand() {
                 // choice === '1' или Enter - добавляем аккаунт
                 console.log('\n🔐 Запуск браузера для добавления аккаунта...\n');
 
-                const { addAccountInteractive } = await import('./src/utils/accountSetup.js');
                 const accountId = await addAccountInteractive();
 
                 if (!accountId) {
@@ -411,7 +411,6 @@ async function startServer() {
             if (choice === '1') {
                 await addAccountInteractive();
             } else if (choice === '2') {
-                const { reloginAccountInteractive } = await import('./src/utils/accountSetup.js');
                 await reloginAccountInteractive();
             } else if (choice === '3') {
                 const hasValidToken = tokens.some((t) => {
@@ -425,7 +424,6 @@ async function startServer() {
                 }
                 break;
             } else if (choice === '4') {
-                const { removeAccountInteractive } = await import('./src/utils/accountSetup.js');
                 await removeAccountInteractive();
             }
         }
@@ -475,9 +473,36 @@ async function startServer() {
         startPeriodicHealthCheck();
     }
 
+    // Запускаем периодическую проверку обновлений если включена
+    if (ENABLE_VERSION_CHECK) {
+        startPeriodicVersionCheck();
+    } else {
+        logDebug('Проверка обновлений отключена (ENABLE_VERSION_CHECK=false)');
+    }
+
     try {
         app.listen(port, host, async () => {
             const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+
+            // Получаем текущую версию всегда
+            const currentVersion = getCurrentVersion();
+
+            // Получаем информацию об обновлениях если включено
+            let versionInfo = null;
+            if (ENABLE_VERSION_CHECK) {
+                versionInfo = await getVersionInfo();
+            }
+
+            // Формируем заголовок с информацией о версии
+            let versionHeader = '🚀 Сервис запущен!';
+            if (currentVersion) {
+                versionHeader += ` v${currentVersion}`;
+            }
+            if (versionInfo && versionInfo.hasUpdate) {
+                versionHeader += ` (доступна v${versionInfo.latestVersion})`;
+            }
+
+            logInfo(versionHeader);
             logInfo(`Сервер запущен на ${host}:${port}`);
             logInfo(`API доступен по адресу: http://${displayHost}:${port}/api`);
             logInfo('Для проверки статуса авторизации: GET /api/status');

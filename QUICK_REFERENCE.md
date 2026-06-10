@@ -1,4 +1,4 @@
-# Quick Reference - FreeQwenApi v1.0.9
+# Quick Reference - FreeQwenApi v1.0.10
 
 ## 🚀 Quick Start
 
@@ -17,7 +17,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.9
+  endykaufman/qwen-api-proxy:1.0.10
 ```
 
 ### Option 2: Docker Compose
@@ -31,8 +31,8 @@ cp .env.example .env
 nano .env  # Add your Telegram bot token
 
 # 3. Run
-docker-compose up -d
-docker-compose logs -f
+docker compose up -d
+docker compose logs -f
 ```
 
 ### Option 3: Local Development
@@ -209,7 +209,7 @@ curl http://localhost:3264/api/status
 /status command
 
 # Via Docker
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### Change Model
@@ -218,7 +218,7 @@ docker-compose logs -f
 DEFAULT_MODEL=qwen-turbo
 
 # Restart
-docker-compose restart
+docker compose restart
 ```
 
 ### Use Proxy
@@ -227,8 +227,8 @@ docker-compose restart
 TELEGRAM_PROXY=http://proxy:8080
 
 # Rebuild
-docker-compose build
-docker-compose up -d
+docker compose build
+docker compose up -d
 ```
 
 ---
@@ -238,10 +238,10 @@ docker-compose up -d
 ### Bot doesn't respond
 ```bash
 # Check logs
-docker-compose logs | grep telegram
+docker compose logs | grep telegram
 
 # Verify .env
-docker-compose exec qwen-proxy env | grep TELEGRAM
+docker compose exec qwen-proxy env | grep TELEGRAM
 
 # Test connection
 curl -x http://proxy:8080 https://api.telegram.org
@@ -262,7 +262,7 @@ curl -x http://proxy:8080 https://api.telegram.org
 # Max size: 50MB
 
 # Check logs
-docker-compose logs | grep -i "archive\|extract"
+docker compose logs | grep -i "archive\|extract"
 ```
 
 ---

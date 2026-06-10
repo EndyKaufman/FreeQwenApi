@@ -182,13 +182,13 @@ catch (error) {
 
 ```bash
 # Start the service
-docker-compose up -d
+docker compose up -d
 
 # Check logs for sensitive patterns
-docker-compose logs | grep -i "token:"
-docker-compose logs | grep -i "password"
-docker-compose logs | grep -i "secret"
-docker-compose logs | grep -i "key:"
+docker compose logs | grep -i "token:"
+docker compose logs | grep -i "password"
+docker compose logs | grep -i "secret"
+docker compose logs | grep -i "key:"
 
 # Should NOT find any actual secret values
 ```
@@ -211,7 +211,7 @@ If sensitive data is accidentally logged:
 
 1. **Stop the service immediately:**
    ```bash
-   docker-compose down
+   docker compose down
    ```
 
 2. **Clear log files:**

@@ -117,7 +117,6 @@ You can now **extend Qwen sessions directly from Telegram**! No need to access t
 ### Image Generation
 - `/image <description>` - Generate image
 - `/imagine <description>` - Alternative command
-- `/генерация <description>` - Russian version
 
 ### Information
 - `/setup` - Session creation guide

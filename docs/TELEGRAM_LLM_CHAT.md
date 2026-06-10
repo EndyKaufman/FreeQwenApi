@@ -210,7 +210,7 @@ DEFAULT_MODEL=qwen-plus
 
 Restart service:
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 ## 🔧 How It Works
@@ -300,10 +300,10 @@ Respond in the same language as the user.
 
 ```bash
 # LLM chat activity
-docker-compose logs -f | grep "LLM Chat"
+docker compose logs -f | grep "LLM Chat"
 
 # All bot activity
-docker-compose logs -f | grep telegram
+docker compose logs -f | grep telegram
 ```
 
 ## ⚠️ Important Notes
@@ -340,13 +340,13 @@ docker-compose logs -f | grep telegram
 **Check:**
 ```bash
 # Service is running
-docker-compose ps
+docker compose ps
 
 # API is accessible
 curl http://localhost:3264/api/status
 
 # Check logs
-docker-compose logs | grep "LLM Chat"
+docker compose logs | grep "LLM Chat"
 ```
 
 **Solutions:**

@@ -3,10 +3,10 @@
 ## How .env Loading Works
 
 ### Docker Compose (Production)
-When using `docker-compose up`, the `.env` file is loaded automatically:
+When using `docker compose up`, the `.env` file is loaded automatically:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 **How it works:**
@@ -86,11 +86,11 @@ DEFAULT_MODEL=qwen-max-latest
 
 **With Docker Compose:**
 ```bash
-docker-compose build
-docker-compose up -d
+docker compose build
+docker compose up -d
 
 # Check logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
 **With Node.js directly:**
@@ -104,7 +104,7 @@ node index.js
 ### Docker Compose
 ```bash
 # Verify variables loaded
-docker-compose exec qwen-proxy env | grep TELEGRAM
+docker compose exec qwen-proxy env | grep TELEGRAM
 
 # Should show:
 TELEGRAM_BOT_TOKEN=
@@ -187,9 +187,9 @@ file .env
 ls -la docker-compose.yml .env
 
 # Rebuild to apply changes
-docker-compose down
-docker-compose build
-docker-compose up -d
+docker compose down
+docker compose build
+docker compose up -d
 ```
 
 **Issue:** Direct Node.js doesn't see .env
@@ -245,7 +245,7 @@ node test-env.js
 
 ```bash
 # Build and run
-docker-compose up -d
+docker compose up -d
 
 # Test from outside
 curl http://localhost:3264/api/status
@@ -291,8 +291,8 @@ head -10 index.js
 **Docker:**
 ```bash
 # Must rebuild/restart
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 **Node.js:**
@@ -318,10 +318,10 @@ npm install
 node index.js
 
 # Production
-docker-compose build
-docker-compose up -d
+docker compose build
+docker compose up -d
 
 # Check status
-docker-compose logs -f
+docker compose logs -f
 curl http://localhost:3264/api/status
 ```

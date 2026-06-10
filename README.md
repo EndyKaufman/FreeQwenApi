@@ -208,7 +208,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.9
+  endykaufman/qwen-api-proxy:1.0.10
 
 # 3. Смотрим логи
 docker logs -f qwen-proxy
@@ -217,17 +217,28 @@ docker logs -f qwen-proxy
 ### Доступные теги
 
 - `latest` - последняя стабильная версия
-- `1.0.9` - текущая версия
+- `1.0.10` - текущая версия
 - `1.0.x` - предыдущие версии
 
 > **💡 Важно:** Перед первым запуском добавьте аккаунт через `npm run auth` или загрузите сессию через Telegram бота.
+
+### 📖 Что такое Docker Compose?
+
+**Docker Compose** - это инструмент для запуска многоконтейнерных приложений через файл `docker-compose.yml`.
+
+**Установка:**
+- **Windows/macOS**: Входит в Docker Desktop (установлен по умолчанию)
+- **Linux**: `sudo apt install docker-compose-plugin`
+- **Проверка**: `docker compose version`
+
+> 💡 Если у вас установлен Docker Desktop - Compose уже есть!
 
 ### Docker Compose с готовым образом
 
 ```yaml
 services:
   qwen-proxy:
-    image: endykaufman/qwen-api-proxy:1.0.9
+    image: endykaufman/qwen-api-proxy:1.0.10
     container_name: qwen-proxy
     env_file:
       - .env
@@ -255,9 +266,23 @@ npm run auth
 cp .env.example .env
 nano .env  # Редактируем переменные
 
-# 3. Собираем и запускаем (локальная сборка)
+# 3. Собираем и запускаем
+
+# Вариант A: С Docker Compose
 docker compose build --no-cache
 docker compose up -d
+
+# Вариант B: Без Docker Compose (обычный Docker)
+docker build -t qwen-proxy .
+docker run -d \
+  --name qwen-proxy \
+  --env-file .env \
+  -p 3264:3264 \
+  -v $(pwd)/session:/app/session \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/uploads:/app/uploads \
+  -v $(pwd)/temp:/app/temp \
+  qwen-proxy
 
 # ИЛИ используем готовый образ с Docker Hub
 docker run -d \
@@ -268,7 +293,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.9
+  endykaufman/qwen-api-proxy:1.0.10
 ```
 
 Файл `docker-compose.yml`:
@@ -277,7 +302,7 @@ docker run -d \
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:1.0.9
+    image: endykaufman/qwen-api-proxy:1.0.10
     container_name: qwen-proxy
     env_file:
       - .env  # Автоматическая загрузка переменных
@@ -303,7 +328,6 @@ services:
 
 Переменная `SKIP_ACCOUNT_MENU=true` (или `NON_INTERACTIVE=true`) пропускает интерактивное меню и сразу запускает сервер, используя ранее сохранённые токены из `session/`.
 
-> **💡 Новое в v1.0.9:** Сервис может работать **только как Telegram бот** даже без токенов! Поддержка генерации изображений (text-to-image + image-to-image), проксирование LLM запросов, умная обработка rate limits.
 
 ### Тома Docker и структура директорий
 

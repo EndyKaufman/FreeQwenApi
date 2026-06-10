@@ -40,3 +40,7 @@ src/Authorization.txt
 .last_telegram_update
 temp
 session_backup_*
+logs
+uploads
+session
+session_backup

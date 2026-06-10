@@ -71,9 +71,9 @@ TELEGRAM_PROXY=http://proxy.example.com:8080
 Then restart:
 
 ```bash
-docker-compose down
-docker-compose build
-docker-compose up -d
+docker compose down
+docker compose build
+docker compose up -d
 ```
 
 ## How It Works
@@ -116,7 +116,7 @@ When proxy is configured, you'll see:
 curl -x http://proxy.example.com:8080 https://api.telegram.org
 
 # Check logs
-docker-compose logs | grep -i proxy
+docker compose logs | grep -i proxy
 ```
 
 **Common Issues:**
@@ -138,10 +138,10 @@ Make sure the URL format is correct:
 **Check:**
 ```bash
 # Verify environment variables loaded
-docker-compose exec qwen-proxy env | grep TELEGRAM_PROXY
+docker compose exec qwen-proxy env | grep TELEGRAM_PROXY
 
 # Check proxy agent creation
-docker-compose logs | grep "Прокси агент"
+docker compose logs | grep "Прокси агент"
 ```
 
 ## Testing
@@ -150,7 +150,7 @@ docker-compose logs | grep "Прокси агент"
 
 ```bash
 # Inside container
-docker-compose exec qwen-proxy node -e "
+docker compose exec qwen-proxy node -e "
 const { ProxyAgent } = require('proxy-agent');
 const agent = new ProxyAgent('http://proxy.example.com:8080');
 fetch('https://api.telegram.org', { agent })
@@ -173,7 +173,7 @@ TELEGRAM_PROXY=
 
 Then restart:
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 ## Security Notes
@@ -232,13 +232,13 @@ Added package:
 
 2. Rebuild and restart:
    ```bash
-   docker-compose build
-   docker-compose up -d
+   docker compose build
+   docker compose up -d
    ```
 
 3. Verify in logs:
    ```bash
-   docker-compose logs | grep -i "прокси"
+   docker compose logs | grep -i "прокси"
    ```
 
 That's it! Your Telegram bot will now use the proxy for all API communications. 🚀

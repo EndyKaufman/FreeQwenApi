@@ -40,10 +40,10 @@ TOKEN_EXPIRY_WARNING_MS=3600000
 
 ```bash
 # Build with new dependencies (adm-zip, p7zip)
-docker-compose build
+docker compose build
 
 # Start the service
-docker-compose up -d
+docker compose up -d
 ```
 
 ## 📦 Creating Session Archive
@@ -161,13 +161,13 @@ Manually restart the service:
 
 ```bash
 # View bot logs
-docker-compose logs -f | grep -i telegram
+docker compose logs -f | grep -i telegram
 
 # View restart events
-docker-compose logs -f | grep -i restart
+docker compose logs -f | grep -i restart
 
 # View session extraction
-docker-compose logs -f | grep -i "архив\|archive\|extract"
+docker compose logs -f | grep -i "архив\|archive\|extract"
 ```
 
 ### Log Messages:
@@ -206,10 +206,10 @@ docker-compose logs -f | grep -i "архив\|archive\|extract"
 **Check:**
 ```bash
 # Verify environment variables
-docker-compose config | grep TELEGRAM
+docker compose config | grep TELEGRAM
 
 # Check logs
-docker-compose logs | grep -i telegram
+docker compose logs | grep -i telegram
 ```
 
 **Solutions:**
@@ -228,7 +228,7 @@ docker-compose logs | grep -i telegram
 
 2. **"p7zip not installed"** (for .7z files)
    - Solution: Already included in Dockerfile
-   - Rebuild: `docker-compose build`
+   - Rebuild: `docker compose build`
 
 3. **"File too large"**
    - Solution: Compress more or split archive
@@ -239,14 +239,14 @@ docker-compose logs | grep -i telegram
 **Check:**
 ```bash
 # Check if restart flag exists
-docker-compose exec qwen-proxy ls -la /app/.restart_flag
+docker compose exec qwen-proxy ls -la /app/.restart_flag
 
 # Manual restart
-docker-compose restart
+docker compose restart
 ```
 
 **Solutions:**
-1. Check startup script is running: `docker-compose exec qwen-proxy ps aux`
+1. Check startup script is running: `docker compose exec qwen-proxy ps aux`
 2. Verify exit code in logs
 3. Manual restart if needed
 
@@ -255,11 +255,11 @@ docker-compose restart
 **Check:**
 ```bash
 # Verify session structure
-docker-compose exec qwen-proxy ls -la /app/session/
-docker-compose exec qwen-proxy ls -la /app/session/accounts/
+docker compose exec qwen-proxy ls -la /app/session/
+docker compose exec qwen-proxy ls -la /app/session/accounts/
 
 # Check tokens
-docker-compose exec qwen-proxy cat /app/session/tokens.json
+docker compose exec qwen-proxy cat /app/session/tokens.json
 ```
 
 ## 📝 Example Workflow

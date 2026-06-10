@@ -162,7 +162,6 @@ Report shows status for each
 ### Image Generation
 - `/image` - Generate image
 - `/imagine` - Alternative
-- `/генерация` - Russian
 
 ### Information
 - `/setup` - Setup guide

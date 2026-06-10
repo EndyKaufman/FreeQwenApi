@@ -253,13 +253,13 @@ curl http://localhost:3264/api/status
 
 ```bash
 # Watch bot activity
-docker-compose logs -f | grep -i telegram
+docker compose logs -f | grep -i telegram
 
 # Watch restarts
-docker-compose logs -f | grep -i restart
+docker compose logs -f | grep -i restart
 
 # Watch extraction
-docker-compose logs -f | grep -i "архив\|extract"
+docker compose logs -f | grep -i "архив\|extract"
 ```
 
 ## 🐛 Troubleshooting
@@ -290,8 +290,8 @@ sudo chmod -R 755 session uploads logs temp session_backup
 
 **Check:**
 ```bash
-docker-compose config | grep TELEGRAM
-docker-compose logs | grep telegram
+docker compose config | grep TELEGRAM
+docker compose logs | grep telegram
 ```
 
 **Fix:**
@@ -315,12 +315,12 @@ cd session && zip -r ../backup.zip *  # ❌
 
 **Manual restart:**
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 **Check startup script:**
 ```bash
-docker-compose exec qwen-proxy ps aux
+docker compose exec qwen-proxy ps aux
 ```
 
 ## 🔄 Complete Workflow
@@ -399,13 +399,13 @@ docker-compose exec qwen-proxy ps aux
 
 ```bash
 # Build with new dependencies
-docker-compose build
+docker compose build
 
 # Start service
-docker-compose up -d
+docker compose up -d
 
 # Check logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### Verify Bot:
@@ -463,8 +463,8 @@ docker-compose logs -f
 
 2. **Build & Start:**
    ```bash
-   docker-compose build
-   docker-compose up -d
+   docker compose build
+   docker compose up -d
    ```
 
 3. **Test:**

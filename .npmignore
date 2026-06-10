@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+
+# Development files
+.github/
+.qoder/
+*.md
+!README.md
+!.env.example
+
+# Session and runtime data (will be created in working directory)
+session/
+logs/
+uploads/
+temp/
+.cache/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Test files
+test_*.js
+*test*.js
+examples/
+scripts/
+
+# Python files
+*.py
+__pycache__/
+*.pyc
+requirements.txt
+main.py
+
+# Backup files
+session_backup_*
+*.zip
+session_backup/
+
+# Docker files
+Dockerfile
+docker-compose.yml
+docker-entrypoint.sh
+.dockerignore
+docker-build-push.sh
+
+# Shell scripts (not needed for npm)
+*.sh
+fix-permissions.sh
+setup-dirs.sh
+start-with-restart.sh
+
+# Windows files
+*.bat
+*.ps1
+
+# Git files
+.git/
+.gitignore
+.nvmrc
+.restart_flag
+.pending_archive
+.last_telegram_update
+
+# Documentation images
+docs/

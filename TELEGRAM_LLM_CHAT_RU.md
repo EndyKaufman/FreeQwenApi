@@ -206,7 +206,7 @@ DEFAULT_MODEL=qwen-max-latest
 
 2. Перезапустите:
    ```bash
-   docker-compose restart
+   docker compose restart
    ```
 
 ## 🎯 Советы
@@ -240,10 +240,10 @@ DEFAULT_MODEL=qwen-max-latest
 
 ```bash
 # Активность LLM чата
-docker-compose logs -f | grep "LLM Chat"
+docker compose logs -f | grep "LLM Chat"
 
 # Вся активность бота
-docker-compose logs -f | grep telegram
+docker compose logs -f | grep telegram
 ```
 
 ## ⚠️ Важно
@@ -274,13 +274,13 @@ docker-compose logs -f | grep telegram
 **Проверьте:**
 ```bash
 # Сервис запущен?
-docker-compose ps
+docker compose ps
 
 # API доступен?
 curl http://localhost:3264/api/status
 
 # Логи
-docker-compose logs | grep "LLM Chat"
+docker compose logs | grep "LLM Chat"
 ```
 
 **Решения:**

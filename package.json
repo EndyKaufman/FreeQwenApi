@@ -1,20 +1,46 @@
 {
     "name": "qwen-api-proxy",
-    "version": "1.0.9",
-    "description": "Прокси-сервер для доступа к Qwen API через эмуляцию браузера",
+    "version": "1.0.10",
+    "description": "Proxy server for accessing Qwen API through browser emulation with OpenAI-compatible API and Telegram bot",
     "license": "MIT",
+    "author": "Endy Kaufman",
+    "engines": {
+        "node": ">=18.0.0"
+    },
     "repository": {
         "type": "git",
-        "url": "git@github.com:EndyKaufman/FreeQwenApi.git"
+        "url": "git+https://github.com/EndyKaufman/FreeQwenApi.git"
     },
-    "homepage": "https://github.com/EndyKaufman/FreeQwenApi",
+    "homepage": "https://github.com/EndyKaufman/FreeQwenApi#readme",
     "bugs": {
         "url": "https://github.com/EndyKaufman/FreeQwenApi/issues"
     },
+    "keywords": [
+        "qwen",
+        "api",
+        "proxy",
+        "openai",
+        "chat",
+        "ai",
+        "llm",
+        "telegram-bot",
+        "browser-automation"
+    ],
+    "bin": {
+        "qwen-api-proxy": "./bin/qwen-api-proxy.js"
+    },
     "main": "index.js",
     "type": "module",
+    "files": [
+        "bin/",
+        "src/",
+        "index.js",
+        ".env.example",
+        "README.md"
+    ],
     "scripts": {
         "start": "node index.js",
+        "archive": "node index.js archive",
         "test": "echo \"Error: no test specified\" && exit 1",
         "check-permissions": "node scripts/checkPermissions.js",
         "fix-permissions": "bash fix-permissions.sh",
@@ -50,7 +76,7 @@
         "puppeteer": "^24.31.0",
         "puppeteer-extra": "^3.3.6",
         "puppeteer-extra-plugin-stealth": "^2.11.2",
-        "undici": "^8.3.0",
+        "undici": "^6.21.1",
         "winston": "^3.17.0"
     }
 }

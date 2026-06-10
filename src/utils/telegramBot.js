@@ -8,8 +8,11 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import AdmZip from 'adm-zip';
-import { fetch, ProxyAgent } from 'undici';
+import { ProxyAgent } from 'undici';
 import { loadTokens } from '../api/tokenManager.js';
+
+// Use global fetch (available in Node 18+) instead of undici's fetch
+const globalFetch = globalThis.fetch;
 
 
 const execAsync = promisify(exec);
@@ -168,9 +171,9 @@ export async function configureProxy() {
             // Тестируем соединение с прокси
             logInfo('🔍 Тестирование соединения с прокси...');
             const testUrl = 'https://api.telegram.org/bot';
-            await fetch(testUrl, {
+            await globalFetch(testUrl, {
                 dispatcher: proxyAgent,
-                timeout: 10000
+                signal: AbortSignal.timeout(10000)
             });
             logInfo('✅ Соединение с прокси установлено');
         } catch (error) {
@@ -1035,6 +1038,10 @@ async function handleCommand(chatId, text) {
             await sendAboutMessage(chatId);
             break;
 
+        case '/archive':
+            await sendArchiveInstructions(chatId);
+            break;
+
         case '/extend':
             // 🔧 ВРЕМЕННО ОТКЛЮЧЕНО
             await sendMessage(chatId,
@@ -1049,7 +1056,6 @@ async function handleCommand(chatId, text) {
 
         case '/image':
         case '/imagine':
-        case '/генерация':
             await sendMessage(chatId, 
                 '🎨 <b>Генерация изображений</b>\n\n' +
                 '💬 <b>Текстовый режим:</b>\n' +
@@ -1065,7 +1071,7 @@ async function handleCommand(chatId, text) {
 
         default:
             // Проверяем, начинается ли сообщение с /image или /imagine с аргументами
-            if (text.startsWith('/image ') || text.startsWith('/imagine ') || text.startsWith('/генерация ')) {
+            if (text.startsWith('/image ') || text.startsWith('/imagine ')) {
                 const prompt = text.substring(text.indexOf(' ') + 1).trim();
                 if (prompt) {
                     await handleImageGeneration(chatId, prompt);
@@ -1089,8 +1095,8 @@ async function handlePhoto(chatId, photos, caption = '') {
         let prompt = caption || 'Улучши это изображение';
         let hasCommand = false;
         
-        // Если caption начинается с /image, /imagine или /генерация
-        if (caption.startsWith('/image ') || caption.startsWith('/imagine ') || caption.startsWith('/генерация ')) {
+        // Если caption начинается с /image или /imagine
+        if (caption.startsWith('/image ') || caption.startsWith('/imagine ')) {
             hasCommand = true;
             prompt = caption.substring(caption.indexOf(' ') + 1).trim();
         }
@@ -1853,14 +1859,13 @@ async function sendHelpMessage(chatId) {
         `/help - Показать это сообщение\n` +
         `/status - Показать статус сервиса\n` +
         `/restart - Перезапустить сервис\n` +
-        `~~/extend~~ - 🔧 Временно отключено\n\n`;
+        `<s>/extend</s> - 🔧 Временно отключено\n\n`;
 
     // Команды генерации изображений
     helpText +=
         `🎨 <b>Генерация изображений:</b>\n\n` +
         `/image &lt;описание&gt; - Сгенерировать изображение\n` +
-        `/imagine &lt;описание&gt; - Альтернативная команда\n` +
-        `/генерация &lt;описание&gt; - Русская версия\n\n` +
+        `/imagine &lt;описание&gt; - Альтернативная команда\n\n` +
         `💡 Пример: /image A beautiful sunset over the ocean\n\n`;
 
     // Показываем LLM команды только если есть аккаунты
@@ -1884,6 +1889,7 @@ async function sendHelpMessage(chatId) {
         `📦 <b>Загрузка сессий:</b>\n\n` +
         `Отправьте ZIP или 7z архив с папкой "session" внутри.\n` +
         `Бот распакует его и перезапустит сервис.\n\n` +
+        `/archive - Инструкция по созданию архива\n\n` +
         `📏 <b>Лимиты:</b>\n` +
         `• Максимальный размер файла: 50MB\n` +
         `• Поддерживаемые форматы: .zip, .7z\n\n` +
@@ -1903,8 +1909,13 @@ async function sendHelpMessage(chatId) {
 async function sendSetupMessage(chatId) {
     const setupText =
         `🛠️ <b>Создание сессии авторизации</b>\n\n` +
+        `<b>📖 Что нужно знать:</b>\n` +
+        `• <b>Git</b> - система управления версиями (опционально)\n` +
+        `• <b>Docker Compose</b> - инструмент для управления контейнерами\n` +
+        `• Если используете Docker Desktop - Compose уже встроен!\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
         `<b>Способ 1: Локальная установка (Node.js)</b>\n\n` +
-        `<b>Linux/macOS:</b>\n` +
+        `<b>Вариант A: С Git:</b>\n` +
         `1. <code>git clone https://github.com/EndyKaufman/FreeQwenApi</code>\n` +
         `2. <code>cd FreeQwenApi</code>\n` +
         `3. <code>npm install</code>\n` +
@@ -1912,21 +1923,30 @@ async function sendSetupMessage(chatId) {
         `5. Выберите <code>1</code> - добавить аккаунт\n` +
         `6. Войдите в аккаунт Qwen в браузере\n` +
         `7. Токен сохранится автоматически\n\n` +
-        `<b>Windows:</b>\n` +
-        `1. <code>git clone https://github.com/EndyKaufman/FreeQwenApi</code>\n` +
-        `2. <code>cd FreeQwenApi</code>\n` +
-        `3. <code>npm install</code>\n` +
-        `4. <code>npm start</code>\n` +
-        `5. Выберите <code>1</code> - добавить аккаунт\n` +
-        `6. Войдите в аккаунт Qwen в браузере\n` +
-        `7. Токен сохранится автоматически\n\n` +
+        `<b>Вариант B: Без Git (ZIP):</b>\n` +
+        `1. Скачайте ZIP: https://github.com/EndyKaufman/FreeQwenApi\n` +
+        `2. Нажмите <b>"<> Code"</b> → <b>"Download ZIP"</b>\n` +
+        `3. Распакуйте и перейдите в папку\n` +
+        `4. <code>npm install</code>\n` +
+        `5. <code>npm start</code> → выберите <code>1</code>\n\n` +
         `<b>Способ 2: Docker</b>\n\n` +
+        `<b>Что такое Docker Compose?</b>\n` +
+        `• Входит в Docker Desktop (Windows/macOS)\n` +
+        `• Linux: <code>sudo apt install docker-compose-plugin</code>\n` +
+        `• Проверка: <code>docker compose version</code>\n\n` +
+        `<b>С Compose:</b>\n` +
         `1. Сначала создайте сессию локально:\n` +
         `   <code>npm run auth</code> (или <code>npm start</code> → <code>1</code>)\n` +
-        `2. Затем соберите Docker:\n` +
+        `2. Соберите Docker:\n` +
         `   <code>docker compose build --no-cache</code>\n` +
         `3. Запустите:\n` +
         `   <code>docker compose up -d</code>\n\n` +
+        `<b>Без Compose (обычный Docker):</b>\n` +
+        `1. Создайте сессию локально (см. Способ 1)\n` +
+        `2. Соберите образ:\n` +
+        `   <code>docker build -t qwen-proxy .</code>\n` +
+        `3. Запустите:\n` +
+        `   <code>docker run -d --name qwen-proxy -p 3264:3264 -e SKIP_ACCOUNT_MENU=true -v $(pwd)/session:/app/session qwen-proxy</code>\n\n` +
         `<b>Структура папки session:</b>\n` +
         `<code>session/</code>\n` +
         `├── <code>accounts/</code>\n` +
@@ -1935,6 +1955,7 @@ async function sendSetupMessage(chatId) {
         `│   └── <code>acc_789012/</code>\n` +
         `│       └── <code>token.txt</code>\n` +
         `└── <code>tokens.json</code>\n\n` +
+        `💡 <b>Совет:</b> Используйте /archive для подробной инструкции\n\n` +
         `📖 Подробнее: https://github.com/EndyKaufman/FreeQwenApi`;
     
     await sendMessage(chatId, setupText);
@@ -1943,9 +1964,18 @@ async function sendSetupMessage(chatId) {
 async function sendConnectMessage(chatId) {
     const connectText =
         `🔌 <b>Подключение FreeQwenApi к проекту</b>\n\n` +
+        `<b>📖 Что такое Docker Compose?</b>\n` +
+        `Это инструмент для запуска многоконтейнерных приложений.\n` +
+        `Он управляет контейнерами через файл <code>docker-compose.yml</code>.\n\n` +
+        `<b>Установка Docker Compose:</b>\n` +
+        `• Входит в <b>Docker Desktop</b> (Windows/macOS)\n` +
+        `• Linux: <code>sudo apt install docker-compose-plugin</code>\n` +
+        `• Проверка: <code>docker compose version</code>\n\n` +
+        `💡 <i>Если Docker Desktop установлен - Compose уже есть!</i>\n\n` +
+        `<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n` +
         `<b>Шаг 1: Запуск через Docker Compose</b>\n\n` +
-        `Добавьте в ваш \`docker-compose.yml\`:\n\n` +
-        `\`\`\`yaml\n` +
+        `Добавьте в ваш <code>docker-compose.yml</code>:\n\n` +
+        `<pre>\n` +
         `services:\n` +
         `  qwen-proxy:\n` +
         `    build: .\n` +
@@ -1962,27 +1992,42 @@ async function sendConnectMessage(chatId) {
         `      - ./uploads:/app/uploads\n` +
         `      - ./temp:/app/temp\n` +
         `    restart: unless-stopped\n` +
-        `\`\`\`\n\n` +
-        `Или используйте наш \`docker-compose.yml\`:\n` +
-        `\`docker compose up -d\`\n\n` +
+        `</pre>\n\n` +
+        `Или используйте наш <code>docker-compose.yml</code>:\n` +
+        `<code>docker compose up -d</code>\n\n` +
+        `<b>Альтернатива: Без Docker Compose</b>\n\n` +
+        `Если Compose не установлен, используйте обычный Docker:\n\n` +
+        `<pre>\n` +
+        `docker build -t qwen-proxy .\n` +
+        `docker run -d \\\n` +
+        `  --name qwen-proxy \\\n` +
+        `  -p 3264:3264 \\\n` +
+        `  -e SKIP_ACCOUNT_MENU=true \\\n` +
+        `  -v $(pwd)/session:/app/session \\\n` +
+        `  -v $(pwd)/logs:/app/logs \\\n` +
+        `  -v $(pwd)/uploads:/app/uploads \\\n` +
+        `  -v $(pwd)/temp:/app/temp \\\n` +
+        `  qwen-proxy\n` +
+        `</pre>\n\n` +
+        `<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n` +
         `<b>Шаг 2: Первый запрос через curl</b>\n\n` +
         `<b>Простой запрос:</b>\n` +
-        `\`\`\`bash\n` +
+        `<pre>\n` +
         `curl http://localhost:3264/api/chat/completions \\\n` +
         `  -H "Content-Type: application/json" \\\n` +
         `  -d '{"model":"qwen3.5-plus","messages":[{"role":"user","content":"Привет!"}]}'\n` +
-        `\`\`\`\n\n` +
+        `</pre>\n\n` +
         `<b>С продолжением диалога:</b>\n` +
-        `\`\`\`bash\n` +
+        `<pre>\n` +
         `curl -X POST http://localhost:3264/api/chat/completions \\\n` +
         `  -H "Content-Type: application/json" \\\n` +
         `  -d '{\n` +
         `    "model": "qwen3.5-plus",\n` +
         `    "messages": [{"role": "user", "content": "Сколько будет 2+2?"}]\n` +
         `  }'\n` +
-        `\`\`\`\n\n` +
+        `</pre>\n\n` +
         `<b>Шаг 3: Использование с OpenAI SDK</b>\n\n` +
-        `\`\`\`javascript\n` +
+        `<pre>\n` +
         `import OpenAI from 'openai';\n\n` +
         `const client = new OpenAI({\n` +
         `    baseURL: 'http://localhost:3264/api',\n` +
@@ -1992,7 +2037,7 @@ async function sendConnectMessage(chatId) {
         `    model: 'qwen3.5-plus',\n` +
         `    messages: [{ role: 'user', content: 'Привет!' }]\n` +
         `});\n` +
-        `\`\`\`\n\n` +
+        `</pre>\n\n` +
         `📖 API Docs: http://localhost:3264/api\n` +
         `📚 GitHub: https://github.com/EndyKaufman/FreeQwenApi`;
     
@@ -2037,6 +2082,89 @@ async function sendAboutMessage(chatId) {
         `💡 <i>Оба проекта используют MIT лицензию</i>`;
     
     await sendMessage(chatId, aboutText);
+}
+
+/**
+ * Отправляет инструкции по созданию архива сессии
+ */
+async function sendArchiveInstructions(chatId) {
+    const archiveText =
+        `📦 <b>Создание архива сессии для Docker</b>\n\n` +
+        `Эта инструкция поможет создать архив с авторизацией\n` +
+        `для последующей загрузки в Telegram бота.\n\n` +
+        `<b>🔹 Шаг 1: Установка Node.js</b>\n\n` +
+        `<b>Windows:</b>\n` +
+        `• Скачайте с <code>nodejs.org</code>\n` +
+        `• Установите (галочка "Add to PATH")\n\n` +
+        `<b>macOS:</b>\n` +
+        `• <code>brew install node</code>\n` +
+        `• Или скачайте с <code>nodejs.org</code>\n\n` +
+        `<b>Linux (Ubuntu/Debian):</b>\n` +
+        `• <code>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -</code>\n` +
+        `• <code>sudo apt install -y nodejs</code>\n\n` +
+        `<b>🔹 Шаг 2: Скачивание проекта</b>\n\n` +
+        `<b>Способ A: Git (если установлен):</b>\n` +
+        `<pre>\n` +
+        `git clone https://github.com/EndyKaufman/FreeQwenApi\n` +
+        `cd FreeQwenApi\n` +
+        `npm install\n` +
+        `</pre>\n\n` +
+        `<b>Способ B: Без Git (ZIP архив):</b>\n` +
+        `1. Откройте: https://github.com/EndyKaufman/FreeQwenApi\n` +
+        `2. Нажмите зелёную кнопку <b>"&lt;&gt; Code"</b>\n` +
+        `3. Выберите <b>"Download ZIP"</b>\n` +
+        `4. Распакуйте архив\n` +
+        `5. Откройте терминал в папке проекта\n` +
+        `6. <code>npm install</code>\n\n` +
+        `💡 <i>Этот способ не требует установки Git!</i>\n\n` +
+        `<b>🔹 Шаг 3: Создание архива сессии</b>\n\n` +
+        `<pre>\n` +
+        `npm run create-session-archive\n` +
+        `</pre>\n\n` +
+        `<b>Что произойдет:</b>\n` +
+        `1. Откроется браузер\n` +
+        `2. Войдите в Qwen (GitHub/Google/email)\n` +
+        `3. Нажмите ENTER в консоли\n` +
+        `4. Сессия сохранится\n` +
+        `5. Создется ZIP архив\n\n` +
+        `<b>🔹 Шаг 4: Отправка в Telegram бота</b>\n\n` +
+        `1. Откройте нашего бота\n` +
+        `2. Нажмите 📎 (скрепка)\n` +
+        `3. Выберите <b>"Файл"</b> (НЕ "Фото"!)\n` +
+        `4. Выберите <code>session_backup_*.zip</code>\n` +
+        `5. Отправьте\n` +
+        `6. Дождитесь: <code>✅ Архив распакован</code>\n\n` +
+        `<b>🔹 Альтернатива: Ручной способ</b>\n\n` +
+        `Если <code>npm run</code> не работает:\n\n` +
+        `<b>Windows PowerShell:</b>\n` +
+        `<pre>\n` +
+        `node scripts/createSessionArchive.js\n` +
+        `</pre>\n\n` +
+        `<b>Linux/macOS:</b>\n` +
+        `<pre>\n` +
+        `node scripts/createSessionArchive.js\n` +
+        `</pre>\n\n` +
+        `<b>🔹 Структура архива:</b>\n\n` +
+        `<pre>\n` +
+        `session/\n` +
+        `├── accounts/\n` +
+        `│   ├── acc_123456/\n` +
+        `│   │   ├── token.txt\n` +
+        `│   │   └── cookies.json\n` +
+        `│   └── acc_789012/\n` +
+        `│       ├── token.txt\n` +
+        `│       └── cookies.json\n` +
+        `└── tokens.json\n` +
+        `</pre>\n\n` +
+        `<b>⚠️ Важно:</b>\n` +
+        `• <code>cookies.json</code> обязателен!\n` +
+        `• Без cookies сессия не продлится\n` +
+        `• Архив должен содержать папку <code>session/</code>\n\n` +
+        `<b>🆘 Проблемы?</b>\n` +
+        `• GitHub: https://github.com/EndyKaufman/FreeQwenApi\n` +
+        `• Используйте /help для списка команд`;
+    
+    await sendMessage(chatId, archiveText);
 }
 
 async function sendStatusMessage(chatId, isScheduled = false) {

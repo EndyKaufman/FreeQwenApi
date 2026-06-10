@@ -14,6 +14,8 @@ import { getProxyInfo } from './src/utils/proxy.js';
 import { checkPermissions } from './src/utils/permissionChecker.js';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
+import { SESSION_DIR } from './src/config.js';
 
 const app = express();
 
@@ -105,6 +107,133 @@ async function handleShutdown() {
     process.exit(0);
 }
 
+/**
+ * Создает ZIP архив папки session/
+ */
+function createSessionArchive() {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const archiveName = `session_backup_${timestamp}.zip`;
+    const archivePath = path.resolve(process.cwd(), archiveName);
+    const sessionPath = path.resolve(process.cwd(), SESSION_DIR);
+
+    console.log('\n📦 Создание архива сессии...');
+    console.log(`📂 Путь к сессии: ${sessionPath}`);
+    console.log(`📄 Имя архива: ${archiveName}`);
+
+    try {
+        // Проверяем существование папки сессии
+        if (!fs.existsSync(sessionPath)) {
+            throw new Error(`Папка сессии не найдена: ${sessionPath}`);
+        }
+
+        // Проверяем содержимое
+        const files = fs.readdirSync(sessionPath);
+        if (files.length === 0) {
+            throw new Error('Папка сессии пуста. Сначала выполните авторизацию.');
+        }
+
+        // Создаем ZIP архив
+        const command = `cd "${process.cwd()}" && zip -r "${archiveName}" "${SESSION_DIR}/"`;
+        logInfo(`Выполнение команды: ${command}`);
+        execSync(command, { stdio: 'inherit' });
+
+        // Проверяем создание архива
+        if (!fs.existsSync(archivePath)) {
+            throw new Error('Архив не был создан');
+        }
+
+        const stats = fs.statSync(archivePath);
+        const sizeMB = (stats.size / (1024 * 1024)).toFixed(2);
+
+        console.log('\n✅ Архив успешно создан!');
+        console.log(`📍 Путь: ${archivePath}`);
+        console.log(`📏 Размер: ${sizeMB} MB`);
+
+        return archivePath;
+    } catch (error) {
+        logError('Ошибка при создании архива', error);
+        throw error;
+    }
+}
+
+/**
+ * Проверяет наличие и содержимое .gitignore в корневой директории
+ */
+function validateGitignore() {
+    const gitignorePath = path.join(process.cwd(), '.gitignore');
+    const requiredEntries = [
+        'session',
+        'logs',
+        'uploads',
+        'temp',
+        'session_backup',
+        'session_backup_*'
+    ];
+    
+    if (!fs.existsSync(gitignorePath)) {
+        logWarn('⚠️  Файл .gitignore не найден в корневой директории');
+        logWarn('   Рекомендуется создать .gitignore для защиты чувствительных данных');
+        return false;
+    }
+    
+    const content = fs.readFileSync(gitignorePath, 'utf8');
+    const lines = content.split('\n').map(line => line.trim());
+    const missingEntries = [];
+    
+    requiredEntries.forEach(entry => {
+        if (!lines.includes(entry)) {
+            missingEntries.push(entry);
+        }
+    });
+    
+    if (missingEntries.length > 0) {
+        logWarn(`⚠️  .gitignore отсутствует: ${missingEntries.join(', ')}`);
+        logWarn('   Добавьте эти записи в .gitignore для защиты данных');
+        return false;
+    }
+    
+    logInfo('✅ .gitignore проверен - все записи на месте');
+    return true;
+}
+
+/**
+ * Обрабатывает CLI команды
+ */
+async function handleCLICommand() {
+    const args = process.argv.slice(2);
+    const command = args[0];
+
+    if (!command) {
+        return false; // Нет команды, продолжаем обычный запуск
+    }
+
+    if (command === 'archive' || command === '--archive') {
+        console.log('\n╔══════════════════════════════════════════════════════════╗');
+        console.log('║           Session Archive Creator                        ║');
+        console.log('║                                                          ║');
+        console.log('║  Создание ZIP архива папки session/                      ║');
+        console.log('╚══════════════════════════════════════════════════════════╝\n');
+
+        try {
+            const archivePath = createSessionArchive();
+            console.log('\n🎉 ГОТОВО!');
+            console.log(`📄 Архив: ${archivePath}`);
+            console.log('\n📱 Следующие шаги:');
+            console.log('   1. Откройте Telegram бота');
+            console.log('   2. Нажмите 📎 (скрепка)');
+            console.log('   3. Выберите "Файл" (НЕ "Фото"!)');
+            console.log('   4. Отправьте архив боту');
+            console.log('   5. Дождитесь подтверждения\n');
+            process.exit(0);
+        } catch (error) {
+            logError('Ошибка при создании архива', error);
+            process.exit(1);
+        }
+    }
+
+    return false;
+}
+
 async function startServer() {
     console.log(`
 ███████ ██████  ███████ ███████  ██████  ██     ██ ███████ ███    ██  █████  ██████  ██ 
@@ -133,6 +262,9 @@ async function startServer() {
     if (archiveProcessed) {
         logInfo('✅ Ожидющий архив успешно распакован при запуске');
     }
+
+    // Проверяем .gitignore
+    validateGitignore();
 
     // Проверяем флаг перезапуска
     const restartFlagPath = path.join(process.cwd(), '.restart_flag');
@@ -299,8 +431,14 @@ async function startServer() {
     }
 }
 
-startServer().catch(async error => {
-    logError('Ошибка при запуске сервера', error);
-    await shutdownBrowser();
-    process.exit(1);
+// Проверяем CLI команды перед запуском сервера
+handleCLICommand().then(hasCommand => {
+    if (!hasCommand) {
+        // Нет команды CLI, запускаем сервер как обычно
+        startServer().catch(async error => {
+            logError('Ошибка при запуске сервера', error);
+            await shutdownBrowser();
+            process.exit(1);
+        });
+    }
 });

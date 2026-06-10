@@ -1,11 +1,23 @@
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fs from 'fs';
 
-// Загружаем .env файл перед использованием переменных окружения
-const dotenvResult = dotenv.config();
+// Determine if running as global CLI or local development
+const isGlobalInstall = process.env.QWEN_API_PROXY_GLOBAL === 'true';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(__dirname, '..');
+
+// Use current working directory for global install, package root for development
+const BASE_DIR = isGlobalInstall ? process.cwd() : PACKAGE_ROOT;
+
+// Load .env file from working directory
+const envPath = path.join(BASE_DIR, '.env');
+const dotenvResult = dotenv.config({ path: envPath });
 if (dotenvResult.error) {
-    console.warn('⚠️  .env файл не найден, используем переменные окружения');
+    console.warn('⚠️  .env file not found, using environment variables');
 } else {
-    console.log('✅ .env файл загружен');
+    console.log('✅ .env file loaded');
 }
 
 // config.js — Единый источник конфигурации проекта.
@@ -45,11 +57,15 @@ export const MAX_RETRY_COUNT = Number(process.env.MAX_RETRY_COUNT) || 3;
 export const TASK_POLL_MAX_ATTEMPTS = Number(process.env.TASK_POLL_MAX_ATTEMPTS) || 90;
 export const TASK_POLL_INTERVAL = Number(process.env.TASK_POLL_INTERVAL) || 2_000;
 
-// ─── Пути (относительно корня проекта) ───────────────────────────────────────
+// ─── Paths (relative to working directory) ───────────────────────────────────────
 export const SESSION_DIR = process.env.SESSION_DIR || 'session';
 export const ACCOUNTS_DIR = 'accounts';
 export const UPLOADS_DIR = process.env.UPLOADS_DIR || 'uploads';
 export const LOGS_DIR = process.env.LOGS_DIR || 'logs';
+export const TEMP_DIR = process.env.TEMP_DIR || 'temp';
+
+// Export base directory for use in other modules
+export { BASE_DIR };
 
 // ─── Браузер ─────────────────────────────────────────────────────────────────
 export const VIEWPORT_WIDTH = Number(process.env.VIEWPORT_WIDTH) || 1920;

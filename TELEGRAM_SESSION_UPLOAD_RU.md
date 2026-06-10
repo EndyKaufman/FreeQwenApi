@@ -104,9 +104,16 @@ npm run create-session-archive
 
 ### Способ 2: Docker
 
-**Требования:**
-- Docker
-- Docker Compose
+**📖 Что такое Docker Compose?**
+
+Docker Compose - это инструмент для управления многоконтейнерными приложениями через файл `docker-compose.yml`.
+
+**Установка:**
+- **Windows/macOS**: Входит в Docker Desktop (установлен по умолчанию)
+- **Linux**: `sudo apt install docker-compose-plugin`
+- **Проверка**: `docker compose version`
+
+> 💡 Если у вас установлен Docker Desktop - Compose уже есть!
 
 **Шаги:**
 
@@ -119,6 +126,23 @@ npm run create-session-archive
    <code>docker compose up -d</code>
 
 4. **Папка session будет доступна** через volume mapping
+
+**Альтернатива: Без Docker Compose**
+
+Если Compose не установлен, используйте обычный Docker:
+
+```bash
+docker build -t qwen-proxy .
+docker run -d \
+  --name qwen-proxy \
+  -p 3264:3264 \
+  -e SKIP_ACCOUNT_MENU=true \
+  -v $(pwd)/session:/app/session \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/uploads:/app/uploads \
+  -v $(pwd)/temp:/app/temp \
+  qwen-proxy
+```
 
 ---
 
@@ -217,8 +241,8 @@ TOKEN_EXPIRY_WARNING_MS=3600000
 ### Пересоберите контейнер:
 
 ```bash
-docker-compose build
-docker-compose up -d
+docker compose build
+docker compose up -d
 ```
 
 ### Проверьте права доступа:
@@ -332,23 +356,23 @@ Startup скрипт ловит код 42
 
 ```bash
 # Логи бота
-docker-compose logs -f | grep -i telegram
+docker compose logs -f | grep -i telegram
 
 # Логи распаковки
-docker-compose logs -f | grep -i "архив\|extract"
+docker compose logs -f | grep -i "архив\|extract"
 
 # Логи перезапуска
-docker-compose logs -f | grep -i restart
+docker compose logs -f | grep -i restart
 ```
 
 ### Проверка сессий:
 
 ```bash
 # Посмотреть структуру
-docker-compose exec qwen-proxy ls -la /app/session/
+docker compose exec qwen-proxy ls -la /app/session/
 
 # Посмотреть аккаунты
-docker-compose exec qwen-proxy ls -la /app/session/accounts/
+docker compose exec qwen-proxy ls -la /app/session/accounts/
 ```
 
 ## ❗ Решение проблем
@@ -377,16 +401,16 @@ cd session && zip -r ../backup.zip *
 
 **Ручной перезапуск:**
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 **Проверка:**
 ```bash
 # Проверить логи
-docker-compose logs --tail=50
+docker compose logs --tail=50
 
 # Проверить статус
-docker-compose ps
+docker compose ps
 ```
 
 ### Бот не отвечает
@@ -398,7 +422,7 @@ docker-compose ps
 
 ```bash
 # Проверка подключения
-docker-compose exec qwen-proxy curl https://api.telegram.org
+docker compose exec qwen-proxy curl https://api.telegram.org
 ```
 
 ### Ошибка EACCES: Permission Denied

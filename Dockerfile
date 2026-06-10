@@ -21,7 +21,8 @@ RUN apk add --no-cache \
     ttf-freefont \
     dumb-init \
     p7zip \
-    dos2unix
+    dos2unix \
+    su-exec
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     CHROME_PATH=/usr/bin/chromium \
@@ -38,13 +39,16 @@ COPY . .
 # fix CRLF + permissions
 RUN dos2unix /app/start-with-restart.sh \
  && chmod +x /app/start-with-restart.sh \
- && mkdir -p /app/session /app/logs /app/uploads \
+ && mkdir -p /app/session /app/logs /app/uploads /app/temp /app/session_backup \
  && addgroup -S appgroup \
  && adduser -S appuser -G appgroup \
  && chown -R appuser:appgroup /app
 
-USER appuser
+# Entrypoint script will fix permissions at runtime
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3264
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["dumb-init", "/app/start-with-restart.sh"]

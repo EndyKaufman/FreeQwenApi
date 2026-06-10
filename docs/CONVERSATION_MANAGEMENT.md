@@ -20,6 +20,8 @@ FreeQwenApi поддерживает несколько режимов упра�
 
 ### Пример с OpenAI SDK (JavaScript)
 
+**Важно:** OpenAI SDK требует использования `extraHeaders` (не `headers`) для передачи custom headers!
+
 ```javascript
 import OpenAI from 'openai';
 
@@ -37,8 +39,8 @@ const response = await openai.chat.completions.create({
     ],
     model: 'qwen-max-latest',
 }, {
-    headers: {
-        'x-chat-id': conversationId  // <-- Управляем диалогом через header
+    extraHeaders: {  // <-- Важно: extraHeaders, не headers!
+        'x-chat-id': conversationId
     }
 });
 
@@ -49,9 +51,18 @@ const response2 = await openai.chat.completions.create({
     ],
     model: 'qwen-max-latest',
 }, {
-    headers: {
+    extraHeaders: {
         'x-chat-id': conversationId  // <-- Тот же ID = тот же диалог
     }
+});
+
+// Альтернатива: передача chat_id в body
+const response3 = await openai.chat.completions.create({
+    messages: [
+        { role: 'user', content: 'Другой диалог' }
+    ],
+    model: 'qwen-max-latest',
+    chat_id: 'another-conversation-456'  // <-- Можно передавать в body
 });
 ```
 

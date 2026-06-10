@@ -970,10 +970,18 @@ router.post('/chat/completions', async (req, res) => {
         let effectiveChatId = explicitChatId;
         let effectiveParentId = explicitParentId;
 
-        if (forceNewChat && !explicitChatId && !isMeta) {
-            effectiveChatId = `chat_${crypto.randomBytes(8).toString('hex')}`;
-            effectiveParentId = null;
-            logInfo(`Принудительно запрошен новый чат (newChat/resetChat): ${effectiveChatId}`);
+        if (forceNewChat && !isMeta) {
+            // Всегда создаем новый чат при FORCE_NEW_CHAT_PER_REQUEST или explicit chatId
+            // Если передан explicitChatId - используем его, иначе генерируем новый
+            if (!explicitChatId) {
+                effectiveChatId = `chat_${crypto.randomBytes(8).toString('hex')}`;
+                effectiveParentId = null;
+                logInfo(`Принудительно запрошен новый чат (newChat/resetChat): ${effectiveChatId}`);
+            } else {
+                // explicitChatId был передан - сбрасываем parent и не восстанавливаем из сессии
+                effectiveParentId = null;
+                logInfo(`Используем переданный chatId с сбросом истории: ${explicitChatId}`);
+            }
         }
 
         if (!effectiveChatId && !isMeta) {
@@ -1304,10 +1312,18 @@ router.post('/v1/chat/completions', async (req, res) => {
         let effectiveChatId = explicitChatId;
         let effectiveParentId = explicitParentId;
 
-        if (forceNewChat && !explicitChatId && !isMeta) {
-            effectiveChatId = `chat_${crypto.randomBytes(8).toString('hex')}`;
-            effectiveParentId = null;
-            logInfo(`Принудительно запрошен новый чат (newChat/resetChat): ${effectiveChatId}`);
+        if (forceNewChat && !isMeta) {
+            // Всегда создаем новый чат при FORCE_NEW_CHAT_PER_REQUEST или explicit chatId
+            // Если передан explicitChatId - используем его, иначе генерируем новый
+            if (!explicitChatId) {
+                effectiveChatId = `chat_${crypto.randomBytes(8).toString('hex')}`;
+                effectiveParentId = null;
+                logInfo(`Принудительно запрошен новый чат (newChat/resetChat): ${effectiveChatId}`);
+            } else {
+                // explicitChatId был передан - сбрасываем parent и не восстанавливаем из сессии
+                effectiveParentId = null;
+                logInfo(`Используем переданный chatId с сбросом истории: ${explicitChatId}`);
+            }
         }
 
         if (!effectiveChatId && !isMeta) {

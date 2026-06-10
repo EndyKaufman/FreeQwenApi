@@ -313,7 +313,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.18
+  endykaufman/qwen-api-proxy:1.0.19
 
 # 3. Смотрим логи
 docker logs -f qwen-proxy
@@ -322,7 +322,7 @@ docker logs -f qwen-proxy
 ### Доступные теги
 
 - `latest` - последняя стабильная версия
-- `1.0.18` - текущая версия
+- `1.0.19` - текущая версия
 - `1.0.x` - предыдущие версии
 
 > **💡 Важно:** Перед первым запуском добавьте аккаунт через `npm run auth` или загрузите сессию через Telegram бота.
@@ -343,7 +343,7 @@ docker logs -f qwen-proxy
 ```yaml
 services:
   qwen-proxy:
-    image: endykaufman/qwen-api-proxy:1.0.18
+    image: endykaufman/qwen-api-proxy:1.0.19
     container_name: qwen-proxy
     env_file:
       - .env
@@ -398,7 +398,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.18
+  endykaufman/qwen-api-proxy:1.0.19
 ```
 
 Файл `docker-compose.yml`:
@@ -407,7 +407,7 @@ docker run -d \
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:1.0.18
+    image: endykaufman/qwen-api-proxy:1.0.19
     container_name: qwen-proxy
     env_file:
       - .env  # Автоматическая загрузка переменных
@@ -2127,15 +2127,15 @@ ENABLE_VERSION_CHECK=false
 
 **Пример вывода в консоли:**
 ```
-🚀 Сервис запущен! v1.0.18 (доступна v1.0.18)
+🚀 Сервис запущен! v1.0.19 (доступна v1.0.19)
 ```
 
 **Пример уведомления в Telegram:**
 ```
 📦 Доступно обновление!
 
-🔹 Текущая версия: 1.0.18
-🔹 Новая версия: 1.0.18
+🔹 Текущая версия: 1.0.19
+🔹 Новая версия: 1.0.19
 📅 Опубликована: 10.06.2026, 14:30
 🕐 2 ч. назад
 

@@ -18,15 +18,15 @@ const API_URL = 'http://localhost:3264/api';
 async function uploadTestFile(filePath) {
     try {
         console.log(`Загрузка файла: ${filePath}`);
-        
+
         if (!fs.existsSync(filePath)) {
             throw new Error(`Файл не найден: ${filePath}`);
         }
-        
+
         // Создаем FormData для загрузки файла
         const formData = new FormData();
         formData.append('file', fs.createReadStream(filePath));
-        
+
         // Отправляем запрос на загрузку
         const response = await axios.post(`${API_URL}/files/upload`, formData, {
             headers: {
@@ -35,10 +35,10 @@ async function uploadTestFile(filePath) {
             maxContentLength: Infinity,
             maxBodyLength: Infinity
         });
-        
+
         console.log('Файл успешно загружен:');
         console.log(JSON.stringify(response.data, null, 2));
-        
+
         return response.data;
     } catch (error) {
         console.error('Ошибка при загрузке файла:');
@@ -59,12 +59,12 @@ async function uploadTestFile(filePath) {
 async function getTestStsToken(fileInfo) {
     try {
         console.log(`Запрос STS токена для файла: ${fileInfo.filename}`);
-        
+
         const response = await axios.post(`${API_URL}/files/getstsToken`, fileInfo);
-        
+
         console.log('Получен STS токен:');
         console.log(JSON.stringify(response.data, null, 2));
-        
+
         return response.data;
     } catch (error) {
         console.error('Ошибка при получении STS токена:');
@@ -86,22 +86,22 @@ async function getTestStsToken(fileInfo) {
 async function directUploadFile(filePath, stsData) {
     try {
         console.log(`Прямая загрузка файла: ${filePath}`);
-        
+
         if (!stsData || !stsData.file_url || !stsData.file_path) {
             throw new Error('Некорректные данные STS токена');
         }
-        
+
         // Загружаем ali-oss библиотеку динамически
         const OSS = (await import('ali-oss')).default;
-        
+
         // Проверяем наличие необходимых данных для OSS
         if (!stsData.access_key_id || !stsData.access_key_secret || !stsData.security_token ||
             !stsData.region || !stsData.bucketname) {
             throw new Error('Неполные данные STS токена для OSS');
         }
-        
+
         console.log(`Создание OSS клиента: регион ${stsData.region}, бакет ${stsData.bucketname}`);
-        
+
         // Создаем клиент OSS с STS токеном
         const client = new OSS({
             region: stsData.region,
@@ -112,19 +112,19 @@ async function directUploadFile(filePath, stsData) {
             secure: true, // Используем HTTPS
             timeout: 60000 // 60 секунд таймаут
         });
-        
+
         // Получаем имя объекта из file_path
         const objectName = stsData.file_path;
-        
+
         console.log(`Загрузка файла в OSS: ${objectName}`);
-        
+
         // Загружаем файл
         const result = await client.put(objectName, filePath);
-        
+
         console.log('Файл успешно загружен в OSS:');
         console.log(`URL: ${stsData.file_url}`);
         console.log(`Ответ OSS: ${JSON.stringify(result)}`);
-        
+
         // Проверяем, что файл действительно загружен
         try {
             const verifyResponse = await axios.get(stsData.file_url);
@@ -133,7 +133,7 @@ async function directUploadFile(filePath, stsData) {
             console.log(`Не удалось проверить файл: ${error.message}`);
             // Это не критическая ошибка, так как файл может быть недоступен сразу
         }
-        
+
         return {
             success: true,
             fileName: path.basename(filePath),
@@ -158,29 +158,29 @@ async function runTest() {
     try {
         // Путь к тестовому файлу (например, изображение)
         const testFilePath = path.join(__dirname, 'test-image.jpg');
-        
+
         // Если файл не существует, создадим простой текстовый файл для теста
         if (!fs.existsSync(testFilePath)) {
             console.log('Тестовый файл не найден, создаем текстовый файл для теста...');
-            
+
             const textFilePath = path.join(__dirname, 'test-file.txt');
             fs.writeFileSync(textFilePath, 'Это тестовый файл для загрузки.');
-            
+
             console.log(`Создан тестовый файл: ${textFilePath}`);
-            
+
             // Тестируем получение STS токена
             const fileInfo = {
                 filename: 'test-file.txt',
                 filesize: fs.statSync(textFilePath).size,
                 filetype: 'file'
             };
-            
+
             const stsData = await getTestStsToken(fileInfo);
-            
+
             // Тестируем прямую загрузку файла
             console.log('\n--- Тестирование прямой загрузки файла ---');
             await directUploadFile(textFilePath, stsData);
-            
+
             // Тестируем загрузку через API
             console.log('\n--- Тестирование загрузки через API ---');
             await uploadTestFile(textFilePath);
@@ -191,18 +191,18 @@ async function runTest() {
                 filesize: fs.statSync(testFilePath).size,
                 filetype: 'image'
             };
-            
+
             const stsData = await getTestStsToken(fileInfo);
-            
+
             // Тестируем прямую загрузку файла
             console.log('\n--- Тестирование прямой загрузки файла ---');
             await directUploadFile(testFilePath, stsData);
-            
+
             // Тестируем загрузку через API
             console.log('\n--- Тестирование загрузки через API ---');
             await uploadTestFile(testFilePath);
         }
-        
+
         console.log('\nТестирование завершено успешно!');
     } catch (error) {
         console.error('Ошибка при выполнении теста:', error.message);
@@ -210,4 +210,4 @@ async function runTest() {
 }
 
 // Запускаем тест
-runTest(); 
+runTest();

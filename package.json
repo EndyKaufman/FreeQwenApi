@@ -1,9 +1,12 @@
 {
     "name": "qwen-api-proxy",
-    "version": "1.0.10",
+    "version": "1.0.13",
     "description": "Proxy server for accessing Qwen API through browser emulation with OpenAI-compatible API and Telegram bot",
     "license": "MIT",
-    "author": "Endy Kaufman",
+    "author": {
+        "name": "EndyKaufman",
+        "email": "admin@site15.ru"
+    },
     "engines": {
         "node": ">=18.0.0"
     },
@@ -41,7 +44,10 @@
     "scripts": {
         "start": "node index.js",
         "archive": "node index.js archive",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
         "test": "echo \"Error: no test specified\" && exit 1",
+        "test:cross-platform": "node test-cross-platform.js",
         "check-permissions": "node scripts/checkPermissions.js",
         "fix-permissions": "bash fix-permissions.sh",
         "rebuild-tokens": "node scripts/rebuildTokens.js",
@@ -78,5 +84,9 @@
         "puppeteer-extra-plugin-stealth": "^2.11.2",
         "undici": "^6.21.1",
         "winston": "^3.17.0"
+    },
+    "devDependencies": {
+        "eslint": "^9.39.4",
+        "eslint-plugin-import": "^2.32.0"
     }
 }

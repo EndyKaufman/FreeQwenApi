@@ -13,7 +13,7 @@ const rl = readline.createInterface({
 });
 
 function question(prompt) {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
         rl.question(prompt, resolve);
     });
 }
@@ -21,7 +21,7 @@ function question(prompt) {
 async function streamChat(userMessage) {
     try {
         console.log('\n🤖 Assistant: ', '');
-        
+
         const response = await axios.post(
             API_URL,
             {
@@ -45,12 +45,12 @@ async function streamChat(userMessage) {
 
         let fullContent = '';
         let chunkCount = 0;
-        
+
         await new Promise((resolve, reject) => {
             response.data.on('data', (chunk) => {
                 const text = chunk.toString();
-                const lines = text.split('\n').filter(line => line.trim());
-                
+                const lines = text.split('\n').filter((line) => line.trim());
+
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         try {
@@ -67,12 +67,12 @@ async function streamChat(userMessage) {
                     }
                 }
             });
-            
+
             response.data.on('end', () => {
                 console.log('\n');
                 resolve();
             });
-            
+
             response.data.on('error', reject);
         });
 
@@ -95,7 +95,7 @@ async function main() {
 
     while (true) {
         const userInput = await question('👤 You: ');
-        
+
         if (userInput.toLowerCase() === 'exit') {
             console.log('\n👋 Goodbye!');
             rl.close();

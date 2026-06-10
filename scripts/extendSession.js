@@ -2,16 +2,16 @@
 
 /**
  * Automatic Session Extender
- * 
+ *
  * This script automatically extends Qwen session tokens by:
  * 1. Opening browser in headless mode
  * 2. Loading existing cookies/session
  * 3. Navigating to Qwen to refresh the session
  * 4. Extracting and saving the new token
  * 5. Closing browser
- * 
+ *
  * Can be run manually or scheduled via cron
- * 
+ *
  * Usage:
  *   npm run extend-session
  *   or
@@ -34,7 +34,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
 const SESSION_PATH = path.resolve(ROOT_DIR, SESSION_DIR);
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Parse command line arguments
@@ -87,7 +87,7 @@ Examples:
  */
 function loadAccountCookies(accountId) {
     const cookiesPath = path.join(SESSION_PATH, 'accounts', accountId, 'cookies.json');
-    
+
     if (!fs.existsSync(cookiesPath)) {
         logWarn(`Cookies not found for account ${accountId}`);
         return null;
@@ -109,11 +109,11 @@ function loadAccountCookies(accountId) {
  */
 async function extendAccountSession(accountId) {
     console.log(`\n🔄 Extending session for account: ${accountId}`);
-    
+
     try {
         // Load existing cookies
         const cookies = loadAccountCookies(accountId);
-        
+
         if (!cookies || cookies.length === 0) {
             logWarn(`⚠️ No cookies found for ${accountId}, skipping`);
             return { success: false, reason: 'no_cookies' };
@@ -122,13 +122,13 @@ async function extendAccountSession(accountId) {
         // Initialize browser in headless mode (silent)
         logInfo('🌐 Opening browser in headless mode...');
         const browserOk = await initBrowser(false, true); // false = headless
-        
+
         if (!browserOk) {
             throw new Error('Failed to initialize browser');
         }
 
         const ctx = getBrowserContext();
-        
+
         // Load existing cookies into browser
         logInfo('🍪 Loading saved cookies...');
         if (ctx && typeof ctx.setCookie === 'function') {
@@ -137,8 +137,8 @@ async function extendAccountSession(accountId) {
 
         // Navigate to Qwen chat to refresh session (3 minutes timeout)
         logInfo('📄 Navigating to Qwen to refresh session...');
-        await ctx.goto(CHAT_PAGE_URL, { 
-            waitUntil: 'domcontentloaded', 
+        await ctx.goto(CHAT_PAGE_URL, {
+            waitUntil: 'domcontentloaded',
             timeout: 180000 // 3 minutes
         });
 
@@ -162,8 +162,8 @@ async function extendAccountSession(accountId) {
 
         // Update tokens.json
         const tokens = loadTokens();
-        const tokenIndex = tokens.findIndex(t => t.id === accountId);
-        
+        const tokenIndex = tokens.findIndex((t) => t.id === accountId);
+
         if (tokenIndex !== -1) {
             tokens[tokenIndex].token = newToken;
             tokens[tokenIndex].resetAt = null; // Clear rate limit
@@ -185,14 +185,14 @@ async function extendAccountSession(accountId) {
 
     } catch (error) {
         logError(`❌ Failed to extend session for ${accountId}`, error);
-        
+
         // Ensure browser is closed
         try {
             await shutdownBrowser();
         } catch (e) {
             // ignore
         }
-        
+
         return { success: false, reason: error.message };
     }
 }
@@ -202,24 +202,24 @@ async function extendAccountSession(accountId) {
  */
 async function extendAllSessions() {
     const tokens = loadTokens();
-    
+
     if (tokens.length === 0) {
         console.log('⚠️ No accounts found in tokens.json');
         return [];
     }
 
     console.log(`\n📊 Found ${tokens.length} account(s) to extend`);
-    
+
     const results = [];
-    
+
     for (const token of tokens) {
         // Skip invalid tokens
         if (token.invalid) {
             console.log(`\n⏭️ Skipping invalid account: ${token.id}`);
-            results.push({ 
-                success: false, 
-                accountId: token.id, 
-                reason: 'invalid_token' 
+            results.push({
+                success: false,
+                accountId: token.id,
+                reason: 'invalid_token'
             });
             continue;
         }
@@ -273,10 +273,10 @@ async function main() {
         console.log('📋 EXTENSION SUMMARY');
         console.log('═'.repeat(60));
 
-        const successCount = results.filter(r => r.success).length;
-        const failCount = results.filter(r => !r.success).length;
+        const successCount = results.filter((r) => r.success).length;
+        const failCount = results.filter((r) => !r.success).length;
 
-        results.forEach(result => {
+        results.forEach((result) => {
             if (result.success) {
                 console.log(`✅ ${result.accountId} - Extended successfully`);
             } else {
@@ -304,7 +304,7 @@ async function main() {
 }
 
 // Run
-main().catch(error => {
+main().catch((error) => {
     logError('Fatal error', error);
     process.exit(1);
 });

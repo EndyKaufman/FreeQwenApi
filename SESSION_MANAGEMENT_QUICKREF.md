@@ -44,7 +44,7 @@ npm run create-session-archive
 npm run extend-session
 
 # Extend specific account
-node scripts/extendSession.js --account-id acc_1234567890
+npx qwen-api-proxy extend --account-id acc_1234567890
 ```
 
 **When to use:**

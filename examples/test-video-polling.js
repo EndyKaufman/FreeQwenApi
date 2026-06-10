@@ -71,7 +71,7 @@ async function testClientSidePolling() {
         const interval = 2000;
 
         for (let i = 1; i <= maxAttempts; i++) {
-            await new Promise(r => setTimeout(r, interval));
+            await new Promise((r) => setTimeout(r, interval));
 
             const statusResp = await fetch(`${BASE_URL}/tasks/status/${taskId}`);
             const statusData = await statusResp.json();
@@ -115,7 +115,7 @@ async function main() {
     const server = await testServerSidePolling();
 
     console.log('\n--- Пауза 5 сек перед следующим тестом ---\n');
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 5000));
 
     const client = await testClientSidePolling();
 

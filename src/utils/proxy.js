@@ -1,6 +1,6 @@
 import { ProxyAgent } from 'proxy-agent';
 import { TELEGRAM_PROXY, QWEN_PROXY, FILE_DOWNLOAD_PROXY } from '../config.js';
-import { logInfo, logWarn, logDebug } from '../logger/index.js';
+import { logInfo, logWarn, logDebug, logError } from '../logger/index.js';
 
 // Кэш прокси агентов (создаются один раз)
 let telegramProxyAgent = null;
@@ -95,7 +95,7 @@ export function getFileDownloadProxyAgent() {
         logInfo('✅ Прокси для скачивания файлов успешно инициализирован');
         return fileDownloadProxyAgent;
     } catch (error) {
-        logError(`❌ Ошибка инициализации прокси для скачивания файлов`, error);
+        logError('❌ Ошибка инициализации прокси для скачивания файлов', error);
         fileDownloadProxyInitialized = true;
         fileDownloadProxyAgent = null;
         return null;
@@ -108,7 +108,7 @@ export function getFileDownloadProxyAgent() {
  * @returns {string} - Замаскированный URL
  */
 function maskProxyUrl(url) {
-    if (!url) return 'none';
+    if (!url) {return 'none';}
     try {
         const parsed = new URL(url);
         if (parsed.username || parsed.password) {
@@ -128,7 +128,7 @@ function maskProxyUrl(url) {
  */
 export async function fetchWithTelegramProxy(url, options = {}) {
     const proxyAgent = getTelegramProxyAgent();
-    
+
     // Если прокси не настроен, используем обычный fetch
     if (!proxyAgent) {
         return fetch(url, options);
@@ -136,9 +136,9 @@ export async function fetchWithTelegramProxy(url, options = {}) {
 
     // Используем node-fetch с agent опцией
     const { default: nodeFetch } = await import('node-fetch');
-    
+
     logDebug(`📱 Запрос к Telegram через прокси: ${url}`);
-    
+
     return nodeFetch(url, {
         ...options,
         agent: proxyAgent
@@ -153,7 +153,7 @@ export async function fetchWithTelegramProxy(url, options = {}) {
  */
 export async function fetchWithQwenProxy(url, options = {}) {
     const proxyAgent = getQwenProxyAgent();
-    
+
     // Если прокси не настроен, используем обычный fetch
     if (!proxyAgent) {
         return fetch(url, options);
@@ -161,9 +161,9 @@ export async function fetchWithQwenProxy(url, options = {}) {
 
     // Используем node-fetch с agent опцией
     const { default: nodeFetch } = await import('node-fetch');
-    
+
     logDebug(`🧠 Запрос к Qwen LLM через прокси: ${url}`);
-    
+
     return nodeFetch(url, {
         ...options,
         agent: proxyAgent
@@ -186,7 +186,7 @@ export async function checkTelegramProxyAvailability() {
         }
 
         const { default: nodeFetch } = await import('node-fetch');
-        
+
         // Тестовый запрос к Telegram API
         const response = await nodeFetch('https://api.telegram.org/bot', {
             agent: proxyAgent,
@@ -216,7 +216,7 @@ export async function checkQwenProxyAvailability() {
         }
 
         const { default: nodeFetch } = await import('node-fetch');
-        
+
         // Тестовый запрос к Qwen API
         const response = await nodeFetch('https://chat.qwen.ai', {
             agent: proxyAgent,

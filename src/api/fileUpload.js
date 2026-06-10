@@ -14,7 +14,7 @@ const DOCUMENT_FILE_TYPE = 'document';
 
 function validateBrowserContext() {
     const browserContext = getBrowserContext();
-    if (!browserContext) throw new Error('Браузер не инициализирован');
+    if (!browserContext) {throw new Error('Браузер не инициализирован');}
     return browserContext;
 }
 
@@ -29,7 +29,7 @@ async function validateAuthToken(browserContext) {
     if (!token) {
         logInfo('Токен авторизации не найден в памяти, пытаемся извлечь из браузера');
         token = await extractAuthToken(browserContext);
-        if (!token) throw new Error('Не удалось получить токен авторизации');
+        if (!token) {throw new Error('Не удалось получить токен авторизации');}
     }
     return token;
 }
@@ -49,7 +49,7 @@ export async function getStsToken(fileInfo) {
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.token}`, 'Accept': 'application/json' },
                     body: JSON.stringify(data.fileInfo)
                 });
-                if (response.ok) return { success: true, data: await response.json() };
+                if (response.ok) {return { success: true, data: await response.json() };}
                 return { success: false, status: response.status, statusText: response.statusText, errorBody: await response.text() };
             } catch (error) { return { success: false, error: error.toString() }; }
         }, { apiUrl: STS_TOKEN_API_URL, token, fileInfo });
@@ -78,9 +78,9 @@ export async function uploadFile(filePath, stsData) {
         throw new Error('Некорректные или неполные данные STS токена');
     }
 
-    logInfo(`[OSS] Загрузка через браузер`);
+    logInfo('[OSS] Загрузка через браузер');
     logInfo(`[OSS] Регион: ${stsData.region}, Бакет: ${stsData.bucketname}`);
-    if (stsData.endpoint) logInfo(`[OSS] Endpoint: ${stsData.endpoint}`);
+    if (stsData.endpoint) {logInfo(`[OSS] Endpoint: ${stsData.endpoint}`);}
     logInfo(`[OSS] File path: ${stsData.file_path}`);
     logInfo(`[OSS] File URL: ${stsData.file_url}`);
 
@@ -104,11 +104,11 @@ export async function uploadFile(filePath, stsData) {
                     });
                     console.log('[OSS] SDK загружен успешно');
                 }
-                
+
                 console.log('[OSS] Создание Blob из файла...');
-                const blob = new Blob([Uint8Array.from(atob(data.fileBase64), c => c.charCodeAt(0))]);
+                const blob = new Blob([Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0))]);
                 console.log(`[OSS] Blob создан, размер: ${blob.size} байт`);
-                
+
                 console.log('[OSS] Создание OSS клиента...');
                 const client = new window.OSS({
                     region: data.stsData.region,
@@ -118,16 +118,16 @@ export async function uploadFile(filePath, stsData) {
                     bucket: data.stsData.bucketname,
                     secure: true
                 });
-                
+
                 console.log(`[OSS] Загрузка файла в OSS: ${data.stsData.file_path}`);
                 await client.put(data.stsData.file_path, blob);
                 console.log('[OSS] Файл успешно загружен');
-                
+
                 return { success: true };
-            } catch (error) { 
+            } catch (error) {
                 console.error(`[OSS Browser] Ошибка: ${error.toString()}`);
                 console.error(`[OSS Browser] Stack: ${error.stack || 'N/A'}`);
-                return { success: false, error: error.toString() }; 
+                return { success: false, error: error.toString() };
             }
         }, {
             fileBase64,
@@ -136,7 +136,7 @@ export async function uploadFile(filePath, stsData) {
         });
 
         if (result.success) {
-            logInfo(`[OSS] Загрузка завершена успешно`);
+            logInfo('[OSS] Загрузка завершена успешно');
             return { success: true, fileName: path.basename(filePath), url: stsData.file_url, fileId: stsData.file_id, filePath: stsData.file_path };
         }
         logError(`[OSS] Ошибка загрузки: ${result.error}`);
@@ -151,27 +151,27 @@ export async function uploadFile(filePath, stsData) {
 
 export async function uploadFileToQwen(filePath) {
     try {
-        if (!fs.existsSync(filePath)) throw new Error(`Файл не найден: ${filePath}`);
+        if (!fs.existsSync(filePath)) {throw new Error(`Файл не найден: ${filePath}`);}
 
         const fileName = path.basename(filePath);
         const fileSize = fs.statSync(filePath).size;
         const fileExt = path.extname(fileName).toLowerCase();
 
         let fileType = DEFAULT_FILE_TYPE;
-        if (IMAGE_EXTENSIONS.includes(fileExt)) fileType = IMAGE_FILE_TYPE;
-        else if (DOCUMENT_EXTENSIONS.includes(fileExt)) fileType = DOCUMENT_FILE_TYPE;
+        if (IMAGE_EXTENSIONS.includes(fileExt)) {fileType = IMAGE_FILE_TYPE;}
+        else if (DOCUMENT_EXTENSIONS.includes(fileExt)) {fileType = DOCUMENT_FILE_TYPE;}
 
         logInfo(`📤 Загрузка файла в Qwen: ${fileName} (${fileSize} байт, тип: ${fileType})`);
-        
+
         const fileInfo = { filename: fileName, filesize: fileSize, filetype: fileType };
         const stsData = await getStsToken(fileInfo);
-        
-        logInfo(`✅ STS токен получен, начинаем загрузку в OSS`);
-        
+
+        logInfo('✅ STS токен получен, начинаем загрузку в OSS');
+
         const uploadResult = await uploadFile(filePath, stsData);
-        
-        logInfo(`✅ Файл успешно загружен в Qwen`);
-        
+
+        logInfo('✅ Файл успешно загружен в Qwen');
+
         return { ...uploadResult, fileInfo, stsData };
     } catch (error) {
         logError(`❌ Ошибка в процессе загрузки файла: ${error.message}`, error);

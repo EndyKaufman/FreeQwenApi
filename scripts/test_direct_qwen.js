@@ -3,11 +3,15 @@
  * Fetches auth token from headless browser, then POSTs directly to Qwen API.
  */
 
-const axios = require('axios');
-const { initBrowser, authenticateUser, getAuthorizationToken } = require('../src/browser/auth');
-const { getPage, closeBrowser } = require('../src/browser/browser');
-const fs = require('fs');
-const path = require('path');
+import axios from 'axios';
+import { initBrowser, authenticateUser, getAuthorizationToken } from '../src/browser/auth.js';
+import { getPage, closeBrowser } from '../src/browser/browser.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const logsDir = path.join(__dirname, '..', 'logs');
 if (!fs.existsSync(logsDir)) {
@@ -27,20 +31,20 @@ async function runTest() {
     try {
         log('=== Starting Direct Qwen API Test ===');
         log('Step 1: Initialize browser and get auth token...');
-        
+
         // Initialize browser
         await initBrowser();
-        
+
         // Get auth token
         const token = await getAuthorizationToken();
         log(`Got token: ${token ? token.substring(0, 50) + '...' : 'FAILED'}`);
-        
+
         if (!token) {
             log('ERROR: Failed to get auth token');
             await closeBrowser();
             return;
         }
-        
+
         // Prepare payload
         const payload = {
             model: 'qwen-turbo',
@@ -52,12 +56,12 @@ async function runTest() {
             ],
             stream: true
         };
-        
+
         log('Step 2: POST directly to Qwen v2 API...');
-        log(`URL: https://chat.qwen.ai/api/v2/chat/completions`);
+        log('URL: https://chat.qwen.ai/api/v2/chat/completions');
         log(`Headers: Authorization: Bearer ${token.substring(0, 30)}...`);
         log(`Payload: ${JSON.stringify(payload)}`);
-        
+
         const startTime = Date.now();
         const response = await axios.post(
             'https://chat.qwen.ai/api/v2/chat/completions',
@@ -72,25 +76,25 @@ async function runTest() {
                 timeout: 30000
             }
         );
-        
+
         log(`Step 3: Response received in ${Date.now() - startTime}ms`);
         log(`Status: ${response.status}`);
         log(`Headers: ${JSON.stringify(response.headers, null, 2)}`);
-        
+
         // Parse stream
         let rawChunks = [];
         let fullContent = '';
         let chunkCount = 0;
-        
+
         await new Promise((resolve, reject) => {
             response.data.on('data', (chunk) => {
                 chunkCount++;
                 const chunkStr = chunk.toString('utf-8');
                 log(`[Chunk ${chunkCount}] Raw bytes: ${chunk.length} bytes`);
                 log(`[Chunk ${chunkCount}] Text: ${chunkStr.substring(0, 100)}`);
-                
+
                 rawChunks.push(chunkStr);
-                
+
                 // Try to parse as SSE
                 const lines = chunkStr.split('\n');
                 for (const line of lines) {
@@ -108,23 +112,23 @@ async function runTest() {
                     }
                 }
             });
-            
+
             response.data.on('end', () => {
                 log(`Stream ended after ${chunkCount} chunks`);
                 resolve();
             });
-            
+
             response.data.on('error', (err) => {
                 log(`Stream error: ${err.message}`);
                 reject(err);
             });
         });
-        
-        log(`Step 4: Stream parsing complete`);
+
+        log('Step 4: Stream parsing complete');
         log(`Total chunks received: ${chunkCount}`);
         log(`Full content: "${fullContent}"`);
         log(`Raw chunks: ${JSON.stringify(rawChunks)}`);
-        
+
         // Save results
         const results = {
             status: response.status,
@@ -134,15 +138,15 @@ async function runTest() {
             rawChunks: rawChunks,
             timestamp: new Date().toISOString()
         };
-        
+
         fs.writeFileSync(
             path.join(logsDir, 'direct-qwen-result.json'),
             JSON.stringify(results, null, 2)
         );
-        log(`Results saved to direct-qwen-result.json`);
-        
+        log('Results saved to direct-qwen-result.json');
+
         log('=== Test Complete ===');
-        
+
     } catch (error) {
         log(`ERROR: ${error.message}`);
         log(`Stack: ${error.stack}`);

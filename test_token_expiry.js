@@ -87,7 +87,7 @@ async function testTokenExpiry() {
 
     // Cleanup: Restore original tokens
     console.log('\nCleanup: Restoring original tokens');
-    const originalTokens = loadTokens().filter(t => !t.id.startsWith('test_token_'));
+    const originalTokens = loadTokens().filter((t) => !t.id.startsWith('test_token_'));
     saveTokens(originalTokens);
     console.log('✓ Original tokens restored');
 
@@ -95,7 +95,7 @@ async function testTokenExpiry() {
 }
 
 // Run tests
-testTokenExpiry().catch(error => {
+testTokenExpiry().catch((error) => {
     logError('Test failed', error);
     process.exit(1);
 });

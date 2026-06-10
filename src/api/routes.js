@@ -2,12 +2,12 @@ import express from 'express';
 import { sendMessage, getAllModels, getApiKeys, createChatV2, pollTaskStatus, pagePool, extractAuthToken } from './chat.js';
 import { getAuthenticationStatus, getBrowserContext } from '../browser/browser.js';
 import { checkAuthentication } from '../browser/auth.js';
-import { logInfo, logError, logDebug } from '../logger/index.js';
+import { logInfo, logError, logDebug, logWarn } from '../logger/index.js';
 import { getMappedModel } from './modelMapping.js';
 import { getStsToken, uploadFileToQwen } from './fileUpload.js';
 import { loadHistory, saveHistory } from './chatHistory.js';
 import { generateImage, getAvailableImageModels, checkImageApiAvailability } from './imageGeneration.js';
-import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE, IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY, FORCE_NEW_CHAT_PER_REQUEST } from '../config.js';
+import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE, IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY, FORCE_NEW_CHAT_PER_REQUEST, SESSION_DIR } from '../config.js';
 import { getActiveModel } from '../utils/botSettings.js';
 import { getFileDownloadProxyAgent } from '../utils/proxy.js';
 import multer from 'multer';
@@ -24,7 +24,7 @@ import { listTokens, markInvalid, markRateLimited, markValid } from './tokenMana
  * 1. Base64 data URLs (data:image/jpeg;base64,...)
  * 2. HTTP/HTTPS URLs (скачивает и загружает в OSS)
  * 3. Локальные файлы (загруженные через multer)
- * 
+ *
  * Возвращает массив в формате: [{type: 'image', image: 'url'}] или [{type: 'file', file: 'url'}]
  */
 async function processFilesForQwen(files) {
@@ -38,7 +38,7 @@ async function processFilesForQwen(files) {
     try {
         for (const file of files) {
             let fileUrl = null;
-            
+
             // Формат 1: {url: 'data:image/...;base64,...'} или {url: 'http://...'}
             if (file.url) {
                 // Если это base64 data URL - сохраняем во временный файл и загружаем в OSS
@@ -46,15 +46,15 @@ async function processFilesForQwen(files) {
                     const [header, base64Data] = file.url.split(',');
                     const mimeType = header.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
                     const ext = mimeType.split('/')[1]?.split('+')[0] || 'bin';
-                    
+
                     const tempFileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`;
                     const tempFilePath = path.join(UPLOADS_DIR, tempFileName);
-                    
+
                     fs.writeFileSync(tempFilePath, Buffer.from(base64Data, 'base64'));
                     tempFiles.push(tempFilePath);
-                    
+
                     logInfo(`📁 Base64 файл сохранен: ${tempFilePath}`);
-                    
+
                     // Загружаем в OSS
                     const uploadResult = await uploadFileToQwen(tempFilePath);
                     if (uploadResult.success) {
@@ -68,13 +68,13 @@ async function processFilesForQwen(files) {
                     // HTTP/HTTPS URL - скачиваем файл и загружаем в OSS
                     logInfo(`📥 Скачивание файла: ${file.url}`);
                     logInfo(`📥 Хост файла: ${new URL(file.url).hostname}`);
-                    
+
                     try {
                         // Получаем прокси агент если настроен
                         const downloadProxyAgent = getFileDownloadProxyAgent();
-                        
+
                         let response;
-                        
+
                         if (downloadProxyAgent) {
                             // Используем node-fetch с прокси
                             const { default: nodeFetch } = await import('node-fetch');
@@ -91,36 +91,36 @@ async function processFilesForQwen(files) {
                                 redirect: 'follow'
                             });
                         }
-                        
+
                         if (!response.ok) {
                             const errorBody = await response.text().catch(() => '');
                             logError(`❌ Ошибка скачивания: ${response.status} ${response.statusText}${errorBody ? ` | Ответ: ${errorBody.substring(0, 500)}` : ''}`);
                             continue;
                         }
-                        
+
                         // Определяем тип файла из Content-Type или расширения URL
                         const contentType = response.headers.get('content-type') || '';
                         const urlExt = file.url.split('.').pop()?.split('?')[0] || '';
                         let ext = 'bin';
-                        
-                        if (contentType.includes('image/jpeg')) ext = 'jpg';
-                        else if (contentType.includes('image/png')) ext = 'png';
-                        else if (contentType.includes('image/gif')) ext = 'gif';
-                        else if (contentType.includes('image/webp')) ext = 'webp';
+
+                        if (contentType.includes('image/jpeg')) {ext = 'jpg';}
+                        else if (contentType.includes('image/png')) {ext = 'png';}
+                        else if (contentType.includes('image/gif')) {ext = 'gif';}
+                        else if (contentType.includes('image/webp')) {ext = 'webp';}
                         else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'txt', 'doc', 'docx'].includes(urlExt)) {
                             ext = urlExt;
                         }
-                        
+
                         // Скачиваем во временный файл
                         const tempFileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`;
                         const tempFilePath = path.join(UPLOADS_DIR, tempFileName);
-                        
+
                         const buffer = Buffer.from(await response.arrayBuffer());
                         fs.writeFileSync(tempFilePath, buffer);
                         tempFiles.push(tempFilePath);
-                        
+
                         logInfo(`📁 Файл скачан: ${tempFilePath} (${buffer.length} байт)`);
-                        
+
                         // Загружаем в OSS
                         const uploadResult = await uploadFileToQwen(tempFilePath);
                         if (uploadResult.success) {
@@ -131,7 +131,7 @@ async function processFilesForQwen(files) {
                             continue;
                         }
                     } catch (error) {
-                        logError(`❌ Ошибка при скачивании файла`, error);
+                        logError('❌ Ошибка при скачивании файла', error);
                         continue;
                     }
                 } else {
@@ -151,7 +151,7 @@ async function processFilesForQwen(files) {
                     continue;
                 }
             }
-            
+
             // Определяем тип файла и добавляем в правильном формате
             if (fileUrl) {
                 const isImage = fileUrl.match(/\.(jpg|jpeg|png|gif|webp|bmp)(\?|$)/i);
@@ -176,14 +176,14 @@ async function processFilesForQwen(files) {
         return qwenFiles;
     } catch (error) {
         logError('Ошибка при обработке файлов', error);
-        
+
         // Очищаем временные файлы при ошибке
         for (const tempFile of tempFiles) {
             try {
                 fs.unlinkSync(tempFile);
             } catch (e) { /* ignore */ }
         }
-        
+
         throw error;
     }
 }
@@ -193,47 +193,47 @@ function generateChatIdFromHistory(messages) {
     if (!Array.isArray(messages) || messages.length === 0) {
         return null;
     }
-    
+
     // Фильтруем служебные сообщения Open WebUI
     // Игнорируем сообщения, которые начинаются с "### Task:" или "History:"
-    const realMessages = messages.filter(m => {
-        if (m.role !== 'user') return true;
+    const realMessages = messages.filter((m) => {
+        if (m.role !== 'user') {return true;}
         const content = typeof m.content === 'string' ? m.content : '';
         return !content.startsWith('### Task:') && !content.startsWith('History:');
     });
-    
+
     // Если остались только служебные сообщения, используем исходные
     const messagesToUse = realMessages.length > 0 ? realMessages : messages;
-    
+
     // Используем хеш первого реального сообщения пользователя для создания стабильного ID
     const userMessages = messagesToUse
-        .filter(m => m.role === 'user')
+        .filter((m) => m.role === 'user')
         .slice(0, 1) // Берём первое сообщение пользователя
-        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+        .map((m) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
         .join('||');
-    
-    if (!userMessages) return null;
-    
+
+    if (!userMessages) {return null;}
+
     // Создаём хеш для детерминированного ID
     const hash = crypto
         .createHash('sha256')
         .update(userMessages)
         .digest('hex')
         .substring(0, 16);
-    
+
     return `chat_${hash}`;
 }
 
 function normalizeIdValue(value) {
-    if (value === null || value === undefined) return null;
-    if (typeof value === 'number' || typeof value === 'bigint') return String(value);
-    if (typeof value !== 'string') return null;
+    if (value === null || value === undefined) {return null;}
+    if (typeof value === 'number' || typeof value === 'bigint') {return String(value);}
+    if (typeof value !== 'string') {return null;}
 
     const trimmed = value.trim();
-    if (!trimmed) return null;
+    if (!trimmed) {return null;}
 
     const lower = trimmed.toLowerCase();
-    if (lower === 'null' || lower === 'undefined') return null;
+    if (lower === 'null' || lower === 'undefined') {return null;}
 
     return trimmed;
 }
@@ -241,14 +241,14 @@ function normalizeIdValue(value) {
 function pickFirstId(candidates) {
     for (const candidate of candidates) {
         const normalized = normalizeIdValue(candidate);
-        if (normalized) return normalized;
+        if (normalized) {return normalized;}
     }
     return null;
 }
 
 function buildInternalChatIdFromHint(hint) {
     const normalizedHint = normalizeIdValue(hint);
-    if (!normalizedHint) return null;
+    if (!normalizedHint) {return null;}
 
     const hash = crypto
         .createHash('sha256')
@@ -296,9 +296,9 @@ function extractParentHint(req) {
 }
 
 function isTruthyFlag(value) {
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'number') return value === 1;
-    if (typeof value !== 'string') return false;
+    if (typeof value === 'boolean') {return value;}
+    if (typeof value === 'number') {return value === 1;}
+    if (typeof value !== 'string') {return false;}
     return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
@@ -367,22 +367,22 @@ async function resolveQwenChatId(effectiveChatId, mappedModel) {
 import { testToken } from './chat.js';
 
 function isOpenWebUiMetaRequest(messages) {
-    if (!Array.isArray(messages) || messages.length === 0) return false;
-    const lastUserMessage = messages.filter(m => m && m.role === 'user').pop();
-    if (!lastUserMessage) return false;
+    if (!Array.isArray(messages) || messages.length === 0) {return false;}
+    const lastUserMessage = messages.filter((m) => m && m.role === 'user').pop();
+    if (!lastUserMessage) {return false;}
 
     const content = lastUserMessage.content;
-    if (Array.isArray(content)) return false; // multimodal / normal user message
-    if (typeof content !== 'string') return false;
+    if (Array.isArray(content)) {return false;} // multimodal / normal user message
+    if (typeof content !== 'string') {return false;}
 
     const text = content.trimStart();
 
     // OpenWebUI background/meta prompts that should not reuse the main chatId/session.
-    if (text.startsWith('### Task:')) return true;
-    if (text.startsWith('History:')) return true;
+    if (text.startsWith('### Task:')) {return true;}
+    if (text.startsWith('History:')) {return true;}
 
     // Some variants embed history blocks and task instructions.
-    if (text.includes('<chat_history>') && text.includes('### Task:')) return true;
+    if (text.includes('<chat_history>') && text.includes('### Task:')) {return true;}
 
     return false;
 }
@@ -431,7 +431,7 @@ function saveChatIdForSession(req, chatId, parentId, scope = null) {
         timestamp: Date.now()
     });
 
-    const scopeSuffix = normalizedScope ? ` (scope=${normalizedScope})` : "";
+    const scopeSuffix = normalizedScope ? ` (scope=${normalizedScope})` : '';
     logDebug(`Saved chatId ${chatId} for session ${sessionKey.substring(0, 8)}${scopeSuffix}`);
 }
 // Очистка старых сессий каждые 10 минут
@@ -457,7 +457,7 @@ const router = express.Router();
 const storage = multer.diskStorage({
     destination(req, file, cb) {
         const uploadDir = path.join(process.cwd(), UPLOADS_DIR);
-        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        if (!fs.existsSync(uploadDir)) {fs.mkdirSync(uploadDir, { recursive: true });}
         cb(null, uploadDir);
     },
     filename(req, file, cb) {
@@ -471,7 +471,7 @@ const upload = multer({ storage, limits: { fileSize: MAX_FILE_SIZE } });
 
 function authMiddleware(req, res, next) {
     const apiKeys = getApiKeys();
-    if (apiKeys.length === 0) return next();
+    if (apiKeys.length === 0) {return next();}
 
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -496,20 +496,20 @@ router.use((req, res, next) => {
 // ─── Helpers: message parsing ────────────────────────────────────────────────
 
 async function parseOpenAIMessages(messages) {
-    const systemMsg = messages.find(msg => msg.role === 'system');
+    const systemMsg = messages.find((msg) => msg.role === 'system');
     const systemMessage = systemMsg ? systemMsg.content : null;
-    const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
-    
+    const lastUserMessage = messages.filter((msg) => msg.role === 'user').pop();
+
     if (!lastUserMessage) {
         return { messageContent: null, systemMessage };
     }
-    
+
     let messageContent = lastUserMessage.content;
     const extractedFiles = [];
-    
+
     // Преобразуем OpenAI format content array во внутренний формат
     if (Array.isArray(messageContent)) {
-        messageContent = messageContent.map(item => {
+        messageContent = messageContent.map((item) => {
             if (item.type === 'text') {
                 return { type: 'text', text: item.text };
             } else if (item.type === 'image_url' && item.image_url) {
@@ -523,25 +523,25 @@ async function parseOpenAIMessages(messages) {
                 return null;
             }
             return item;
-        }).filter(item => item !== null); // Убираем null
+        }).filter((item) => item !== null); // Убираем null
     }
-    
+
     // Поддерживаем также формат: content: 'text', files: [{url: '...'}]
     // Добавляем файлы из lastUserMessage.files в extractedFiles
     if (lastUserMessage.files && Array.isArray(lastUserMessage.files)) {
-        lastUserMessage.files.forEach(f => {
+        lastUserMessage.files.forEach((f) => {
             if (f.url) {
                 extractedFiles.push({url: f.url});
             }
         });
     }
-    
+
     // Используем только extractedFiles (уже содержит все файлы)
     const rawFiles = extractedFiles;
-    
+
     // Обрабатываем все файлы (base64 -> OSS, локальные -> OSS, URLs -> как есть)
     const files = rawFiles.length > 0 ? await processFilesForQwen(rawFiles) : [];
-    
+
     // Добавляем файлы в messageContent
     if (Array.isArray(messageContent) && files.length > 0) {
         messageContent = [...messageContent, ...files];
@@ -552,12 +552,12 @@ async function parseOpenAIMessages(messages) {
             ...files
         ];
     }
-    
+
     return { messageContent, systemMessage };
 }
 
 function buildCombinedTools(tools, functions, toolChoice) {
-    const combinedTools = tools || (functions ? functions.map(fn => ({ type: 'function', function: fn })) : null);
+    const combinedTools = tools || (functions ? functions.map((fn) => ({ type: 'function', function: fn })) : null);
     return { combinedTools, toolChoice };
 }
 
@@ -595,7 +595,7 @@ async function handleStreamingResponse(res, mappedModel, messageContent, chatId,
                     created: Math.floor(Date.now() / 1000), model: mappedModel,
                     choices: [{ index: 0, delta: { content: codePoints.slice(i, i + chunkSize).join('') }, finish_reason: null }]
                 });
-                await new Promise(r => setTimeout(r, STREAMING_CHUNK_DELAY));
+                await new Promise((r) => setTimeout(r, STREAMING_CHUNK_DELAY));
             }
         }
 
@@ -650,7 +650,7 @@ router.post('/chat', async (req, res) => {
         if (messages && Array.isArray(messages)) {
             const parsed = await parseOpenAIMessages(messages);
             systemMessage = parsed.systemMessage;
-            if (parsed.messageContent) messageContent = parsed.messageContent;
+            if (parsed.messageContent) {messageContent = parsed.messageContent;}
         }
 
         if (!messageContent) {
@@ -779,12 +779,12 @@ router.post('/chat', async (req, res) => {
             }
         }
 
-            const result = await sendMessage(messageContent, mappedModel, isMeta ? null : chatId, isMeta ? null : parentId, null, null, null, systemMessage);
+        const result = await sendMessage(messageContent, mappedModel, isMeta ? null : chatId, isMeta ? null : parentId, null, null, null, systemMessage);
 
         if (result.choices && result.choices[0] && result.choices[0].message) {
             const responseLength = result.choices[0].message.content ? result.choices[0].message.content.length : 0;
             logInfo(`Ответ успешно сформирован для запроса, длина ответа: ${responseLength}`);
-            
+
             // Сохраняем историю чата
             if (result.chatId) {
                 try {
@@ -815,7 +815,7 @@ router.get('/models', async (req, res) => {
         const modelsRaw = getAllModels();
         const openAiModels = {
             object: 'list',
-            data: modelsRaw.models.map(m => ({
+            data: modelsRaw.models.map((m) => ({
                 id: m.id || m.name || m,
                 object: 'model',
                 created: 0,
@@ -836,19 +836,19 @@ router.get('/status', async (req, res) => {
         logInfo('Запрос статуса авторизации');
         const tokens = listTokens();
         const now = Date.now();
-        
+
         // Фильтруем только действительные токены с cookies
-        const validTokens = tokens.filter(t => {
-            if (t.invalid) return false;
-            if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
-            if (t.expiryTime && t.expiryTime <= now) return false;
+        const validTokens = tokens.filter((t) => {
+            if (t.invalid) {return false;}
+            if (t.resetAt && new Date(t.resetAt).getTime() > now) {return false;}
+            if (t.expiryTime && t.expiryTime <= now) {return false;}
             // Проверяем наличие cookies.json
             const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', t.id, 'cookies.json');
-            if (!fs.existsSync(cookiesPath)) return false;
+            if (!fs.existsSync(cookiesPath)) {return false;}
             return true;
         });
-        
-        const accounts = await Promise.all(validTokens.map(async t => {
+
+        const accounts = await Promise.all(validTokens.map(async (t) => {
             const accInfo = { id: t.id, status: 'UNKNOWN', resetAt: t.resetAt || null };
 
             if (t.resetAt) {
@@ -857,9 +857,9 @@ router.get('/status', async (req, res) => {
             }
 
             const testResult = await testToken(t.token);
-            if (testResult === 'OK') { accInfo.status = 'OK'; if (t.invalid || t.resetAt) markValid(t.id); }
+            if (testResult === 'OK') { accInfo.status = 'OK'; if (t.invalid || t.resetAt) {markValid(t.id);} }
             else if (testResult === 'RATELIMIT') { accInfo.status = 'WAIT'; markRateLimited(t.id, 24); }
-            else if (testResult === 'UNAUTHORIZED') { accInfo.status = 'INVALID'; if (!t.invalid) markInvalid(t.id); }
+            else if (testResult === 'UNAUTHORIZED') { accInfo.status = 'INVALID'; if (!t.invalid) {markInvalid(t.id);} }
             else { accInfo.status = 'ERROR'; }
             return accInfo;
         }));
@@ -870,7 +870,7 @@ router.get('/status', async (req, res) => {
             return res.json({ authenticated: false, message: 'Браузер не инициализирован', accounts });
         }
 
-        if (getAuthenticationStatus()) return res.json({ accounts });
+        if (getAuthenticationStatus()) {return res.json({ accounts });}
 
         await checkAuthentication(browserContext);
         const isAuthenticated = getAuthenticationStatus();
@@ -969,22 +969,22 @@ router.post('/chat/completions', async (req, res) => {
         }
 
         // Извлекаем system message если есть
-        const systemMsg = messages.find(msg => msg.role === 'system');
+        const systemMsg = messages.find((msg) => msg.role === 'system');
         const systemMessage = systemMsg ? systemMsg.content : null;
 
-        const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
+        const lastUserMessage = messages.filter((msg) => msg.role === 'user').pop();
         if (!lastUserMessage) {
             logError('В запросе нет сообщений от пользователя');
             return res.status(400).json({ error: 'В запросе нет сообщений от пользователя' });
         }
 
         let messageContent = lastUserMessage.content;
-        
+
         // Преобразуем OpenAI format content array во внутренний формат
         const extractedFiles = []; // Files из content array
-        
+
         if (Array.isArray(messageContent)) {
-            messageContent = messageContent.map(item => {
+            messageContent = messageContent.map((item) => {
                 if (item.type === 'text') {
                     return { type: 'text', text: item.text };
                 } else if (item.type === 'image_url' && item.image_url) {
@@ -999,27 +999,27 @@ router.post('/chat/completions', async (req, res) => {
                 }
                 return item;
             });
-            
+
             // Убираем пустые text элементы
-            messageContent = messageContent.filter(item => item.type !== 'text' || item.text.trim());
+            messageContent = messageContent.filter((item) => item.type !== 'text' || item.text.trim());
         }
-        
+
         // Поддерживаем также формат: content: 'text', files: [{url: '...'}]
         // Добавляем файлы из lastUserMessage.files в extractedFiles
         if (lastUserMessage.files && Array.isArray(lastUserMessage.files)) {
-            lastUserMessage.files.forEach(f => {
+            lastUserMessage.files.forEach((f) => {
                 if (f.url) {
                     extractedFiles.push({url: f.url});
                 }
             });
         }
-        
+
         // Используем только extractedFiles (уже содержит все файлы)
         const rawFiles = extractedFiles;
-        
+
         // Обрабатываем все файлы (base64 -> OSS, локальные -> OSS, URLs -> как есть)
         const files = rawFiles.length > 0 ? await processFilesForQwen(rawFiles) : [];
-        
+
         // Добавляем файлы в messageContent
         if (Array.isArray(messageContent) && files.length > 0) {
             messageContent = [...messageContent, ...files];
@@ -1045,7 +1045,7 @@ router.post('/chat/completions', async (req, res) => {
             logInfo(`Модель "${model}" заменена на "${mappedModel}"`);
         }
         logInfo(`Используется модель: ${mappedModel}`);
-        if (systemMessage) logInfo(`System message: ${systemMessage.substring(0, 50)}${systemMessage.length > 50 ? '...' : ''}`);
+        if (systemMessage) {logInfo(`System message: ${systemMessage.substring(0, 50)}${systemMessage.length > 50 ? '...' : ''}`);}
 
         const { combinedTools } = buildCombinedTools(tools, functions, tool_choice);
 
@@ -1054,7 +1054,7 @@ router.post('/chat/completions', async (req, res) => {
         }
 
         // Логируем полную историю сообщений
-        logInfo(`История содержит ${messages.length} сообщений: ${messages.map(m => m.role).join(', ')}`);
+        logInfo(`История содержит ${messages.length} сообщений: ${messages.map((m) => m.role).join(', ')}`);
         if (effectiveChatId) {
             logInfo(`Используется chatId: ${effectiveChatId}, parentId: ${effectiveParentId || 'null'}`);
         }
@@ -1073,7 +1073,7 @@ router.post('/chat/completions', async (req, res) => {
             };
 
             try {
-                const combinedTools = tools || (functions ? functions.map(fn => ({ type: 'function', function: fn })) : null);
+                const combinedTools = tools || (functions ? functions.map((fn) => ({ type: 'function', function: fn })) : null);
                 const qwenChatId = await resolveQwenChatId(effectiveChatId, mappedModel);
 
                 // Setup streaming callback if stream=true
@@ -1171,7 +1171,7 @@ router.post('/chat/completions', async (req, res) => {
                 res.end();
             }
         } else {
-            const combinedTools = tools || (functions ? functions.map(fn => ({ type: 'function', function: fn })) : null);
+            const combinedTools = tools || (functions ? functions.map((fn) => ({ type: 'function', function: fn })) : null);
             const qwenChatId = await resolveQwenChatId(effectiveChatId, mappedModel);
             const result = await sendMessage(messageContent, mappedModel, qwenChatId, effectiveParentId, null, combinedTools, tool_choice, systemMessage);
 
@@ -1188,22 +1188,22 @@ router.post('/chat/completions', async (req, res) => {
 
             if (result.error) {
                 return res.status(500).json({
-                    error: { message: result.error, type: "server_error" }
+                    error: { message: result.error, type: 'server_error' }
                 });
             }
 
             const openaiResponse = {
-                id: result.id || "chatcmpl-" + Date.now(),
-                object: "chat.completion",
+                id: result.id || 'chatcmpl-' + Date.now(),
+                object: 'chat.completion',
                 created: Math.floor(Date.now() / 1000),
                 model: result.model || mappedModel,
                 choices: result.choices || [{
                     index: 0,
                     message: {
-                        role: "assistant",
-                        content: result.choices?.[0]?.message?.content || ""
+                        role: 'assistant',
+                        content: result.choices?.[0]?.message?.content || ''
                     },
-                    finish_reason: "stop"
+                    finish_reason: 'stop'
                 }],
                 usage: result.usage || {
                     prompt_tokens: 0,
@@ -1233,7 +1233,7 @@ router.post('/chat/completions', async (req, res) => {
         }
     } catch (error) {
         logError('Ошибка при обработке запроса', error);
-        res.status(500).json({ error: { message: 'Внутренняя ошибка сервера', type: "server_error" } });
+        res.status(500).json({ error: { message: 'Внутренняя ошибка сервера', type: 'server_error' } });
     }
 });
 
@@ -1303,22 +1303,22 @@ router.post('/v1/chat/completions', async (req, res) => {
         }
 
         // Извлекаем system message если есть
-        const systemMsg = messages.find(msg => msg.role === 'system');
+        const systemMsg = messages.find((msg) => msg.role === 'system');
         const systemMessage = systemMsg ? systemMsg.content : null;
 
-        const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
+        const lastUserMessage = messages.filter((msg) => msg.role === 'user').pop();
         if (!lastUserMessage) {
             logError('В запросе нет сообщений от пользователя');
             return res.status(400).json({ error: 'В запросе нет сообщений от пользователя' });
         }
 
         let messageContent = lastUserMessage.content;
-        
+
         // Преобразуем OpenAI format content array во внутренний формат
         const extractedFiles = []; // Files из content array
-        
+
         if (Array.isArray(messageContent)) {
-            messageContent = messageContent.map(item => {
+            messageContent = messageContent.map((item) => {
                 if (item.type === 'text') {
                     return { type: 'text', text: item.text };
                 } else if (item.type === 'image_url' && item.image_url) {
@@ -1333,27 +1333,27 @@ router.post('/v1/chat/completions', async (req, res) => {
                 }
                 return item;
             });
-            
+
             // Убираем пустые text элементы
-            messageContent = messageContent.filter(item => item.type !== 'text' || item.text.trim());
+            messageContent = messageContent.filter((item) => item.type !== 'text' || item.text.trim());
         }
-        
+
         // Поддерживаем также формат: content: 'text', files: [{url: '...'}]
         // Добавляем файлы из lastUserMessage.files в extractedFiles
         if (lastUserMessage.files && Array.isArray(lastUserMessage.files)) {
-            lastUserMessage.files.forEach(f => {
+            lastUserMessage.files.forEach((f) => {
                 if (f.url) {
                     extractedFiles.push({url: f.url});
                 }
             });
         }
-        
+
         // Используем только extractedFiles (уже содержит все файлы)
         const rawFiles = extractedFiles;
-        
+
         // Обрабатываем все файлы (base64 -> OSS, локальные -> OSS, URLs -> как есть)
         const files = rawFiles.length > 0 ? await processFilesForQwen(rawFiles) : [];
-        
+
         // Добавляем файлы в messageContent
         if (Array.isArray(messageContent) && files.length > 0) {
             messageContent = [...messageContent, ...files];
@@ -1385,7 +1385,7 @@ router.post('/v1/chat/completions', async (req, res) => {
         }
 
         // Логируем полную историю сообщений
-        logInfo(`История содержит ${messages.length} сообщений: ${messages.map(m => m.role).join(', ')}`);
+        logInfo(`История содержит ${messages.length} сообщений: ${messages.map((m) => m.role).join(', ')}`);
         if (effectiveChatId) {
             logInfo(`Используется chatId: ${effectiveChatId}, parentId: ${effectiveParentId || 'null'}`);
         }
@@ -1404,7 +1404,7 @@ router.post('/v1/chat/completions', async (req, res) => {
             };
 
             try {
-                const combinedTools = tools || (functions ? functions.map(fn => ({ type: 'function', function: fn })) : null);
+                const combinedTools = tools || (functions ? functions.map((fn) => ({ type: 'function', function: fn })) : null);
                 const qwenChatId = await resolveQwenChatId(effectiveChatId, mappedModel);
 
                 // Setup streaming callback if stream=true
@@ -1425,7 +1425,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                         });
                     };
                 }
-                
+
                 const result = await sendMessage(
                     messageContent,
                     mappedModel,
@@ -1498,7 +1498,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                 res.end();
             }
         } else {
-            const combinedTools = tools || (functions ? functions.map(fn => ({ type: 'function', function: fn })) : null);
+            const combinedTools = tools || (functions ? functions.map((fn) => ({ type: 'function', function: fn })) : null);
             const qwenChatId = await resolveQwenChatId(effectiveChatId, mappedModel);
 
             const result = await sendMessage(messageContent, mappedModel, qwenChatId, effectiveParentId, filesForSend, combinedTools, tool_choice, systemMessage);
@@ -1517,7 +1517,7 @@ router.post('/v1/chat/completions', async (req, res) => {
 
             if (result.error) {
                 return res.status(500).json({
-                    error: { message: result.error, type: "server_error" }
+                    error: { message: result.error, type: 'server_error' }
                 });
             }
 
@@ -1530,17 +1530,17 @@ router.post('/v1/chat/completions', async (req, res) => {
             }
 
             const openaiResponse = {
-                id: result.id || "chatcmpl-" + Date.now(),
-                object: "chat.completion",
+                id: result.id || 'chatcmpl-' + Date.now(),
+                object: 'chat.completion',
                 created: Math.floor(Date.now() / 1000),
                 model: result.model || mappedModel,
                 choices: [{
                     index: 0,
                     message: {
-                        role: "assistant",
+                        role: 'assistant',
                         content: messageText
                     },
-                    finish_reason: "stop"
+                    finish_reason: 'stop'
                 }],
                 usage: result.usage || {
                     prompt_tokens: 0,
@@ -1582,7 +1582,7 @@ router.post('/v1/chat/completions', async (req, res) => {
         }
     } catch (error) {
         logError('Ошибка при обработке v1 запроса', error);
-        res.status(500).json({ error: { message: 'Внутренняя ошибка сервера', type: "server_error" } });
+        res.status(500).json({ error: { message: 'Внутренняя ошибка сервера', type: 'server_error' } });
     }
 });
 
@@ -1629,7 +1629,7 @@ router.post('/files/upload', upload.single('file'), async (req, res) => {
 /**
  * POST /api/chat/multipart - Chat with file uploads via multipart/form-data
  * OpenAI-compatible endpoint that supports both JSON and file uploads
- * 
+ *
  * Fields:
  * - message: Text message (required)
  * - model: Model name (optional)
@@ -1662,7 +1662,7 @@ router.post('/chat/multipart', upload.array('files', 5), async (req, res) => {
 
         // Обрабатываем загруженные файлы
         const files = uploadedFiles.length > 0 ? await processFilesForQwen(uploadedFiles) : [];
-        
+
         // Встраиваем файлы в messageContent как в test 2
         let messageContent = message;
         if (files.length > 0) {
@@ -1748,7 +1748,7 @@ router.post('/chat/multipart', upload.array('files', 5), async (req, res) => {
                 });
                 res.write('data: [DONE]\n\n');
                 res.end();
-                return;
+
             } catch (error) {
                 logError('Ошибка при обработке потокового multipart запроса', error);
                 writeSse({
@@ -1760,7 +1760,7 @@ router.post('/chat/multipart', upload.array('files', 5), async (req, res) => {
                 });
                 res.write('data: [DONE]\n\n');
                 res.end();
-                return;
+
             }
         } else {
             // Non-streaming response
@@ -1872,7 +1872,7 @@ router.post('/images/generations', async (req, res) => {
     try {
         const { prompt, model, n, size, response_format, user } = req.body;
 
-        logInfo(`Получен запрос на генерацию изображения`);
+        logInfo('Получен запрос на генерацию изображения');
         logDebug(`Prompt: ${prompt?.substring(0, 100)}${prompt?.length > 100 ? '...' : ''}`);
 
         if (!prompt) {
@@ -1949,10 +1949,10 @@ router.post('/images/generations', async (req, res) => {
 router.get('/images/models', async (req, res) => {
     try {
         const models = getAvailableImageModels();
-        
+
         res.json({
             object: 'list',
-            data: models.map(model => ({
+            data: models.map((model) => ({
                 id: model,
                 object: 'model',
                 created: Date.now(),
@@ -1980,9 +1980,9 @@ router.get('/images/status', async (req, res) => {
             apiKeyConfigured: !!DASHSCOPE_API_KEY,
             message: IMAGE_GENERATION_MODE === 'browser'
                 ? (isAvailable ? 'Browser mode активен' : 'Браузер не инициализирован')
-                : (isAvailable 
-                    ? 'DashScope API доступен' 
-                    : DASHSCOPE_API_KEY 
+                : (isAvailable
+                    ? 'DashScope API доступен'
+                    : DASHSCOPE_API_KEY
                         ? 'DashScope API недоступен или неверные учётные данные'
                         : 'API ключ DASHSCOPE_API_KEY не настроен')
         });
@@ -2004,7 +2004,7 @@ router.post('/v1/images/generations', async (req, res) => {
     try {
         const { prompt, model, n, size, response_format, quality, style, user } = req.body;
 
-        logInfo(`[OpenAI v1] Получен запрос на генерацию изображения`);
+        logInfo('[OpenAI v1] Получен запрос на генерацию изображения');
         logDebug(`Prompt: ${prompt?.substring(0, 100)}${prompt?.length > 100 ? '...' : ''}`);
 
         if (!prompt) {
@@ -2088,7 +2088,7 @@ router.post('/v1/images/generations', async (req, res) => {
 
         // Если запрошено несколько изображений (когда API поддерживает)
         if (n > 1 && result.imageUrls) {
-            responseData.data = result.imageUrls.map(url => ({
+            responseData.data = result.imageUrls.map((url) => ({
                 url,
                 revised_prompt: prompt
             }));
@@ -2117,12 +2117,12 @@ router.get('/v1/models', async (req, res) => {
     try {
         const chatModels = getAllModels();
         const imageModels = getAvailableImageModels();
-        
+
         const allModels = {
             object: 'list',
             data: [
                 // Chat models
-                ...chatModels.models.map(m => ({
+                ...chatModels.models.map((m) => ({
                     id: m.id || m.name || m,
                     object: 'model',
                     created: 0,
@@ -2131,7 +2131,7 @@ router.get('/v1/models', async (req, res) => {
                     capabilities: ['chat', 'completion']
                 })),
                 // Image generation models
-                ...imageModels.map(model => ({
+                ...imageModels.map((model) => ({
                     id: model,
                     object: 'model',
                     created: Date.now(),

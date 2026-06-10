@@ -5,25 +5,25 @@ import { IMAGE_GENERATION_MODE } from '../../src/config.js';
 async function testImageGeneration() {
     console.log('🧪 Тестирование генерации изображений\n');
     console.log(`Текущий режим: ${IMAGE_GENERATION_MODE}`);
-    
+
     // Проверка доступности API
     console.log('\n📋 Проверка доступности API...');
     const isAvailable = await checkImageApiAvailability();
     console.log(`API доступен: ${isAvailable ? '✅' : '❌'}`);
-    
+
     if (!isAvailable) {
         console.log('⚠️ API недоступен. Проверьте настройки.');
         return;
     }
-    
+
     // Тест генерации
     console.log('\n🎨 Тест генерации изображения...');
     const prompt = 'A beautiful sunset over the ocean with dramatic clouds';
-    
+
     const result = await generateImage(prompt, 'qwen-image-plus', {
         size: '1024*1024'
     });
-    
+
     if (result.success) {
         console.log('✅ Изображение успешно сгенерировано!');
         console.log(`URL: ${result.imageUrl}`);

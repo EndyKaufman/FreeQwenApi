@@ -8,6 +8,35 @@
 - **Node.js 22.x** (LTS) - ✅ Fully supported
 - **Node.js 23.x** (Current) - ✅ Fully supported
 
+## Cross-Platform Support
+
+This application is fully cross-platform compatible:
+
+- ✅ **Windows** (10/11, Server 2019+)
+- ✅ **Linux** (Ubuntu 18.04+, Debian 10+, CentOS 8+)
+- ✅ **macOS** (10.15+, including Apple Silicon)
+
+### Windows Compatibility
+
+**ESM Module Loading**: Fixed using `pathToFileURL()` to convert Windows paths to proper `file://` URLs.
+
+**Archive Command**: Supports multiple backends:
+- `zip` (via Chocolatey: `choco install zip`)
+- `7-Zip` (via Chocolatey: `choco install 7zip`)
+- PowerShell `Compress-Archive` (built-in fallback)
+
+**Health Checks**: Cross-platform disk space detection using:
+- `wmic` (Windows Management Instrumentation)
+- PowerShell `Get-PSDrive` (fallback)
+
+### Unix Compatibility (Linux/macOS)
+
+**Archive Command**: Uses standard `zip` utility.
+
+**Health Checks**: Uses standard Unix `df` command.
+
+> 📖 **Full Guide**: See [CROSS_PLATFORM.md](CROSS_PLATFORM.md) for detailed information.
+
 ## Minimum Requirements
 
 - **Minimum Node.js version**: 18.0.0

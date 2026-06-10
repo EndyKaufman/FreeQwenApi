@@ -5,4 +5,4 @@ import { interactiveAccountMenu } from '../src/utils/accountSetup.js';
 
 (async () => {
     await interactiveAccountMenu();
-})(); 
+})();

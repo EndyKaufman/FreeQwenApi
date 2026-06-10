@@ -40,7 +40,7 @@ function loadPersistedSettings() {
             activeModel = settings.activeModel;
             logInfo(`📝 Загружена активная модель: ${activeModel}`);
         } else {
-            logInfo(`📝 Активная модель не установлена, используется модель по умолчанию`);
+            logInfo('📝 Активная модель не установлена, используется модель по умолчанию');
         }
         llmChatEnabled = settings.llmChatEnabled || false;
         logInfo(`📝 LLM чат: ${llmChatEnabled ? 'включен' : 'выключен'}`);
@@ -74,27 +74,27 @@ async function checkAIHealth(tokens) {
 
     try {
         logInfo('🧪 Тестирование AI нейросети (ping pong)...');
-        
+
         // Импортируем функцию sendMessage для прямого запроса к Qwen
         const { sendMessage } = await import('../api/chat.js');
         const testModel = getBotSettingsModel();
-        
+
         // Делаем запрос напрямую к Qwen API через наш модуль
         const startTime = Date.now();
         const result = await sendMessage('ping', testModel, null, null, null, null, null, null, 't2t', null, true, 0);
         const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        
+
         if (result && !result.error) {
             const responseContent = result.choices?.[0]?.message?.content || '';
             const usedModel = result.model || testModel;
-            
+
             // Проверяем что ответ содержит "pong" (в любом регистре)
             const hasPong = responseContent.toLowerCase().includes('pong');
-            
+
             if (hasPong) {
                 // Тест пройден - ответ содержит pong
                 logInfo(`✅ AI тест прошел успешно: модель=${usedModel}, время=${responseTime}с, ответ="${responseContent.substring(0, 50)}"`);
-                
+
                 return [
                     {
                         name: '🧠 AI Нейросеть',
@@ -110,16 +110,16 @@ async function checkAIHealth(tokens) {
             } else {
                 // Тест не пройден - ответ не содержит pong
                 const fullResponse = JSON.stringify(result, null, 2);
-                
-                logError(`❌ AI тест не пройден: ответ не содержит "pong"`);
+
+                logError('❌ AI тест не пройден: ответ не содержит "pong"');
                 logError(`Получен ответ: ${responseContent.substring(0, 200)}`);
                 logDebug(`Полный JSON ответа: ${fullResponse.substring(0, 1000)}`);
-                
+
                 return [
                     {
                         name: '🧠 AI Нейросеть',
                         status: false,
-                        details: `❌ Тест не пройден: ответ не содержит "pong"`
+                        details: '❌ Тест не пройден: ответ не содержит "pong"'
                     },
                     {
                         name: '   📝 Ответ',
@@ -132,10 +132,10 @@ async function checkAIHealth(tokens) {
             // Ошибка от API
             const errorMsg = result.error || 'Unknown error';
             const fullResponse = JSON.stringify(result, null, 2);
-            
+
             logError(`❌ AI тест не пройден: ${errorMsg}`);
             logDebug(`Полный JSON ошибки: ${fullResponse.substring(0, 1000)}`);
-            
+
             return [{
                 name: '🧠 AI Нейросеть',
                 status: false,
@@ -145,7 +145,7 @@ async function checkAIHealth(tokens) {
     } catch (error) {
         // Ошибка подключения
         logError('❌ AI тест не пройден (ошибка подключения)', error);
-        
+
         return [{
             name: '🧠 AI Нейросеть',
             status: false,
@@ -301,33 +301,33 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
     // 2. Проверяем токены
     const tokens = loadTokens();
     const now = Date.now();
-    
+
     // Фильтруем только действительные токены (не invalid, не rate-limited, не истекшие, с cookies)
-    const validTokens = tokens.filter(t => {
-        if (t.invalid) return false;
-        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
-        if (t.expiryTime && t.expiryTime <= now) return false;
+    const validTokens = tokens.filter((t) => {
+        if (t.invalid) { return false; }
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) { return false; }
+        if (t.expiryTime && t.expiryTime <= now) { return false; }
         // Проверяем наличие cookies.json
         const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', t.id, 'cookies.json');
-        if (!fs.existsSync(cookiesPath)) return false;
+        if (!fs.existsSync(cookiesPath)) { return false; }
         return true;
     });
 
     // Проверка оставшегося времени для токенов
     if (tokens.length > 0) {
         const filteredCount = tokens.length - validTokens.length;
-        
+
         const expirySummary = validTokens.reduce((acc, token) => {
             const now = Date.now();
-            
+
             // Если expiryTime не установлен
             if (!token.expiryTime) {
                 acc.tokens.push({ timeStr: 'Неизвестно', id: token.id, hasExpiry: false });
                 return acc;
             }
-            
+
             const timeLeft = token.expiryTime - now;
-            
+
             // Форматируем время в удобочитаемый вид
             let timeStr;
             if (timeLeft <= 0) {
@@ -338,31 +338,31 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
                 const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
-                
+
                 const parts = [];
-                if (days > 0) parts.push(`${days}д`);
-                if (hours > 0) parts.push(`${hours}ч`);
-                if (minutes > 0) parts.push(`${minutes}м`);
+                if (days > 0) { parts.push(`${days}д`); }
+                if (hours > 0) { parts.push(`${hours}ч`); }
+                if (minutes > 0) { parts.push(`${minutes}м`); }
                 parts.push(`${seconds}с`);
-                
+
                 timeStr = parts.join(' ');
             }
-            
+
             acc.tokens.push({ timeStr, id: token.id, hasExpiry: true });
             return acc;
         }, { expired: 0, tokens: [] });
-        
+
         let tokenDetails = `✅ Доступно: ${validTokens.length}`;
         if (filteredCount > 0) {
             tokenDetails += ` (пропущено ${filteredCount} истекших)`;
         }
-        
+
         checks.push({
             name: '🎫 Токены',
             status: validTokens.length > 0,
             details: tokenDetails
         });
-        
+
         // Показываем только действительные токены
         if (expirySummary.tokens.length > 0) {
             expirySummary.tokens.forEach((token, index) => {
@@ -370,17 +370,17 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
                 const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', token.id, 'cookies.json');
                 const hasCookies = fs.existsSync(cookiesPath);
                 const cookieStatus = hasCookies ? '✅' : '❌';
-                
+
                 checks.push({
                     name: `   Токен ${index + 1}`,
                     status: token.hasExpiry && hasCookies,
-                    details: token.hasExpiry 
+                    details: token.hasExpiry
                         ? `${cookieStatus} ${token.id}\n      ⏱️ Осталось: ${token.timeStr}`
                         : `${cookieStatus} ${token.id}\n      ⚠️ Время истечения: ${token.timeStr}`
                 });
             });
         }
-        
+
         // Если все токены истекли, показываем предупреждение
         if (validTokens.length === 0) {
             checks.push({
@@ -403,7 +403,7 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
         status: botStarted,
         details: botStarted ? '✅ Работает' : '❌ Не запущен'
     });
-    
+
     // 3.1. Показываем настройки бота (если загружены)
     if (botStarted) {
         const llmStatus = llmChatEnabled ? '✅ Включен' : '❌ Выключен';
@@ -468,7 +468,7 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
     logInfo('🔍 ПРОВЕРКА ПОД СИСТЕМ ПРИ ЗАПУСКЕ');
     logInfo('='.repeat(60));
 
-    checks.forEach(check => {
+    checks.forEach((check) => {
         const status = check.status ? '✅' : '❌';
         logInfo(`${status} ${check.name}: ${check.details}`);
     });
@@ -489,36 +489,36 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
     const reportLines = [];
 
     // Заголовок
-    reportLines.push(`🚀 <b>Сервис запущен!</b>\n`);
+    reportLines.push('🚀 <b>Сервис запущен!</b>\n');
 
     // Группа 1: Основные компоненты
-    reportLines.push(`<b>🔑 Основные компоненты:</b>`);
-    const mainComponents = checks.filter(c => 
-        c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') || 
+    reportLines.push('<b>🔑 Основные компоненты:</b>');
+    const mainComponents = checks.filter((c) =>
+        c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') ||
         c.name.includes('Токен ') || c.name.includes('AI') || c.name.includes('Ответ')
     );
-    mainComponents.forEach(check => {
+    mainComponents.forEach((check) => {
         reportLines.push(`${check.name}: ${check.details}`);
     });
 
     reportLines.push('');
 
     // Группа 2: Инфраструктура
-    reportLines.push(`<b>🏗️ Инфраструктура:</b>`);
-    const infrastructure = checks.filter(c => 
+    reportLines.push('<b>🏗️ Инфраструктура:</b>');
+    const infrastructure = checks.filter((c) =>
         c.name.includes('Прокси') || c.name.includes('Uploads') || c.name.includes('Логирование')
     );
-    infrastructure.forEach(check => {
+    infrastructure.forEach((check) => {
         reportLines.push(`${check.name}: ${check.details}`);
     });
 
     reportLines.push('');
 
     // Группа 3: Инструменты
-    const tools = checks.filter(c => c.name.includes('p7zip'));
+    const tools = checks.filter((c) => c.name.includes('p7zip'));
     if (tools.length > 0) {
-        reportLines.push(`<b>🔧 Инструменты:</b>`);
-        tools.forEach(check => {
+        reportLines.push('<b>🔧 Инструменты:</b>');
+        tools.forEach((check) => {
             reportLines.push(`${check.name}: ${check.details}`);
         });
         reportLines.push('');
@@ -529,29 +529,29 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
 
     // Итоговый статус
     if (hasTokens && allOk) {
-        reportLines.push(`✅ <b>Все системы работают</b>`);
+        reportLines.push('✅ <b>Все системы работают</b>');
     } else if (!hasTokens) {
-        reportLines.push(`⚠️ <b>Режим ожидания архива</b>`);
-        reportLines.push(`📦 Отправьте архив с сессиями`);
+        reportLines.push('⚠️ <b>Режим ожидания архива</b>');
+        reportLines.push('📦 Отправьте архив с сессиями');
     } else {
-        reportLines.push(`⚠️ <b>Есть проблемы</b>`);
+        reportLines.push('⚠️ <b>Есть проблемы</b>');
     }
 
     // Ссылки
     reportLines.push(`\n🌐 API: http://localhost:${process.env.PORT || 3264}`);
     reportLines.push(`📖 Docs: http://localhost:${process.env.PORT || 3264}/api`);
-    
+
     // Репозиторий
-    reportLines.push(`\n📚 <b>Репозиторий:</b>`);
-    reportLines.push(`🔗 GitHub: https://github.com/EndyKaufman/FreeQwenApi`);
-    reportLines.push(`⭐ Оригинал: https://github.com/y1n7sint/FreeQwenApi`);
-    reportLines.push(`🐳 Docker: https://hub.docker.com/r/endykaufman/qwen-api-proxy`);
-    
+    reportLines.push('\n📚 <b>Репозиторий:</b>');
+    reportLines.push('🔗 GitHub: https://github.com/EndyKaufman/FreeQwenApi');
+    reportLines.push('⭐ Оригинал: https://github.com/y1n7sint/FreeQwenApi');
+    reportLines.push('🐳 Docker: https://hub.docker.com/r/endykaufman/qwen-api-proxy');
+
     // Справка
-    reportLines.push(`\n💡 <b>Справка:</b>`);
-    reportLines.push(`📝 Используйте /help для списка команд`);
-    reportLines.push(`🔍 Используйте /status для проверки состояния`);
-    reportLines.push(`🤖 Используйте /chat для включения LLM режима`);
+    reportLines.push('\n💡 <b>Справка:</b>');
+    reportLines.push('📝 Используйте /help для списка команд');
+    reportLines.push('🔍 Используйте /status для проверки состояния');
+    reportLines.push('🤖 Используйте /chat для включения LLM режима');
 
     const report = reportLines.join('\n');
 
@@ -564,7 +564,7 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
             logError('❌ Не удалось отправить отчет в Telegram', e);
         }
     }
-    
+
     // Возвращаем массив проверок для повторного использования
     return checks;
 }
@@ -581,7 +581,7 @@ async function fetchWithProxy(url, options = {}, skipLog = false) {
     if (proxyAgent) {
         fetchOptions.dispatcher = proxyAgent;
         if (proxyConfigured && !skipLog) {
-            logInfo(`🌐 Запрос через прокси...`);
+            logInfo('🌐 Запрос через прокси...');
         }
     }
 
@@ -606,7 +606,7 @@ export async function startTelegramBot() {
 
     try {
         logInfo('🤖 Запуск Telegram бота...');
-        
+
         // Загружаем сохраненные настройки
         loadPersistedSettings();
 
@@ -685,7 +685,7 @@ async function startPolling() {
             if (!response.ok) {
                 const errorText = await response.text().catch(() => '');
                 logError(`Ошибка получения обновлений Telegram: HTTP ${response.status}${errorText ? ` | Ответ: ${errorText.substring(0, 500)}` : ''}`);
-                await new Promise(resolve => setTimeout(resolve, 5000));
+                await new Promise((resolve) => setTimeout(resolve, 5000));
                 continue;
             }
 
@@ -707,7 +707,7 @@ async function startPolling() {
             }
         } catch (error) {
             logError('Ошибка в polling Telegram', error);
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise((resolve) => setTimeout(resolve, 5000));
         }
     }
 }
@@ -736,10 +736,10 @@ async function processUpdate(update) {
                     await handleLLMChat(chatId, message.text);
                 } else {
                     await sendMessage(chatId,
-                        `❌ <b>LLM чат временно недоступен</b>\n\n` +
-                        `🔒 Нет аккаунтов для обработки запросов\n` +
-                        `📦 Отправьте архив с сессиями\n` +
-                        `💡 Или используйте /chat чтобы выключить LLM режим`
+                        '❌ <b>LLM чат временно недоступен</b>\n\n' +
+                        '🔒 Нет аккаунтов для обработки запросов\n' +
+                        '📦 Отправьте архив с сессиями\n' +
+                        '💡 Или используйте /chat чтобы выключить LLM режим'
                     );
                 }
                 return;
@@ -792,45 +792,45 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
         if (imagePath) {
             logInfo(`📸 Режим image-to-image с файлом: ${imagePath}`);
         }
-        
+
         // Отправляем сообщение о начале генерации
-        await sendMessage(chatId, 
-            `🎨 <b>Генерация изображения...</b>\n\n` +
+        await sendMessage(chatId,
+            '🎨 <b>Генерация изображения...</b>\n\n' +
             `📝 Запрос: ${prompt}\n` +
-            (imagePath ? `📸 Режим: Image-to-Image\n` : '') +
-            `⏳ Пожалуйста, подождите...`
+            (imagePath ? '📸 Режим: Image-to-Image\n' : '') +
+            '⏳ Пожалуйста, подождите...'
         );
 
         // Импортируем функцию генерации
         const { generateImage } = await import('../api/imageGeneration.js');
         const { getActiveModel } = await import('./botSettings.js');
-        
+
         // Используем модель для генерации изображений
         const model = 'qwen-image-plus';
-        
+
         const startTime = Date.now();
         const options = {
             size: '1024*1024'
         };
-        
+
         // Если есть изображение, передаем путь к файлу
         if (imagePath) {
             options.imagePath = imagePath;
         }
-        
+
         const result = await generateImage(prompt, model, options);
         const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
         if (result.success && result.imageUrl) {
             logInfo(`✅ Изображение сгенерировано за ${generationTime}с: ${result.imageUrl}`);
-            
+
             // Отправляем изображение как фото
             try {
                 await sendPhoto(chatId, result.imageUrl, prompt);
-                
+
                 // Отправляем дополнительную информацию
                 await sendMessage(chatId,
-                    `✅ <b>Изображение сгенерировано!</b>\n\n` +
+                    '✅ <b>Изображение сгенерировано!</b>\n\n' +
                     `🎨 Модель: ${result.model || model}\n` +
                     `⏱️ Время: ${generationTime}с\n` +
                     `📝 Prompt: ${prompt}`
@@ -839,7 +839,7 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
                 // Если не удалось отправить как фото, отправляем как ссылку
                 logWarn('Не удалось отправить изображение как фото, отправляю ссылку');
                 await sendMessage(chatId,
-                    `✅ <b>Изображение сгенерировано!</b>\n\n` +
+                    '✅ <b>Изображение сгенерировано!</b>\n\n' +
                     `🖼️ <a href="${result.imageUrl}">Скачать изображение</a>\n\n` +
                     `🎨 Модель: ${result.model || model}\n` +
                     `⏱️ Время: ${generationTime}с\n` +
@@ -848,23 +848,23 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
             }
         } else {
             logError(`❌ Ошибка генерации изображения: ${result.error}`);
-            
+
             // Проверяем, это rate limit?
             if (result.rateLimit) {
                 const hours = result.rateLimitHours || 24;
                 await sendMessage(chatId,
-                    `⏳ <b>Лимит генерации изображений достигнут</b>\n\n` +
-                    `⚠️ API Qwen ограничивает количество генераций в день\n` +
+                    '⏳ <b>Лимит генерации изображений достигнут</b>\n\n' +
+                    '⚠️ API Qwen ограничивает количество генераций в день\n' +
                     `⏰ Попробуйте через ${hours}ч\n\n` +
-                    `💡 Совет: используйте другой аккаунт с токеном\n` +
-                    `📝 Или подождите сброса лимита`
+                    '💡 Совет: используйте другой аккаунт с токеном\n' +
+                    '📝 Или подождите сброса лимита'
                 );
                 return;
             }
-            
+
             // Формируем детальное сообщение об ошибке
             let errorMessage = result.error || 'Неизвестная ошибка';
-            
+
             // Если есть дополнительные детали в rawResponse
             if (result.rawResponse) {
                 // Проверяем errorBody (JSON строка)
@@ -919,19 +919,19 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
                     }
                 }
             }
-            
+
             await sendMessage(chatId,
-                `❌ <b>Ошибка генерации изображения</b>\n\n` +
+                '❌ <b>Ошибка генерации изображения</b>\n\n' +
                 `⚠️ ${escapeHtml(errorMessage)}\n\n` +
-                `💡 Попробуйте изменить запрос или повторите позже`
+                '💡 Попробуйте изменить запрос или повторите позже'
             );
         }
     } catch (error) {
         logError('❌ Ошибка в handleImageGeneration', error);
         await sendMessage(chatId,
-            `❌ <b>Произошла ошибка</b>\n\n` +
+            '❌ <b>Произошла ошибка</b>\n\n' +
             `⚠️ ${error.message}\n\n` +
-            `💡 Попробуйте позже`
+            '💡 Попробуйте позже'
         );
     }
 }
@@ -942,7 +942,7 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
 async function sendPhoto(chatId, photoUrl, caption = '') {
     try {
         const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
-        
+
         const body = {
             chat_id: chatId,
             photo: photoUrl,
@@ -993,71 +993,71 @@ async function handleCommand(chatId, text) {
     }
 
     switch (command) {
-        case '/start':
-        case '/help':
-            await sendHelpMessage(chatId);
-            break;
+    case '/start':
+    case '/help':
+        await sendHelpMessage(chatId);
+        break;
 
-        case '/status':
-            await sendStatusMessage(chatId);
-            break;
+    case '/status':
+        await sendStatusMessage(chatId);
+        break;
 
-        case '/restart':
-            await handleRestart(chatId);
-            break;
+    case '/restart':
+        await handleRestart(chatId);
+        break;
 
-        case '/chat':
-            await showLLMChatStatus(chatId);
-            break;
+    case '/chat':
+        await showLLMChatStatus(chatId);
+        break;
 
-        case '/togglechat':
-            await toggleLLMChat(chatId);
-            break;
+    case '/togglechat':
+        await toggleLLMChat(chatId);
+        break;
 
-        case '/model':
-            await showModelInfo(chatId);
-            break;
+    case '/model':
+        await showModelInfo(chatId);
+        break;
 
-        case '/setmodel':
-            await showModelInfo(chatId);
-            break;
+    case '/setmodel':
+        await showModelInfo(chatId);
+        break;
 
-        case '/clear':
-            await clearChatContext(chatId);
-            break;
+    case '/clear':
+        await clearChatContext(chatId);
+        break;
 
-        case '/setup':
-            await sendSetupMessage(chatId);
-            break;
+    case '/setup':
+        await sendSetupMessage(chatId);
+        break;
 
-        case '/connect':
-            await sendConnectMessage(chatId);
-            break;
+    case '/connect':
+        await sendConnectMessage(chatId);
+        break;
 
-        case '/about':
-            await sendAboutMessage(chatId);
-            break;
+    case '/about':
+        await sendAboutMessage(chatId);
+        break;
 
-        case '/archive':
-            await sendArchiveInstructions(chatId);
-            break;
+    case '/archive':
+        await sendArchiveInstructions(chatId);
+        break;
 
-        case '/extend':
-            // 🔧 ВРЕМЕННО ОТКЛЮЧЕНО
-            await sendMessage(chatId,
-                `🔧 <b>Команда /extend временно отключена</b>\n\n` +
-                `Функция продления сессий находится на техническом обслуживании.\n\n` +
-                `📦 <b>Что делать:</b>\n` +
-                `1. Создайте новую сессию: <code>npm run create-session-archive</code>\n` +
-                `2. Отправьте архив через бота\n\n` +
-                `⏳ Функция будет доступна в ближайшее время.`
-            );
-            break;
+    case '/extend':
+        // 🔧 ВРЕМЕННО ОТКЛЮЧЕНО
+        await sendMessage(chatId,
+            '🔧 <b>Команда /extend временно отключена</b>\n\n' +
+                'Функция продления сессий находится на техническом обслуживании.\n\n' +
+                '📦 <b>Что делать:</b>\n' +
+                '1. Создайте новую сессию: <code>npm run create-session-archive</code>\n' +
+                '2. Отправьте архив через бота\n\n' +
+                '⏳ Функция будет доступна в ближайшее время.'
+        );
+        break;
 
-        case '/image':
-        case '/imagine':
-            await sendMessage(chatId, 
-                '🎨 <b>Генерация изображений</b>\n\n' +
+    case '/image':
+    case '/imagine':
+        await sendMessage(chatId,
+            '🎨 <b>Генерация изображений</b>\n\n' +
                 '💬 <b>Текстовый режим:</b>\n' +
                 '/image &lt;описание&gt; - генерация по описанию\n\n' +
                 '📸 <b>Режим Image-to-Image:</b>\n' +
@@ -1066,21 +1066,21 @@ async function handleCommand(chatId, text) {
                 '📝 Примеры:\n' +
                 '• /image A beautiful sunset\n' +
                 '• Отправьте фото с текстом "Улучши это"'
-            );
-            break;
+        );
+        break;
 
-        default:
-            // Проверяем, начинается ли сообщение с /image или /imagine с аргументами
-            if (text.startsWith('/image ') || text.startsWith('/imagine ')) {
-                const prompt = text.substring(text.indexOf(' ') + 1).trim();
-                if (prompt) {
-                    await handleImageGeneration(chatId, prompt);
-                } else {
-                    await sendMessage(chatId, '🎨 Пожалуйста, укажите описание изображения\n\nПример: /image A beautiful sunset over the ocean');
-                }
+    default:
+        // Проверяем, начинается ли сообщение с /image или /imagine с аргументами
+        if (text.startsWith('/image ') || text.startsWith('/imagine ')) {
+            const prompt = text.substring(text.indexOf(' ') + 1).trim();
+            if (prompt) {
+                await handleImageGeneration(chatId, prompt);
             } else {
-                await sendMessage(chatId, '❓ Неизвестная команда. Используйте /help для списка команд');
+                await sendMessage(chatId, '🎨 Пожалуйста, укажите описание изображения\n\nПример: /image A beautiful sunset over the ocean');
             }
+        } else {
+            await sendMessage(chatId, '❓ Неизвестная команда. Используйте /help для списка команд');
+        }
     }
 }
 
@@ -1090,48 +1090,48 @@ async function handleCommand(chatId, text) {
 async function handlePhoto(chatId, photos, caption = '') {
     try {
         logInfo(`📸 Получено фото с caption: "${caption.substring(0, 50)}${caption.length > 50 ? '...' : ''}"`);
-        
+
         // Проверяем, есть ли команда в caption
         let prompt = caption || 'Улучши это изображение';
         let hasCommand = false;
-        
+
         // Если caption начинается с /image или /imagine
         if (caption.startsWith('/image ') || caption.startsWith('/imagine ')) {
             hasCommand = true;
             prompt = caption.substring(caption.indexOf(' ') + 1).trim();
         }
-        
+
         if (!hasCommand && !caption) {
             // Если просто фото без caption - не обрабатываем как image-to-image
             logInfo('📸 Фото без caption - пропускаем обработку');
             return;
         }
-        
+
         // Telegram отправляет несколько размеров фото, берем самый большой (последний в массиве)
         const photo = photos[photos.length - 1];
         const fileId = photo.file_id;
         const fileSize = photo.file_size;
-        
+
         logInfo(`📸 Загрузка фото из Telegram (file_id: ${fileId}, size: ${fileSize} bytes)`);
-        
-        await sendMessage(chatId, 
-            `🎨 <b>Обработка изображения...</b>\n\n` +
+
+        await sendMessage(chatId,
+            '🎨 <b>Обработка изображения...</b>\n\n' +
             `📝 Запрос: ${prompt}\n` +
-            `⏳ Пожалуйста, подождите...`
+            '⏳ Пожалуйста, подождите...'
         );
-        
+
         // Скачиваем фото из Telegram и сохраняем во временный файл
         const tempFilePath = await downloadTelegramFileToTemp(fileId);
-        
+
         if (!tempFilePath) {
             throw new Error('Не удалось скачать фото из Telegram');
         }
-        
+
         logInfo(`✅ Фото скачано: ${tempFilePath}`);
-        
+
         // Генерируем изображение с использованием фото
         await handleImageGeneration(chatId, prompt, tempFilePath);
-        
+
         // Удаляем временный файл
         try {
             fs.unlinkSync(tempFilePath);
@@ -1139,13 +1139,13 @@ async function handlePhoto(chatId, photos, caption = '') {
         } catch (e) {
             logWarn('Не удалось удалить временный файл', e);
         }
-        
+
     } catch (error) {
         logError('❌ Ошибка в handlePhoto', error);
         await sendMessage(chatId,
-            `❌ <b>Ошибка обработки фото</b>\n\n` +
+            '❌ <b>Ошибка обработки фото</b>\n\n' +
             `⚠️ ${error.message}\n\n` +
-            `💡 Попробуйте позже`
+            '💡 Попробуйте позже'
         );
     }
 }
@@ -1160,45 +1160,45 @@ async function downloadTelegramFileToTemp(fileId) {
         // Получаем информацию о файле
         const fileUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`;
         const fileResponse = await fetchWithProxy(fileUrl, undefined, true);
-        
+
         if (!fileResponse.ok) {
             throw new Error(`Не удалось получить информацию о файле: HTTP ${fileResponse.status}`);
         }
-        
+
         const fileData = await fileResponse.json();
-        
+
         if (!fileData.ok) {
             throw new Error(`Telegram API error: ${fileData.description || 'Unknown error'}`);
         }
-        
+
         const filePath = fileData.result.file_path;
         const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`;
-        
+
         logInfo(`📥 URL для скачивания файла: ${downloadUrl}`);
-        
+
         // Скачиваем файл
         const downloadResponse = await fetchWithProxy(downloadUrl, undefined, true);
-        
+
         if (!downloadResponse.ok) {
             throw new Error(`Не удалось скачать файл: HTTP ${downloadResponse.status}`);
         }
-        
+
         // Сохраняем во временный файл
         const tempDir = path.join(process.cwd(), 'temp');
         if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, { recursive: true });
         }
-        
+
         const tempFileName = `telegram_${Date.now()}_${fileId}.jpg`;
         const tempFilePath = path.join(tempDir, tempFileName);
-        
+
         const buffer = Buffer.from(await downloadResponse.arrayBuffer());
         fs.writeFileSync(tempFilePath, buffer);
-        
+
         logInfo(`✅ Файл сохранен: ${tempFilePath} (${buffer.length} bytes)`);
-        
+
         return tempFilePath;
-        
+
     } catch (error) {
         logError('❌ Ошибка скачивания файла из Telegram', error);
         throw error;
@@ -1222,7 +1222,7 @@ async function handleDocument(chatId, document) {
     if (!allowedExtensions.includes(ext)) {
         await sendMessage(chatId,
             `❌ Неподдерживаемый формат файла: ${ext}\n` +
-            `📎 Поддерживаются только: .zip и .7z`
+            '📎 Поддерживаются только: .zip и .7z'
         );
         return;
     }
@@ -1232,7 +1232,7 @@ async function handleDocument(chatId, document) {
     if (fileSize > maxSize) {
         await sendMessage(chatId,
             `❌ Файл слишком большой: ${(fileSize / 1024 / 1024).toFixed(2)}MB\n` +
-            `📏 Максимальный размер: 50MB`
+            '📏 Максимальный размер: 50MB'
         );
         return;
     }
@@ -1246,7 +1246,7 @@ async function handleDocument(chatId, document) {
                 logInfo(`⚠️ Архив ${fileName} уже ожидает распаковки, перезапускаем`);
                 await sendMessage(chatId,
                     `✅ Архив ${fileName} уже загружен\n` +
-                    `🔄 Перезапуск для распаковки...`
+                    '🔄 Перезапуск для распаковки...'
                 );
                 // Запускаем перезапуск
                 await gracefulRestart(chatId);
@@ -1260,7 +1260,7 @@ async function handleDocument(chatId, document) {
     // Проверяем существует ли уже файл в temp (по оригинальному имени)
     const tempDir = path.join(process.cwd(), 'temp');
     const existingFiles = fs.existsSync(tempDir) ? fs.readdirSync(tempDir) : [];
-    const existingFile = existingFiles.find(f => f.endsWith(`_${fileName}`) || f === fileName);
+    const existingFile = existingFiles.find((f) => f.endsWith(`_${fileName}`) || f === fileName);
 
     if (existingFile) {
         const tempFilePath = path.join(tempDir, existingFile);
@@ -1274,14 +1274,14 @@ async function handleDocument(chatId, document) {
                 ext: ext,
                 uploadedAt: new Date().toISOString()
             }));
-            logInfo(`📝 Создан флаг для существующего архива`);
+            logInfo('📝 Создан флаг для существующего архива');
 
             // Запускаем перезапуск
             await gracefulRestart(chatId);
         } else {
             await sendMessage(chatId,
-                `✅ Архив уже загружен и ожидает распаковки\n` +
-                `🔄 Сервис будет перезапущен...`
+                '✅ Архив уже загружен и ожидает распаковки\n' +
+                '🔄 Сервис будет перезапущен...'
             );
             // Запускаем перезапуск
             await gracefulRestart(chatId);
@@ -1313,7 +1313,7 @@ async function handleDocument(chatId, document) {
         logInfo(`📊 Ожидаемый размер (из Telegram): ${fileData.result.file_size || 'unknown'} bytes`);
 
         // Скачиваем файл
-        logInfo(`📥 Начинаем загрузку файла...`);
+        logInfo('📥 Начинаем загрузку файла...');
         const downloadResponse = await fetchWithProxy(downloadUrl);
         logInfo(`📥 Статус загрузки: ${downloadResponse.status}`);
         logInfo(`📥 Content-Type: ${downloadResponse.headers.get('content-type')}`);
@@ -1326,7 +1326,7 @@ async function handleDocument(chatId, document) {
         logInfo(`📥 Загружено ${fileSize} bytes из Telegram`);
 
         if (fileSize === 0) {
-            logError(`❌ Загружен пустой файл!`);
+            logError('❌ Загружен пустой файл!');
             logError(`📡 Статус ответа: ${downloadResponse.status}`);
             logError(`📊 Content-Length header: ${downloadResponse.headers.get('content-length')}`);
             logError(`🔗 URL: ${downloadUrl}`);
@@ -1348,10 +1348,10 @@ async function handleDocument(chatId, document) {
         const tempFilePath = path.join(tempDir, uniqueFileName);
 
         // Удаляем старые файлы с таким же именем (если есть)
-        const oldFiles = existingFiles.filter(f => f.endsWith(`_${fileName}`) || f === fileName);
+        const oldFiles = existingFiles.filter((f) => f.endsWith(`_${fileName}`) || f === fileName);
         if (oldFiles.length > 0) {
             logInfo(`🗑️ Найдено ${oldFiles.length} старых файлов с именем ${fileName}, удаляем`);
-            oldFiles.forEach(oldFile => {
+            oldFiles.forEach((oldFile) => {
                 try {
                     fs.unlinkSync(path.join(tempDir, oldFile));
                     logInfo(`🗑️ Удален старый файл: ${oldFile}`);
@@ -1374,7 +1374,7 @@ async function handleDocument(chatId, document) {
         }
 
         logInfo(`✅ Файл сохранен: ${tempFilePath}`);
-        await sendMessage(chatId, `✅ Файл загружен. Распаковка...`);
+        await sendMessage(chatId, '✅ Файл загружен. Распаковка...');
 
         // Сохраняем информацию об архиве для обработки при перезапуске
         fs.writeFileSync(archiveInfoPath, JSON.stringify({
@@ -1386,8 +1386,8 @@ async function handleDocument(chatId, document) {
 
         logInfo(`📝 Записан флаг ожидающего архива: ${archiveInfoPath}`);
         await sendMessage(chatId,
-            `✅ Архив сохранен\n` +
-            `🔄 При перезапуске будет автоматически распакован\n` +
+            '✅ Архив сохранен\n' +
+            '🔄 При перезапуске будет автоматически распакован\n' +
             `📂 Файл: ${tempFilePath}`
         );
 
@@ -1428,9 +1428,9 @@ async function createSessionBackup(sessionPath, chatId) {
             logWarn('⛔ session_backup отменен - СЕРВЕР НЕ БУДЕТ ПЕРЕЗАПУЩЕН');
             try {
                 await sendMessage(chatId,
-                    `❌ Ошибка session_backup: нет прав для создания папки\n` +
-                    `⛔ Распаковка продолжена, но сервер НЕ будет перезапущен\n` +
-                    `💡 Перезапустите сервер вручную после проверки файлов`
+                    '❌ Ошибка session_backup: нет прав для создания папки\n' +
+                    '⛔ Распаковка продолжена, но сервер НЕ будет перезапущен\n' +
+                    '💡 Перезапустите сервер вручную после проверки файлов'
                 );
             } catch (sendError) {
                 // Игнорируем
@@ -1448,7 +1448,7 @@ async function createSessionBackup(sessionPath, chatId) {
 
         try {
             await sendMessage(chatId,
-                `💾 Создание session_backup текущей session...\n` +
+                '💾 Создание session_backup текущей session...\n' +
                 `📁 Найдено элементов: ${items.length}`
             );
         } catch (sendError) {
@@ -1489,8 +1489,8 @@ async function createSessionBackup(sessionPath, chatId) {
         try {
             await sendMessage(chatId,
                 `❌ Ошибка session_backup: ${error.message}\n` +
-                `⛔ Распаковка продолжена, но сервер НЕ будет перезапущен\n` +
-                `💡 Перезапустите сервер вручную после проверки файлов`
+                '⛔ Распаковка продолжена, но сервер НЕ будет перезапущен\n' +
+                '💡 Перезапустите сервер вручную после проверки файлов'
             );
         } catch (sendError) {
             // Игнорируем
@@ -1513,10 +1513,10 @@ async function extractArchive(filePath, chatId, ext) {
         if (!backupSuccess) {
             logWarn('⛔ Распаковка отменена из-за ошибки backup');
             await sendMessage(chatId,
-                `⚠️ <b>Распаковка отменена</b>\n\n` +
-                `❌ Не удалось создать backup текущей session\n` +
-                `🔒 Файлы не были изменены для безопасности\n` +
-                `💡 Проверьте права доступа и попробуйте снова`
+                '⚠️ <b>Распаковка отменена</b>\n\n' +
+                '❌ Не удалось создать backup текущей session\n' +
+                '🔒 Файлы не были изменены для безопасности\n' +
+                '💡 Проверьте права доступа и попробуйте снова'
             );
             return; // Выходим без перезапуска
         }
@@ -1530,9 +1530,9 @@ async function extractArchive(filePath, chatId, ext) {
         }
 
         let statusMessage =
-            `✅ <b>Архив успешно распакован!</b>\n\n` +
-            `📂 Папка session обновлена\n` +
-            `💾 Старая версия сохранена в session_backup\n`;
+            '✅ <b>Архив успешно распакован!</b>\n\n' +
+            '📂 Папка session обновлена\n' +
+            '💾 Старая версия сохранена в session_backup\n';
 
         if (result && result.successCount !== 'все') {
             statusMessage += `📊 Распаковано: ${result.successCount} файлов\n`;
@@ -1541,12 +1541,12 @@ async function extractArchive(filePath, chatId, ext) {
             }
         }
 
-        statusMessage += `🔄 Сервис будет перезапущен...`;
+        statusMessage += '🔄 Сервис будет перезапущен...';
 
         await sendMessage(chatId, statusMessage);
 
         // Ждем 2 секунды чтобы сообщение дошло
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Запускаем перезапуск только если backup был успешен
         logInfo('✅ Backup успешен, запускаем перезапуск сервера');
@@ -1568,27 +1568,27 @@ async function extractZip(zipPath, sessionPath, chatId) {
             const zipEntries = zip.getEntries();
 
             // Для отладки: показываем первые несколько записей в архиве
-            const firstEntries = zipEntries.slice(0, 20).map(e => e.entryName);
-            logInfo(`📂 Первые 20 записей в ZIP архиве:`);
+            const firstEntries = zipEntries.slice(0, 20).map((e) => e.entryName);
+            logInfo('📂 Первые 20 записей в ZIP архиве:');
             logInfo(firstEntries.join('\n'));
 
             // Проверяем что есть папка session
-            const hasSessionFolder = zipEntries.some(entry =>
+            const hasSessionFolder = zipEntries.some((entry) =>
                 entry.entryName.startsWith('session/') || entry.entryName === 'session'
             );
 
             if (!hasSessionFolder) {
                 // Пытаемся найти session в любом месте архива
-                const sessionEntries = zipEntries.filter(e =>
+                const sessionEntries = zipEntries.filter((e) =>
                     e.entryName.includes('session') || e.entryName.includes('Session')
                 );
 
                 if (sessionEntries.length > 0) {
-                    logInfo(`🔍 Найдены записи содержащие 'session':`);
-                    logInfo(sessionEntries.slice(0, 10).map(e => e.entryName).join('\n'));
+                    logInfo('🔍 Найдены записи содержащие \'session\':');
+                    logInfo(sessionEntries.slice(0, 10).map((e) => e.entryName).join('\n'));
                     reject(new Error(
                         `Архив содержит '${sessionEntries[0].entryName}', но не содержит 'session/' в корне. ` +
-                        `Переместите папку session/ в корень архива`
+                        'Переместите папку session/ в корень архива'
                     ));
                 } else {
                     reject(new Error('Архив не содержит папку "session". Проверите что архив содержит папку session/ в корне'));
@@ -1607,7 +1607,7 @@ async function extractZip(zipPath, sessionPath, chatId) {
             let successCount = 0;
             let errorCount = 0;
 
-            zipEntries.forEach(entry => {
+            zipEntries.forEach((entry) => {
                 if (entry.entryName.startsWith('session/')) {
                     try {
                         const relativePath = entry.entryName.substring('session/'.length);
@@ -1753,7 +1753,7 @@ async function extract7z(sevenZPath, sessionPath, chatId) {
             const items = fs.readdirSync(sourceDir);
             logInfo(`📂 Найдено элементов для копирования: ${items.length}`);
 
-            items.forEach(item => {
+            items.forEach((item) => {
                 const sourcePath = path.join(sourceDir, item);
                 const targetPath = path.join(targetDir, item);
 
@@ -1819,8 +1819,8 @@ async function gracefulRestart(chatId) {
         logInfo('🔄 Запуск корректного перезапуска сервиса...');
 
         await sendMessage(chatId,
-            `🔄 <b>Перезапуск сервиса...</b>\n\n` +
-            `⏱️ Сервис будет перезапущен в течение 5 секунд`
+            '🔄 <b>Перезапуск сервиса...</b>\n\n' +
+            '⏱️ Сервис будет перезапущен в течение 5 секунд'
         );
 
         // Даем Docker Compose время на перезапуск
@@ -1854,51 +1854,51 @@ async function sendHelpMessage(chatId) {
     const accountsExist = hasAccounts();
 
     let helpText =
-        `🤖 <b>FreeQwenApi Bot - Управление</b>\n\n` +
-        `📋 <b>Команды управления:</b>\n\n` +
-        `/help - Показать это сообщение\n` +
-        `/status - Показать статус сервиса\n` +
-        `/restart - Перезапустить сервис\n` +
-        `<s>/extend</s> - 🔧 Временно отключено\n\n`;
+        '🤖 <b>FreeQwenApi Bot - Управление</b>\n\n' +
+        '📋 <b>Команды управления:</b>\n\n' +
+        '/help - Показать это сообщение\n' +
+        '/status - Показать статус сервиса\n' +
+        '/restart - Перезапустить сервис\n' +
+        '<s>/extend</s> - 🔧 Временно отключено\n\n';
 
     // Команды генерации изображений
     helpText +=
-        `🎨 <b>Генерация изображений:</b>\n\n` +
-        `/image &lt;описание&gt; - Сгенерировать изображение\n` +
-        `/imagine &lt;описание&gt; - Альтернативная команда\n\n` +
-        `💡 Пример: /image A beautiful sunset over the ocean\n\n`;
+        '🎨 <b>Генерация изображений:</b>\n\n' +
+        '/image &lt;описание&gt; - Сгенерировать изображение\n' +
+        '/imagine &lt;описание&gt; - Альтернативная команда\n\n' +
+        '💡 Пример: /image A beautiful sunset over the ocean\n\n';
 
     // Показываем LLM команды только если есть аккаунты
     if (accountsExist) {
         helpText +=
-            `🤖 <b>LLM Чат (AI ассистент):</b>\n\n` +
-            `/chat - Показать состояние LLM чата\n` +
-            `/togglechat - Включить/выключить LLM чат\n` +
-            `/clear - Очистить контекст чата\n` +
-            `/model - Информация о модели\n` +
-            `/setmodel &lt;название&gt; - Сменить модель\n\n` +
-            `💡 Когда LLM чат включен, просто отправляйте сообщения!\n\n`;
+            '🤖 <b>LLM Чат (AI ассистент):</b>\n\n' +
+            '/chat - Показать состояние LLM чата\n' +
+            '/togglechat - Включить/выключить LLM чат\n' +
+            '/clear - Очистить контекст чата\n' +
+            '/model - Информация о модели\n' +
+            '/setmodel &lt;название&gt; - Сменить модель\n\n' +
+            '💡 Когда LLM чат включен, просто отправляйте сообщения!\n\n';
     } else {
         helpText +=
-            `⚠️ <b>LLM Чат недоступен</b>\n\n` +
-            `🔒 Функции AI ассистента временно недоступны\n` +
-            `📦 Отправьте архив с сессиями для активации\n\n`;
+            '⚠️ <b>LLM Чат недоступен</b>\n\n' +
+            '🔒 Функции AI ассистента временно недоступны\n' +
+            '📦 Отправьте архив с сессиями для активации\n\n';
     }
 
     helpText +=
-        `📦 <b>Загрузка сессий:</b>\n\n` +
-        `Отправьте ZIP или 7z архив с папкой "session" внутри.\n` +
-        `Бот распакует его и перезапустит сервис.\n\n` +
-        `/archive - Инструкция по созданию архива\n\n` +
-        `📏 <b>Лимиты:</b>\n` +
-        `• Максимальный размер файла: 50MB\n` +
-        `• Поддерживаемые форматы: .zip, .7z\n\n` +
-        `📚 <b>Дополнительные команды:</b>\n\n` +
-        `/setup - Инструкция по созданию сессии\n` +
-        `/connect - Как подключить к проекту\n` +
-        `/about - Информация о проекте\n\n` +
-        `🐳 <b>Docker:</b>\n` +
-        `https://hub.docker.com/r/endykaufman/qwen-api-proxy`;
+        '📦 <b>Загрузка сессий:</b>\n\n' +
+        'Отправьте ZIP или 7z архив с папкой "session" внутри.\n' +
+        'Бот распакует его и перезапустит сервис.\n\n' +
+        '/archive - Инструкция по созданию архива\n\n' +
+        '📏 <b>Лимиты:</b>\n' +
+        '• Максимальный размер файла: 50MB\n' +
+        '• Поддерживаемые форматы: .zip, .7z\n\n' +
+        '📚 <b>Дополнительные команды:</b>\n\n' +
+        '/setup - Инструкция по созданию сессии\n' +
+        '/connect - Как подключить к проекту\n' +
+        '/about - Информация о проекте\n\n' +
+        '🐳 <b>Docker:</b>\n' +
+        'https://hub.docker.com/r/endykaufman/qwen-api-proxy';
 
     await sendMessage(chatId, helpText);
 }
@@ -1908,179 +1908,179 @@ async function sendHelpMessage(chatId) {
  */
 async function sendSetupMessage(chatId) {
     const setupText =
-        `🛠️ <b>Создание сессии авторизации</b>\n\n` +
-        `<b>📖 Что нужно знать:</b>\n` +
-        `• <b>Git</b> - система управления версиями (опционально)\n` +
-        `• <b>Docker Compose</b> - инструмент для управления контейнерами\n` +
-        `• Если используете Docker Desktop - Compose уже встроен!\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `<b>Способ 1: Локальная установка (Node.js)</b>\n\n` +
-        `<b>Вариант A: С Git:</b>\n` +
-        `1. <code>git clone https://github.com/EndyKaufman/FreeQwenApi</code>\n` +
-        `2. <code>cd FreeQwenApi</code>\n` +
-        `3. <code>npm install</code>\n` +
-        `4. <code>npm start</code>\n` +
-        `5. Выберите <code>1</code> - добавить аккаунт\n` +
-        `6. Войдите в аккаунт Qwen в браузере\n` +
-        `7. Токен сохранится автоматически\n\n` +
-        `<b>Вариант B: Без Git (ZIP):</b>\n` +
-        `1. Скачайте ZIP: https://github.com/EndyKaufman/FreeQwenApi\n` +
-        `2. Нажмите <b>"<> Code"</b> → <b>"Download ZIP"</b>\n` +
-        `3. Распакуйте и перейдите в папку\n` +
-        `4. <code>npm install</code>\n` +
-        `5. <code>npm start</code> → выберите <code>1</code>\n\n` +
-        `<b>Способ 2: Docker</b>\n\n` +
-        `<b>Что такое Docker Compose?</b>\n` +
-        `• Входит в Docker Desktop (Windows/macOS)\n` +
-        `• Linux: <code>sudo apt install docker-compose-plugin</code>\n` +
-        `• Проверка: <code>docker compose version</code>\n\n` +
-        `<b>С Compose:</b>\n` +
-        `1. Сначала создайте сессию локально:\n` +
-        `   <code>npm run auth</code> (или <code>npm start</code> → <code>1</code>)\n` +
-        `2. Соберите Docker:\n` +
-        `   <code>docker compose build --no-cache</code>\n` +
-        `3. Запустите:\n` +
-        `   <code>docker compose up -d</code>\n\n` +
-        `<b>Без Compose (обычный Docker):</b>\n` +
-        `1. Создайте сессию локально (см. Способ 1)\n` +
-        `2. Соберите образ:\n` +
-        `   <code>docker build -t qwen-proxy .</code>\n` +
-        `3. Запустите:\n` +
-        `   <code>docker run -d --name qwen-proxy -p 3264:3264 -e SKIP_ACCOUNT_MENU=true -v $(pwd)/session:/app/session qwen-proxy</code>\n\n` +
-        `<b>Структура папки session:</b>\n` +
-        `<code>session/</code>\n` +
-        `├── <code>accounts/</code>\n` +
-        `│   ├── <code>acc_123456/</code>\n` +
-        `│   │   └── <code>token.txt</code>\n` +
-        `│   └── <code>acc_789012/</code>\n` +
-        `│       └── <code>token.txt</code>\n` +
-        `└── <code>tokens.json</code>\n\n` +
-        `💡 <b>Совет:</b> Используйте /archive для подробной инструкции\n\n` +
-        `📖 Подробнее: https://github.com/EndyKaufman/FreeQwenApi`;
-    
+        '🛠️ <b>Создание сессии авторизации</b>\n\n' +
+        '<b>📖 Что нужно знать:</b>\n' +
+        '• <b>Git</b> - система управления версиями (опционально)\n' +
+        '• <b>Docker Compose</b> - инструмент для управления контейнерами\n' +
+        '• Если используете Docker Desktop - Compose уже встроен!\n\n' +
+        '━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+        '<b>Способ 1: Локальная установка (Node.js)</b>\n\n' +
+        '<b>Вариант A: С Git:</b>\n' +
+        '1. <code>git clone https://github.com/EndyKaufman/FreeQwenApi</code>\n' +
+        '2. <code>cd FreeQwenApi</code>\n' +
+        '3. <code>npm install</code>\n' +
+        '4. <code>npm start</code>\n' +
+        '5. Выберите <code>1</code> - добавить аккаунт\n' +
+        '6. Войдите в аккаунт Qwen в браузере\n' +
+        '7. Токен сохранится автоматически\n\n' +
+        '<b>Вариант B: Без Git (ZIP):</b>\n' +
+        '1. Скачайте ZIP: https://github.com/EndyKaufman/FreeQwenApi\n' +
+        '2. Нажмите <b>"<> Code"</b> → <b>"Download ZIP"</b>\n' +
+        '3. Распакуйте и перейдите в папку\n' +
+        '4. <code>npm install</code>\n' +
+        '5. <code>npm start</code> → выберите <code>1</code>\n\n' +
+        '<b>Способ 2: Docker</b>\n\n' +
+        '<b>Что такое Docker Compose?</b>\n' +
+        '• Входит в Docker Desktop (Windows/macOS)\n' +
+        '• Linux: <code>sudo apt install docker-compose-plugin</code>\n' +
+        '• Проверка: <code>docker compose version</code>\n\n' +
+        '<b>С Compose:</b>\n' +
+        '1. Сначала создайте сессию локально:\n' +
+        '   <code>npm run auth</code> (или <code>npm start</code> → <code>1</code>)\n' +
+        '2. Соберите Docker:\n' +
+        '   <code>docker compose build --no-cache</code>\n' +
+        '3. Запустите:\n' +
+        '   <code>docker compose up -d</code>\n\n' +
+        '<b>Без Compose (обычный Docker):</b>\n' +
+        '1. Создайте сессию локально (см. Способ 1)\n' +
+        '2. Соберите образ:\n' +
+        '   <code>docker build -t qwen-proxy .</code>\n' +
+        '3. Запустите:\n' +
+        '   <code>docker run -d --name qwen-proxy -p 3264:3264 -e SKIP_ACCOUNT_MENU=true -v $(pwd)/session:/app/session qwen-proxy</code>\n\n' +
+        '<b>Структура папки session:</b>\n' +
+        '<code>session/</code>\n' +
+        '├── <code>accounts/</code>\n' +
+        '│   ├── <code>acc_123456/</code>\n' +
+        '│   │   └── <code>token.txt</code>\n' +
+        '│   └── <code>acc_789012/</code>\n' +
+        '│       └── <code>token.txt</code>\n' +
+        '└── <code>tokens.json</code>\n\n' +
+        '💡 <b>Совет:</b> Используйте /archive для подробной инструкции\n\n' +
+        '📖 Подробнее: https://github.com/EndyKaufman/FreeQwenApi';
+
     await sendMessage(chatId, setupText);
 }
 
 async function sendConnectMessage(chatId) {
     const connectText =
-        `🔌 <b>Подключение FreeQwenApi к проекту</b>\n\n` +
-        `<b>📖 Что такое Docker Compose?</b>\n` +
-        `Это инструмент для запуска многоконтейнерных приложений.\n` +
-        `Он управляет контейнерами через файл <code>docker-compose.yml</code>.\n\n` +
-        `<b>Установка Docker Compose:</b>\n` +
-        `• Входит в <b>Docker Desktop</b> (Windows/macOS)\n` +
-        `• Linux: <code>sudo apt install docker-compose-plugin</code>\n` +
-        `• Проверка: <code>docker compose version</code>\n\n` +
-        `💡 <i>Если Docker Desktop установлен - Compose уже есть!</i>\n\n` +
-        `<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n` +
-        `<b>Шаг 1: Запуск через Docker Compose</b>\n\n` +
-        `Добавьте в ваш <code>docker-compose.yml</code>:\n\n` +
-        `<pre>\n` +
-        `services:\n` +
-        `  qwen-proxy:\n` +
-        `    build: .\n` +
-        `    container_name: qwen-proxy\n` +
-        `    environment:\n` +
-        `      - SKIP_ACCOUNT_MENU=true\n` +
-        `      - PORT=3264\n` +
-        `    ports:\n` +
-        `      - "3264:3264"\n` +
-        `    volumes:\n` +
-        `      - ./session_backup:/app/session_backup\n` +
-        `      - ./session:/app/session\n` +
-        `      - ./logs:/app/logs\n` +
-        `      - ./uploads:/app/uploads\n` +
-        `      - ./temp:/app/temp\n` +
-        `    restart: unless-stopped\n` +
-        `</pre>\n\n` +
-        `Или используйте наш <code>docker-compose.yml</code>:\n` +
-        `<code>docker compose up -d</code>\n\n` +
-        `<b>Альтернатива: Без Docker Compose</b>\n\n` +
-        `Если Compose не установлен, используйте обычный Docker:\n\n` +
-        `<pre>\n` +
-        `docker build -t qwen-proxy .\n` +
-        `docker run -d \\\n` +
-        `  --name qwen-proxy \\\n` +
-        `  -p 3264:3264 \\\n` +
-        `  -e SKIP_ACCOUNT_MENU=true \\\n` +
-        `  -v $(pwd)/session:/app/session \\\n` +
-        `  -v $(pwd)/logs:/app/logs \\\n` +
-        `  -v $(pwd)/uploads:/app/uploads \\\n` +
-        `  -v $(pwd)/temp:/app/temp \\\n` +
-        `  qwen-proxy\n` +
-        `</pre>\n\n` +
-        `<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n` +
-        `<b>Шаг 2: Первый запрос через curl</b>\n\n` +
-        `<b>Простой запрос:</b>\n` +
-        `<pre>\n` +
-        `curl http://localhost:3264/api/chat/completions \\\n` +
-        `  -H "Content-Type: application/json" \\\n` +
-        `  -d '{"model":"qwen3.5-plus","messages":[{"role":"user","content":"Привет!"}]}'\n` +
-        `</pre>\n\n` +
-        `<b>С продолжением диалога:</b>\n` +
-        `<pre>\n` +
-        `curl -X POST http://localhost:3264/api/chat/completions \\\n` +
-        `  -H "Content-Type: application/json" \\\n` +
-        `  -d '{\n` +
-        `    "model": "qwen3.5-plus",\n` +
-        `    "messages": [{"role": "user", "content": "Сколько будет 2+2?"}]\n` +
-        `  }'\n` +
-        `</pre>\n\n` +
-        `<b>Шаг 3: Использование с OpenAI SDK</b>\n\n` +
-        `<pre>\n` +
-        `import OpenAI from 'openai';\n\n` +
-        `const client = new OpenAI({\n` +
-        `    baseURL: 'http://localhost:3264/api',\n` +
-        `    apiKey: 'any-string'\n` +
-        `});\n\n` +
-        `const response = await client.chat.completions.create({\n` +
-        `    model: 'qwen3.5-plus',\n` +
-        `    messages: [{ role: 'user', content: 'Привет!' }]\n` +
-        `});\n` +
-        `</pre>\n\n` +
-        `📖 API Docs: http://localhost:3264/api\n` +
-        `📚 GitHub: https://github.com/EndyKaufman/FreeQwenApi`;
-    
+        '🔌 <b>Подключение FreeQwenApi к проекту</b>\n\n' +
+        '<b>📖 Что такое Docker Compose?</b>\n' +
+        'Это инструмент для запуска многоконтейнерных приложений.\n' +
+        'Он управляет контейнерами через файл <code>docker-compose.yml</code>.\n\n' +
+        '<b>Установка Docker Compose:</b>\n' +
+        '• Входит в <b>Docker Desktop</b> (Windows/macOS)\n' +
+        '• Linux: <code>sudo apt install docker-compose-plugin</code>\n' +
+        '• Проверка: <code>docker compose version</code>\n\n' +
+        '💡 <i>Если Docker Desktop установлен - Compose уже есть!</i>\n\n' +
+        '<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n' +
+        '<b>Шаг 1: Запуск через Docker Compose</b>\n\n' +
+        'Добавьте в ваш <code>docker-compose.yml</code>:\n\n' +
+        '<pre>\n' +
+        'services:\n' +
+        '  qwen-proxy:\n' +
+        '    build: .\n' +
+        '    container_name: qwen-proxy\n' +
+        '    environment:\n' +
+        '      - SKIP_ACCOUNT_MENU=true\n' +
+        '      - PORT=3264\n' +
+        '    ports:\n' +
+        '      - "3264:3264"\n' +
+        '    volumes:\n' +
+        '      - ./session_backup:/app/session_backup\n' +
+        '      - ./session:/app/session\n' +
+        '      - ./logs:/app/logs\n' +
+        '      - ./uploads:/app/uploads\n' +
+        '      - ./temp:/app/temp\n' +
+        '    restart: unless-stopped\n' +
+        '</pre>\n\n' +
+        'Или используйте наш <code>docker-compose.yml</code>:\n' +
+        '<code>docker compose up -d</code>\n\n' +
+        '<b>Альтернатива: Без Docker Compose</b>\n\n' +
+        'Если Compose не установлен, используйте обычный Docker:\n\n' +
+        '<pre>\n' +
+        'docker build -t qwen-proxy .\n' +
+        'docker run -d \\\n' +
+        '  --name qwen-proxy \\\n' +
+        '  -p 3264:3264 \\\n' +
+        '  -e SKIP_ACCOUNT_MENU=true \\\n' +
+        '  -v $(pwd)/session:/app/session \\\n' +
+        '  -v $(pwd)/logs:/app/logs \\\n' +
+        '  -v $(pwd)/uploads:/app/uploads \\\n' +
+        '  -v $(pwd)/temp:/app/temp \\\n' +
+        '  qwen-proxy\n' +
+        '</pre>\n\n' +
+        '<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n' +
+        '<b>Шаг 2: Первый запрос через curl</b>\n\n' +
+        '<b>Простой запрос:</b>\n' +
+        '<pre>\n' +
+        'curl http://localhost:3264/api/chat/completions \\\n' +
+        '  -H "Content-Type: application/json" \\\n' +
+        '  -d \'{"model":"qwen3.5-plus","messages":[{"role":"user","content":"Привет!"}]}\'\n' +
+        '</pre>\n\n' +
+        '<b>С продолжением диалога:</b>\n' +
+        '<pre>\n' +
+        'curl -X POST http://localhost:3264/api/chat/completions \\\n' +
+        '  -H "Content-Type: application/json" \\\n' +
+        '  -d \'{\n' +
+        '    "model": "qwen3.5-plus",\n' +
+        '    "messages": [{"role": "user", "content": "Сколько будет 2+2?"}]\n' +
+        '  }\'\n' +
+        '</pre>\n\n' +
+        '<b>Шаг 3: Использование с OpenAI SDK</b>\n\n' +
+        '<pre>\n' +
+        'import OpenAI from \'openai\';\n\n' +
+        'const client = new OpenAI({\n' +
+        '    baseURL: \'http://localhost:3264/api\',\n' +
+        '    apiKey: \'any-string\'\n' +
+        '});\n\n' +
+        'const response = await client.chat.completions.create({\n' +
+        '    model: \'qwen3.5-plus\',\n' +
+        '    messages: [{ role: \'user\', content: \'Привет!\' }]\n' +
+        '});\n' +
+        '</pre>\n\n' +
+        '📖 API Docs: http://localhost:3264/api\n' +
+        '📚 GitHub: https://github.com/EndyKaufman/FreeQwenApi';
+
     await sendMessage(chatId, connectText);
 }
 
 async function sendAboutMessage(chatId) {
     const aboutText =
-        `📚 <b>О проекте FreeQwenApi</b>\n\n` +
-        `<b>🌐 Оригинальный проект:</b>\n` +
-        `https://github.com/y13sint/FreeQwenApi\n\n` +
-        `<b>🔧 Мой форк:</b>\n` +
-        `https://github.com/EndyKaufman/FreeQwenApi\n\n` +
-        `<b>⭐ Ключевые отличия форка:</b>\n\n` +
-        `✅ <b>Telegram Bot интеграция</b>\n` +
-        `   - Управление сервисом через Telegram\n` +
-        `   - Загрузка сессий архивами (.zip/.7z)\n` +
-        `   - LLM чат с AI ассистентом\n` +
-        `   - Мониторинг статуса в реальном времени\n\n` +
-        `✅ <b>Прокси поддержка для Telegram</b>\n` +
-        `   - HTTP/HTTPS/SOCKS прокси\n` +
-        `   - Безопасное логирование (без credentials)\n\n` +
-        `✅ <b>Автоматическая распаковка архивов</b>\n` +
-        `   - Backup перед обновлением\n` +
-        `   - Error-tolerant extraction\n` +
-        `   - Health check при запуске\n\n` +
-        `✅ <b>Улучшенная документация</b>\n` +
-        `   - Подробные README на русском\n` +
-        `   - Telegram bot guides\n` +
-        `✅ <b>Production-ready features</b>\n` +
-        `   - Docker оптимизация\n` +
-        `   - Graceful restarts\n` +
-        `   - System health monitoring\n\n` +
-        `<b>📊 Общие возможности:</b>\n` +
-        `• 25+ моделей Qwen (включая Qwen 3.5)\n` +
-        `• OpenAI-совместимый API\n` +
-        `• Генерация изображений\n` +
-        `• Загрузка файлов\n` +
-        `• Streaming ответов (SSE)\n` +
-        `• Мультиаккаунт ротация\n` +
-        `• Бесплатный доступ к Qwen AI\n\n` +
-        `💡 <i>Оба проекта используют MIT лицензию</i>`;
-    
+        '📚 <b>О проекте FreeQwenApi</b>\n\n' +
+        '<b>🌐 Оригинальный проект:</b>\n' +
+        'https://github.com/y13sint/FreeQwenApi\n\n' +
+        '<b>🔧 Мой форк:</b>\n' +
+        'https://github.com/EndyKaufman/FreeQwenApi\n\n' +
+        '<b>⭐ Ключевые отличия форка:</b>\n\n' +
+        '✅ <b>Telegram Bot интеграция</b>\n' +
+        '   - Управление сервисом через Telegram\n' +
+        '   - Загрузка сессий архивами (.zip/.7z)\n' +
+        '   - LLM чат с AI ассистентом\n' +
+        '   - Мониторинг статуса в реальном времени\n\n' +
+        '✅ <b>Прокси поддержка для Telegram</b>\n' +
+        '   - HTTP/HTTPS/SOCKS прокси\n' +
+        '   - Безопасное логирование (без credentials)\n\n' +
+        '✅ <b>Автоматическая распаковка архивов</b>\n' +
+        '   - Backup перед обновлением\n' +
+        '   - Error-tolerant extraction\n' +
+        '   - Health check при запуске\n\n' +
+        '✅ <b>Улучшенная документация</b>\n' +
+        '   - Подробные README на русском\n' +
+        '   - Telegram bot guides\n' +
+        '✅ <b>Production-ready features</b>\n' +
+        '   - Docker оптимизация\n' +
+        '   - Graceful restarts\n' +
+        '   - System health monitoring\n\n' +
+        '<b>📊 Общие возможности:</b>\n' +
+        '• 25+ моделей Qwen (включая Qwen 3.5)\n' +
+        '• OpenAI-совместимый API\n' +
+        '• Генерация изображений\n' +
+        '• Загрузка файлов\n' +
+        '• Streaming ответов (SSE)\n' +
+        '• Мультиаккаунт ротация\n' +
+        '• Бесплатный доступ к Qwen AI\n\n' +
+        '💡 <i>Оба проекта используют MIT лицензию</i>';
+
     await sendMessage(chatId, aboutText);
 }
 
@@ -2089,81 +2089,81 @@ async function sendAboutMessage(chatId) {
  */
 async function sendArchiveInstructions(chatId) {
     const archiveText =
-        `📦 <b>Создание архива сессии для Docker</b>\n\n` +
-        `Эта инструкция поможет создать архив с авторизацией\n` +
-        `для последующей загрузки в Telegram бота.\n\n` +
-        `<b>🔹 Шаг 1: Установка Node.js</b>\n\n` +
-        `<b>Windows:</b>\n` +
-        `• Скачайте с <code>nodejs.org</code>\n` +
-        `• Установите (галочка "Add to PATH")\n\n` +
-        `<b>macOS:</b>\n` +
-        `• <code>brew install node</code>\n` +
-        `• Или скачайте с <code>nodejs.org</code>\n\n` +
-        `<b>Linux (Ubuntu/Debian):</b>\n` +
-        `• <code>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -</code>\n` +
-        `• <code>sudo apt install -y nodejs</code>\n\n` +
-        `<b>🔹 Шаг 2: Скачивание проекта</b>\n\n` +
-        `<b>Способ A: Git (если установлен):</b>\n` +
-        `<pre>\n` +
-        `git clone https://github.com/EndyKaufman/FreeQwenApi\n` +
-        `cd FreeQwenApi\n` +
-        `npm install\n` +
-        `</pre>\n\n` +
-        `<b>Способ B: Без Git (ZIP архив):</b>\n` +
-        `1. Откройте: https://github.com/EndyKaufman/FreeQwenApi\n` +
-        `2. Нажмите зелёную кнопку <b>"&lt;&gt; Code"</b>\n` +
-        `3. Выберите <b>"Download ZIP"</b>\n` +
-        `4. Распакуйте архив\n` +
-        `5. Откройте терминал в папке проекта\n` +
-        `6. <code>npm install</code>\n\n` +
-        `💡 <i>Этот способ не требует установки Git!</i>\n\n` +
-        `<b>🔹 Шаг 3: Создание архива сессии</b>\n\n` +
-        `<pre>\n` +
-        `npm run create-session-archive\n` +
-        `</pre>\n\n` +
-        `<b>Что произойдет:</b>\n` +
-        `1. Откроется браузер\n` +
-        `2. Войдите в Qwen (GitHub/Google/email)\n` +
-        `3. Нажмите ENTER в консоли\n` +
-        `4. Сессия сохранится\n` +
-        `5. Создется ZIP архив\n\n` +
-        `<b>🔹 Шаг 4: Отправка в Telegram бота</b>\n\n` +
-        `1. Откройте нашего бота\n` +
-        `2. Нажмите 📎 (скрепка)\n` +
-        `3. Выберите <b>"Файл"</b> (НЕ "Фото"!)\n` +
-        `4. Выберите <code>session_backup_*.zip</code>\n` +
-        `5. Отправьте\n` +
-        `6. Дождитесь: <code>✅ Архив распакован</code>\n\n` +
-        `<b>🔹 Альтернатива: Ручной способ</b>\n\n` +
-        `Если <code>npm run</code> не работает:\n\n` +
-        `<b>Windows PowerShell:</b>\n` +
-        `<pre>\n` +
-        `node scripts/createSessionArchive.js\n` +
-        `</pre>\n\n` +
-        `<b>Linux/macOS:</b>\n` +
-        `<pre>\n` +
-        `node scripts/createSessionArchive.js\n` +
-        `</pre>\n\n` +
-        `<b>🔹 Структура архива:</b>\n\n` +
-        `<pre>\n` +
-        `session/\n` +
-        `├── accounts/\n` +
-        `│   ├── acc_123456/\n` +
-        `│   │   ├── token.txt\n` +
-        `│   │   └── cookies.json\n` +
-        `│   └── acc_789012/\n` +
-        `│       ├── token.txt\n` +
-        `│       └── cookies.json\n` +
-        `└── tokens.json\n` +
-        `</pre>\n\n` +
-        `<b>⚠️ Важно:</b>\n` +
-        `• <code>cookies.json</code> обязателен!\n` +
-        `• Без cookies сессия не продлится\n` +
-        `• Архив должен содержать папку <code>session/</code>\n\n` +
-        `<b>🆘 Проблемы?</b>\n` +
-        `• GitHub: https://github.com/EndyKaufman/FreeQwenApi\n` +
-        `• Используйте /help для списка команд`;
-    
+        '📦 <b>Создание архива сессии для Docker</b>\n\n' +
+        'Эта инструкция поможет создать архив с авторизацией\n' +
+        'для последующей загрузки в Telegram бота.\n\n' +
+        '<b>🔹 Шаг 1: Установка Node.js</b>\n\n' +
+        '<b>Windows:</b>\n' +
+        '• Скачайте с <code>nodejs.org</code>\n' +
+        '• Установите (галочка "Add to PATH")\n\n' +
+        '<b>macOS:</b>\n' +
+        '• <code>brew install node</code>\n' +
+        '• Или скачайте с <code>nodejs.org</code>\n\n' +
+        '<b>Linux (Ubuntu/Debian):</b>\n' +
+        '• <code>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -</code>\n' +
+        '• <code>sudo apt install -y nodejs</code>\n\n' +
+        '<b>🔹 Шаг 2: Скачивание проекта</b>\n\n' +
+        '<b>Способ A: Git (если установлен):</b>\n' +
+        '<pre>\n' +
+        'git clone https://github.com/EndyKaufman/FreeQwenApi\n' +
+        'cd FreeQwenApi\n' +
+        'npm install\n' +
+        '</pre>\n\n' +
+        '<b>Способ B: Без Git (ZIP архив):</b>\n' +
+        '1. Откройте: https://github.com/EndyKaufman/FreeQwenApi\n' +
+        '2. Нажмите зелёную кнопку <b>"&lt;&gt; Code"</b>\n' +
+        '3. Выберите <b>"Download ZIP"</b>\n' +
+        '4. Распакуйте архив\n' +
+        '5. Откройте терминал в папке проекта\n' +
+        '6. <code>npm install</code>\n\n' +
+        '💡 <i>Этот способ не требует установки Git!</i>\n\n' +
+        '<b>🔹 Шаг 3: Создание архива сессии</b>\n\n' +
+        '<pre>\n' +
+        'npm run create-session-archive\n' +
+        '</pre>\n\n' +
+        '<b>Что произойдет:</b>\n' +
+        '1. Откроется браузер\n' +
+        '2. Войдите в Qwen (GitHub/Google/email)\n' +
+        '3. Нажмите ENTER в консоли\n' +
+        '4. Сессия сохранится\n' +
+        '5. Создется ZIP архив\n\n' +
+        '<b>🔹 Шаг 4: Отправка в Telegram бота</b>\n\n' +
+        '1. Откройте нашего бота\n' +
+        '2. Нажмите 📎 (скрепка)\n' +
+        '3. Выберите <b>"Файл"</b> (НЕ "Фото"!)\n' +
+        '4. Выберите <code>session_backup_*.zip</code>\n' +
+        '5. Отправьте\n' +
+        '6. Дождитесь: <code>✅ Архив распакован</code>\n\n' +
+        '<b>🔹 Альтернатива: Ручной способ</b>\n\n' +
+        'Если <code>npm run</code> не работает:\n\n' +
+        '<b>Windows PowerShell:</b>\n' +
+        '<pre>\n' +
+        'node scripts/createSessionArchive.js\n' +
+        '</pre>\n\n' +
+        '<b>Linux/macOS:</b>\n' +
+        '<pre>\n' +
+        'node scripts/createSessionArchive.js\n' +
+        '</pre>\n\n' +
+        '<b>🔹 Структура архива:</b>\n\n' +
+        '<pre>\n' +
+        'session/\n' +
+        '├── accounts/\n' +
+        '│   ├── acc_123456/\n' +
+        '│   │   ├── token.txt\n' +
+        '│   │   └── cookies.json\n' +
+        '│   └── acc_789012/\n' +
+        '│       ├── token.txt\n' +
+        '│       └── cookies.json\n' +
+        '└── tokens.json\n' +
+        '</pre>\n\n' +
+        '<b>⚠️ Важно:</b>\n' +
+        '• <code>cookies.json</code> обязателен!\n' +
+        '• Без cookies сессия не продлится\n' +
+        '• Архив должен содержать папку <code>session/</code>\n\n' +
+        '<b>🆘 Проблемы?</b>\n' +
+        '• GitHub: https://github.com/EndyKaufman/FreeQwenApi\n' +
+        '• Используйте /help для списка команд';
+
     await sendMessage(chatId, archiveText);
 }
 
@@ -2172,92 +2172,92 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         // Получаем статус бота
         const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
         const botStarted = !!telegramToken;
-        
+
         // Проверяем все подсистемы (не отправляем автоматически, так как sendStatusMessage отправит сам)
         const checks = await checkAllSubsystems(botStarted, false);
-        
+
         // Формируем сообщение с统一的格式
         const reportLines = [];
 
         // Заголовок
         if (isScheduled) {
             const now = new Date();
-            const timeStr = now.toLocaleString('ru-RU', { 
-                day: '2-digit', 
-                month: '2-digit', 
+            const timeStr = now.toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
                 year: 'numeric',
-                hour: '2-digit', 
-                minute: '2-digit' 
+                hour: '2-digit',
+                minute: '2-digit'
             });
             reportLines.push(`⏰ <b>Плановая проверка</b> (${timeStr})\n`);
         } else {
-            reportLines.push(`🚀 <b>Сервис запущен!</b>\n`);
+            reportLines.push('🚀 <b>Сервис запущен!</b>\n');
         }
 
         // Группа 1: Основные компоненты
-        reportLines.push(`<b>🔑 Основные компоненты:</b>`);
-        const mainComponents = checks.filter(c => 
-            c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') || 
+        reportLines.push('<b>🔑 Основные компоненты:</b>');
+        const mainComponents = checks.filter((c) =>
+            c.name.includes('Session') || c.name.includes('Токены') || c.name.includes('Telegram') ||
             c.name.includes('Токен ') || c.name.includes('AI') || c.name.includes('Ответ')
         );
-        mainComponents.forEach(check => {
+        mainComponents.forEach((check) => {
             reportLines.push(`${check.name}: ${check.details}`);
         });
 
         reportLines.push('');
 
         // Группа 2: Инфраструктура
-        reportLines.push(`<b>🏗️ Инфраструктура:</b>`);
-        const infrastructure = checks.filter(c => 
+        reportLines.push('<b>🏗️ Инфраструктура:</b>');
+        const infrastructure = checks.filter((c) =>
             c.name.includes('Прокси') || c.name.includes('Uploads') || c.name.includes('Логирование')
         );
-        infrastructure.forEach(check => {
+        infrastructure.forEach((check) => {
             reportLines.push(`${check.name}: ${check.details}`);
         });
 
         reportLines.push('');
 
         // Группа 3: Инструменты
-        reportLines.push(`<b>🔧 Инструменты:</b>`);
-        const tools = checks.filter(c => 
+        reportLines.push('<b>🔧 Инструменты:</b>');
+        const tools = checks.filter((c) =>
             c.name.includes('p7zip')
         );
-        tools.forEach(check => {
+        tools.forEach((check) => {
             reportLines.push(`${check.name}: ${check.details}`);
         });
 
         reportLines.push('');
-        reportLines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        reportLines.push('━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         // Итоговый статус
         const tokens = loadTokens();
         const hasTokens = tokens.length > 0;
-        const allOk = checks.every(c => c.status);
-        
+        const allOk = checks.every((c) => c.status);
+
         if (hasTokens && allOk) {
-            reportLines.push(`✅ <b>Все системы работают</b>`);
+            reportLines.push('✅ <b>Все системы работают</b>');
         } else if (!hasTokens) {
-            reportLines.push(`⚠️ <b>Режим ожидания архива</b>`);
-            reportLines.push(`📦 Отправьте архив с сессиями`);
+            reportLines.push('⚠️ <b>Режим ожидания архива</b>');
+            reportLines.push('📦 Отправьте архив с сессиями');
         } else {
-            reportLines.push(`⚠️ <b>Есть проблемы</b>`);
+            reportLines.push('⚠️ <b>Есть проблемы</b>');
         }
 
         // Ссылки
         reportLines.push(`\n🌐 API: http://localhost:${process.env.PORT || 3264}`);
         reportLines.push(`📖 Docs: http://localhost:${process.env.PORT || 3264}/api`);
-        
+
         // Репозиторий
-        reportLines.push(`\n📚 <b>Репозиторий:</b>`);
-        reportLines.push(`🔗 GitHub: https://github.com/EndyKaufman/FreeQwenApi`);
-        reportLines.push(`⭐ Оригинал: https://github.com/y1n7sint/FreeQwenApi`);
-        reportLines.push(`🐳 Docker: https://hub.docker.com/r/endykaufman/qwen-api-proxy`);
-        
+        reportLines.push('\n📚 <b>Репозиторий:</b>');
+        reportLines.push('🔗 GitHub: https://github.com/EndyKaufman/FreeQwenApi');
+        reportLines.push('⭐ Оригинал: https://github.com/y1n7sint/FreeQwenApi');
+        reportLines.push('🐳 Docker: https://hub.docker.com/r/endykaufman/qwen-api-proxy');
+
         // Справка
-        reportLines.push(`\n💡 <b>Справка:</b>`);
-        reportLines.push(`📝 Используйте /help для списка команд`);
-        reportLines.push(`🔍 Используйте /status для проверки состояния`);
-        reportLines.push(`🤖 Используйте /chat для включения LLM режима`);
+        reportLines.push('\n💡 <b>Справка:</b>');
+        reportLines.push('📝 Используйте /help для списка команд');
+        reportLines.push('🔍 Используйте /status для проверки состояния');
+        reportLines.push('🤖 Используйте /chat для включения LLM режима');
 
         const report = reportLines.join('\n');
         await sendMessage(chatId, report);
@@ -2272,7 +2272,7 @@ async function sendStatusMessage(chatId, isScheduled = false) {
  */
 async function handleRestart(chatId) {
     await sendMessage(chatId, '🔄 Перезапуск сервиса...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     await gracefulRestart(chatId);
 }
 
@@ -2287,11 +2287,11 @@ async function handleExtendSession(chatId) {
         const { loadSession, saveAuthToken } = await import('../browser/session.js');
         const { loadTokens, saveTokens } = await import('../api/tokenManager.js');
         const { CHAT_PAGE_URL } = await import('../config.js');
-        
+
         const tokens = loadTokens();
-        
+
         if (tokens.length === 0) {
-            await sendMessage(chatId, 
+            await sendMessage(chatId,
                 '⚠️ <b>Нет аккаунтов</b>\n\n' +
                 'Сначала создайте сессию:\n' +
                 '1. Запустите <code>npm run create-session-archive</code>\n' +
@@ -2302,21 +2302,21 @@ async function handleExtendSession(chatId) {
 
         // Фильтруем только действительные токены для продления
         const now = Date.now();
-        const validTokens = tokens.filter(t => {
-            if (t.invalid) return false;
-            if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
-            if (t.expiryTime && t.expiryTime <= now) return false;
+        const validTokens = tokens.filter((t) => {
+            if (t.invalid) { return false; }
+            if (t.resetAt && new Date(t.resetAt).getTime() > now) { return false; }
+            if (t.expiryTime && t.expiryTime <= now) { return false; }
             // Проверяем наличие cookies.json
             const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', t.id, 'cookies.json');
-            if (!fs.existsSync(cookiesPath)) return false;
+            if (!fs.existsSync(cookiesPath)) { return false; }
             return true;
         });
 
         const expiredCount = tokens.length - validTokens.length;
 
         if (validTokens.length === 0) {
-            await sendMessage(chatId, 
-                `⚠️ <b>Нет действительных токенов</b>\n\n` +
+            await sendMessage(chatId,
+                '⚠️ <b>Нет действительных токенов</b>\n\n' +
                 `Все ${tokens.length} токенов истекли.\n\n` +
                 'Создайте новые сессии:\n' +
                 '1. Запустите <code>npm run create-session-archive</code>\n' +
@@ -2325,15 +2325,15 @@ async function handleExtendSession(chatId) {
             return;
         }
 
-        let startMessage = `🔄 <b>Продление сессий...</b>\n\n` +
+        let startMessage = '🔄 <b>Продление сессий...</b>\n\n' +
             `📊 Найдено аккаунтов: ${validTokens.length}`;
-        
+
         if (expiredCount > 0) {
             startMessage += ` (пропущено ${expiredCount} истекших)`;
         }
-        
-        startMessage += `\n⏳ Это может занять несколько минут...\n` +
-            `🕐 Примерное время: ~2-4 минуты на аккаунт`;
+
+        startMessage += '\n⏳ Это может занять несколько минут...\n' +
+            '🕐 Примерное время: ~2-4 минуты на аккаунт';
 
         await sendMessage(chatId, startMessage);
 
@@ -2345,7 +2345,7 @@ async function handleExtendSession(chatId) {
             try {
                 // Показываем прогресс
                 const currentNum = results.length + 1;
-                await sendMessage(chatId, 
+                await sendMessage(chatId,
                     `🔄 Обрабатываю аккаунт ${currentNum}/${tokens.length}...\n` +
                     `👤 ${token.id}`
                 );
@@ -2359,7 +2359,7 @@ async function handleExtendSession(chatId) {
 
                 // Загружаем cookies для аккаунта
                 const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', token.id, 'cookies.json');
-                
+
                 if (!fs.existsSync(cookiesPath)) {
                     results.push(`❌ ${token.id} - нет cookies`);
                     failCount++;
@@ -2372,26 +2372,26 @@ async function handleExtendSession(chatId) {
 
                 // Открываем браузер в headless режиме
                 const browserOk = await initBrowser(false, true);
-                
+
                 if (!browserOk) {
                     throw new Error('Не удалось открыть браузер');
                 }
 
                 const ctx = getBrowserContext();
-                
+
                 // Загружаем cookies
                 if (ctx && typeof ctx.setCookie === 'function') {
                     await ctx.setCookie(...cookies);
                 }
 
                 // Переходим на Qwen для обновления сессии (3 минуты таймаут)
-                await ctx.goto(CHAT_PAGE_URL, { 
-                    waitUntil: 'domcontentloaded', 
+                await ctx.goto(CHAT_PAGE_URL, {
+                    waitUntil: 'domcontentloaded',
                     timeout: 180000 // 3 минуты
                 });
 
                 // Ждем загрузки страницы (1 минута для полной загрузки)
-                await new Promise(resolve => setTimeout(resolve, 60000));
+                await new Promise((resolve) => setTimeout(resolve, 60000));
 
                 // Извлекаем новый токен
                 const newToken = await extractAuthToken(ctx, true);
@@ -2409,7 +2409,7 @@ async function handleExtendSession(chatId) {
                 saveAuthToken(newToken);
 
                 // Обновляем tokens.json
-                const tokenIndex = tokens.findIndex(t => t.id === token.id);
+                const tokenIndex = tokens.findIndex((t) => t.id === token.id);
                 if (tokenIndex !== -1) {
                     tokens[tokenIndex].token = newToken;
                     tokens[tokenIndex].resetAt = null;
@@ -2430,14 +2430,14 @@ async function handleExtendSession(chatId) {
 
                 // Небольшая задержка между аккаунтами
                 if (successCount < tokens.length) {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
                 }
 
             } catch (error) {
                 logError(`Ошибка продления ${token.id}`, error);
                 results.push(`❌ ${token.id} - ${error.message}`);
                 failCount++;
-                
+
                 // Убеждаемся что браузер закрыт
                 try {
                     await shutdownBrowser();
@@ -2448,31 +2448,31 @@ async function handleExtendSession(chatId) {
         }
 
         // Формируем отчет
-        let report = `📋 <b>Результат продления сессий</b>\n\n`;
+        let report = '📋 <b>Результат продления сессий</b>\n\n';
         report += `✅ Успешно: ${successCount}\n`;
         report += `❌ Ошибки: ${failCount}\n\n`;
-        report += `<b>Детали:</b>\n`;
+        report += '<b>Детали:</b>\n';
         report += results.join('\n');
 
         if (successCount > 0) {
-            report += `\n\n🎉 Сессии продлены!`;
+            report += '\n\n🎉 Сессии продлены!';
         }
 
         if (failCount > 0 && successCount === 0) {
-            report += `\n\n⚠️ Все сессии не удалось продлить.\n`;
-            
+            report += '\n\n⚠️ Все сессии не удалось продлить.\n';
+
             // Check if the issue is missing cookies
-            const missingCookiesCount = results.filter(r => r.includes('нет cookies')).length;
-            
+            const missingCookiesCount = results.filter((r) => r.includes('нет cookies')).length;
+
             if (missingCookiesCount > 0) {
-                report += `\n📦 <b>Причина: отсутствуют cookies.json</b>\n`;
-                report += `\nДля создания новой сессии с cookies:\n`;
-                report += `1. Запустите: <code>npm run create-session-archive</code>\n`;
-                report += `2. Войдите в систему в браузере\n`;
-                report += `3. Бот автоматически сохранит cookies и токен\n`;
-                report += `\n💡 Или отправьте архив с сессиями через бота`;
+                report += '\n📦 <b>Причина: отсутствуют cookies.json</b>\n';
+                report += '\nДля создания новой сессии с cookies:\n';
+                report += '1. Запустите: <code>npm run create-session-archive</code>\n';
+                report += '2. Войдите в систему в браузере\n';
+                report += '3. Бот автоматически сохранит cookies и токен\n';
+                report += '\n💡 Или отправьте архив с сессиями через бота';
             } else {
-                report += `\nВыполните: <code>npm run create-session-archive</code>`;
+                report += '\nВыполните: <code>npm run create-session-archive</code>';
             }
         }
 
@@ -2480,12 +2480,12 @@ async function handleExtendSession(chatId) {
 
     } catch (error) {
         logError('Ошибка при продлении сессий', error);
-        await sendMessage(chatId, 
-            `❌ <b>Ошибка продления сессий</b>\n\n` +
+        await sendMessage(chatId,
+            '❌ <b>Ошибка продления сессий</b>\n\n' +
             `Ошибка: ${error.message}\n\n` +
-            `Попробуйте:\n` +
-            `1. <code>npm run create-session-archive</code>\n` +
-            `2. Или отправьте архив с сессиями`
+            'Попробуйте:\n' +
+            '1. <code>npm run create-session-archive</code>\n' +
+            '2. Или отправьте архив с сессиями'
         );
     }
 }
@@ -2501,7 +2501,7 @@ async function sendScheduledStatusToAdmins() {
         }
 
         const adminUserIds = TELEGRAM_USER_IDS;
-        
+
         if (adminUserIds.length === 0) {
             logInfo('Нет админов для отправки плановой проверки');
             return;
@@ -2527,9 +2527,9 @@ async function sendScheduledStatusToAdmins() {
  */
 export function startPeriodicHealthCheck() {
     const FOUR_HOURS = 4 * 60 * 60 * 1000; // 4 часа в миллисекундах
-    
-    logInfo(`Запуск периодической проверки здоровья каждые 4 часа`);
-    
+
+    logInfo('Запуск периодической проверки здоровья каждые 4 часа');
+
     setInterval(async () => {
         logInfo('Выполняется плановая проверка здоровья...');
         await sendScheduledStatusToAdmins();
@@ -2580,6 +2580,7 @@ export async function notifyAllUsers(message) {
  * Обработчик LLM чата - отправляет сообщение в Qwen API
  */
 async function handleLLMChat(chatId, userMessage) {
+    let context;
     try {
         // Показываем индикатор набора текста
         await sendChatAction(chatId, 'typing');
@@ -2588,7 +2589,8 @@ async function handleLLMChat(chatId, userMessage) {
         if (!chatContexts.has(chatId)) {
             chatContexts.set(chatId, []);
         }
-        const context = chatContexts.get(chatId);
+
+        context = chatContexts.get(chatId);
 
         // Добавляем сообщение пользователя в контекст
         context.push({ role: 'user', content: userMessage });
@@ -2624,17 +2626,17 @@ async function handleLLMChat(chatId, userMessage) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-chat-id': `telegram-${chatId}`  // Уникальный ID для каждого Telegram чата
+                'x-chat-id': `telegram-${chatId}` // Уникальный ID для каждого Telegram чата
             },
             body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
             const errorText = await response.text();
-            
+
             // Логируем полную ошибку
             logError(`❌ LLM Chat: Qwen API error ${response.status}`, errorText);
-            
+
             // Пытаемся распарсить JSON для лучшего форматирования
             let errorJson;
             try {
@@ -2642,16 +2644,16 @@ async function handleLLMChat(chatId, userMessage) {
             } catch {
                 errorJson = { error: errorText };
             }
-            
+
             // Формируем сообщение об ошибке с полным JSON
             const escapedJson = escapeHtmlForCode(JSON.stringify(errorJson, null, 2));
-            const errorMessage = 
-                `❌ <b>Ошибка Qwen API</b>\n\n` +
+            const errorMessage =
+                '❌ <b>Ошибка Qwen API</b>\n\n' +
                 `Статус: <code>${response.status}</code>\n\n` +
-                `<b>Полный ответ:</b>\n` +
+                '<b>Полный ответ:</b>\n' +
                 `<pre>${escapedJson}</pre>\n\n` +
-                `💡 Попробуйте еще раз или используйте /clear`;
-            
+                '💡 Попробуйте еще раз или используйте /clear';
+
             // Отправляем ошибку (разбиваем если длинная)
             if (errorMessage.length > 4000) {
                 const chunks = splitMessage(errorMessage, 4000);
@@ -2661,12 +2663,12 @@ async function handleLLMChat(chatId, userMessage) {
             } else {
                 await sendMessage(chatId, errorMessage);
             }
-            
+
             // Удаляем последнее сообщение пользователя из контекста (оно не было обработано)
             if (context.length > 0) {
                 context.pop();
             }
-            
+
             return; // Выходим, не выбрасывая ошибку
         }
 
@@ -2693,17 +2695,17 @@ async function handleLLMChat(chatId, userMessage) {
 
     } catch (error) {
         logError('❌ LLM Chat: Ошибка', error);
-        
+
         // Формируем сообщение об ошибке с деталями
         const escapedStack = escapeHtmlForCode(error.stack || 'Stack trace unavailable');
-        const errorMessage = 
-            `❌ <b>Ошибка при обработке запроса</b>\n\n` +
+        const errorMessage =
+            '❌ <b>Ошибка при обработке запроса</b>\n\n' +
             `<b>Тип:</b> ${error.name || 'Unknown'}\n` +
             `<b>Сообщение:</b> ${escapeHtml(error.message)}\n\n` +
-            `<b>Стек:</b>\n` +
+            '<b>Стек:</b>\n' +
             `<pre>${escapedStack}</pre>\n\n` +
-            `💡 Попробуйте еще раз или используйте /clear для очистки контекста.`;
-        
+            '💡 Попробуйте еще раз или используйте /clear для очистки контекста.';
+
         // Отправляем ошибку (разбиваем если длинная)
         if (errorMessage.length > 4000) {
             const chunks = splitMessage(errorMessage, 4000);
@@ -2713,7 +2715,7 @@ async function handleLLMChat(chatId, userMessage) {
         } else {
             await sendMessage(chatId, errorMessage);
         }
-        
+
         // Удаляем последнее сообщение пользователя из контекста
         if (context && context.length > 0) {
             context.pop();
@@ -2728,18 +2730,18 @@ async function toggleLLMChat(chatId) {
     // Проверяем есть ли аккаунты
     if (!hasAccounts()) {
         await sendMessage(chatId,
-            `❌ <b>LLM чат недоступен</b>\n\n` +
-            `🔒 Для работы AI ассистента нужны аккаунты\n` +
-            `📦 Отправьте архив с сессиями через бота\n` +
-            `💡 После загрузки аккаунтов функции будут доступны`
+            '❌ <b>LLM чат недоступен</b>\n\n' +
+            '🔒 Для работы AI ассистента нужны аккаунты\n' +
+            '📦 Отправьте архив с сессиями через бота\n' +
+            '💡 После загрузки аккаунтов функции будут доступны'
         );
-        logInfo(`❌ LLM Chat запрошен, но аккаунты отсутствуют`);
+        logInfo('❌ LLM Chat запрошен, но аккаунты отсутствуют');
         return;
     }
 
     // Если LLM уже включен - выключаем, и наоборот
     llmChatEnabled = !llmChatEnabled;
-    
+
     // Сохраняем состояние LLM чата
     saveBotSettings({
         activeModel: activeModel,
@@ -2753,26 +2755,26 @@ async function toggleLLMChat(chatId) {
         }
 
         await sendMessage(chatId,
-            `✅ <b>LLM чат включен!</b>\n\n` +
-            `🤖 Теперь я отвечаю как AI ассистент.\n` +
+            '✅ <b>LLM чат включен!</b>\n\n' +
+            '🤖 Теперь я отвечаю как AI ассистент.\n' +
             `📝 Модель: ${getModelForChat(chatId)}\n` +
-            `💬 Просто отправляйте сообщения.\n` +
-            `💾 Настройка сохранена\n\n` +
-            `<b>Команды:</b>\n` +
-            `/togglechat - Выключить LLM чат\n` +
-            `/clear - Очистить контекст\n` +
-            `/model - Информация о модели\n` +
-            `/setmodel &lt;название&gt; - Сменить модель\n` +
-            `/help - Все команды бота`
+            '💬 Просто отправляйте сообщения.\n' +
+            '💾 Настройка сохранена\n\n' +
+            '<b>Команды:</b>\n' +
+            '/togglechat - Выключить LLM чат\n' +
+            '/clear - Очистить контекст\n' +
+            '/model - Информация о модели\n' +
+            '/setmodel &lt;название&gt; - Сменить модель\n' +
+            '/help - Все команды бота'
         );
 
         logInfo(`✅ LLM Chat включен для пользователя ${chatId} (сохранено)`);
     } else {
         await sendMessage(chatId,
-            `❌ <b>LLM чат выключен</b>\n\n` +
-            `🔧 Возвращен в режим управления ботом.\n` +
-            `💾 Настройка сохранена\n` +
-            `Используйте /togglechat чтобы включить снова.`
+            '❌ <b>LLM чат выключен</b>\n\n' +
+            '🔧 Возвращен в режим управления ботом.\n' +
+            '💾 Настройка сохранена\n' +
+            'Используйте /togglechat чтобы включить снова.'
         );
 
         logInfo(`❌ LLM Chat выключен для пользователя ${chatId} (сохранено)`);
@@ -2786,15 +2788,15 @@ async function showLLMChatStatus(chatId) {
     const status = llmChatEnabled ? '✅ Включен' : '❌ Выключен';
     const model = getModelForChat(chatId);
     const context = chatContexts.get(chatId) || [];
-    
+
     await sendMessage(chatId,
-        `📊 <b>Состояние LLM чата</b>\n\n` +
+        '📊 <b>Состояние LLM чата</b>\n\n' +
         `🔧 Статус: ${status}\n` +
         `🤖 Модель: <code>${model}</code>\n` +
         `💬 Сообщений в контексте: ${context.length}\n\n` +
         `💡 Используйте /togglechat чтобы ${llmChatEnabled ? 'выключить' : 'включить'} LLM чат`
     );
-    
+
     logInfo(`📊 Проверка статуса LLM чата: ${llmChatEnabled ? 'включен' : 'выключен'}`);
 }
 
@@ -2803,44 +2805,44 @@ async function showLLMChatStatus(chatId) {
  */
 async function handleSetModel(chatId, text) {
     const parts = text.trim().split(/\s+/);
-    
+
     // Если нет аргумента - показываем текущую модель
     if (parts.length < 2) {
         await showModelInfo(chatId);
         return;
     }
-    
+
     const requestedModel = parts[1].trim();
     const { getAvailableModelsFromFile } = await import('../api/chat.js');
     const availableModels = getAvailableModelsFromFile();
-    
+
     // Проверяем что модель существует
     if (!availableModels.includes(requestedModel)) {
         await sendMessage(chatId,
-            `❌ <b>Модель не найдена</b>\n\n` +
+            '❌ <b>Модель не найдена</b>\n\n' +
             `Модель <code>${requestedModel}</code> не найдена в списке доступных.\n\n` +
-            `<b>Используйте /model для списка доступных моделей</b>`
+            '<b>Используйте /model для списка доступных моделей</b>'
         );
         logWarn(`❌ Пользователь ${chatId} попытался установить несуществующую модель: ${requestedModel}`);
         return;
     }
-    
+
     // Устанавливаем глобальную активную модель
     activeModel = requestedModel;
-    
+
     // Сохраняем в файл
     const settings = loadBotSettings();
     settings.activeModel = requestedModel;
     saveBotSettings(settings);
-    
+
     await sendMessage(chatId,
-        `✅ <b>Модель изменена!</b>\n\n` +
+        '✅ <b>Модель изменена!</b>\n\n' +
         `🤖 Новая модель: <code>${requestedModel}</code>\n` +
-        `💬 Будет использоваться во всех чатах\n` +
-        `💾 Настройка сохранена\n\n` +
-        `💡 Для сброса используйте /clear`
+        '💬 Будет использоваться во всех чатах\n' +
+        '💾 Настройка сохранена\n\n' +
+        '💡 Для сброса используйте /clear'
     );
-    
+
     logInfo(`✅ Установлена глобальная модель: ${requestedModel} (сохранено)`);
 }
 
@@ -2853,7 +2855,7 @@ function getModelForChat(chatId) {
     if (activeModel) {
         return activeModel;
     }
-    
+
     // Возвращаем модель из настроек бота
     return getBotSettingsModel();
 }
@@ -2877,15 +2879,15 @@ async function showModelInfo(chatId) {
     const availableModels = getAvailableModelsFromFile();
 
     const message =
-        `📊 <b>Информация о модели</b>\n\n` +
+        '📊 <b>Информация о модели</b>\n\n' +
         `🤖 Активная модель: <code>${currentModel}</code>\n` +
         `💬 Сообщений в контексте: ${context.length}\n` +
         `🔧 LLM чат: ${llmChatEnabled ? '✅ Включен' : '❌ Выключен'}\n\n` +
-        `<b>Доступные модели:</b>\n` +
-        availableModels.map(m => `<code>${m}</code>`).join(', ') +
-        `\n\n💡 Для смены модели используйте:\n` +
-        `/setmodel &lt;название_модели&gt;\n` +
-        `Например: /setmodel qwen3-max`;
+        '<b>Доступные модели:</b>\n' +
+        availableModels.map((m) => `<code>${m}</code>`).join(', ') +
+        '\n\n💡 Для смены модели используйте:\n' +
+        '/setmodel &lt;название_модели&gt;\n' +
+        'Например: /setmodel qwen3-max';
 
     await sendMessage(chatId, message);
 }
@@ -2897,8 +2899,8 @@ async function clearChatContext(chatId) {
     chatContexts.set(chatId, []);
 
     await sendMessage(chatId,
-        `🗑️ <b>Контекст чата очищен</b>\n\n` +
-        `💬 Новая история чата начата.\n` +
+        '🗑️ <b>Контекст чата очищен</b>\n\n' +
+        '💬 Новая история чата начата.\n' +
         `🤖 LLM чат: ${llmChatEnabled ? '✅ Включен' : '❌ Выключен'}`
     );
 
@@ -2958,7 +2960,7 @@ function splitMessage(text, maxLength) {
  * Экранирует HTML специальные символы
  */
 function escapeHtml(text) {
-    if (!text) return '';
+    if (!text) { return ''; }
     return String(text)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -2969,7 +2971,7 @@ function escapeHtml(text) {
  * Экранирует текст для вставки в <pre> тег (только < и &)
  */
 function escapeHtmlForCode(text) {
-    if (!text) return '';
+    if (!text) { return ''; }
     return String(text)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')

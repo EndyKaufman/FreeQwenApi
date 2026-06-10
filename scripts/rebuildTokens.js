@@ -2,10 +2,10 @@
 
 /**
  * Rebuild tokens.json from account directories
- * 
+ *
  * This script scans the session/accounts directory for token.txt files
  * and rebuilds the tokens.json registry.
- * 
+ *
  * Usage:
  *   npm run rebuild-tokens
  *   or
@@ -29,23 +29,23 @@ const TOKENS_FILE = path.join(SESSION_PATH, 'tokens.json');
  */
 function decodeJwtExpiry(token) {
     try {
-        if (!token || typeof token !== 'string') return null;
-        
+        if (!token || typeof token !== 'string') {return null;}
+
         const parts = token.split('.');
-        if (parts.length !== 3) return null;
-        
+        if (parts.length !== 3) {return null;}
+
         let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
         while (base64.length % 4) {
             base64 += '=';
         }
-        
+
         const payload = Buffer.from(base64, 'base64').toString('utf8');
         const decoded = JSON.parse(payload);
-        
+
         if (decoded.exp) {
             return decoded.exp * 1000;
         }
-        
+
         return null;
     } catch (error) {
         return null;
@@ -57,47 +57,47 @@ function decodeJwtExpiry(token) {
  */
 function rebuildTokens() {
     console.log('🔍 Scanning account directories...\n');
-    
+
     if (!fs.existsSync(ACCOUNTS_PATH)) {
         logError(`Accounts directory not found: ${ACCOUNTS_PATH}`);
         process.exit(1);
     }
-    
-    const accounts = fs.readdirSync(ACCOUNTS_PATH).filter(dir => {
+
+    const accounts = fs.readdirSync(ACCOUNTS_PATH).filter((dir) => {
         return fs.statSync(path.join(ACCOUNTS_PATH, dir)).isDirectory();
     });
-    
+
     if (accounts.length === 0) {
         logWarn('No account directories found');
         process.exit(0);
     }
-    
+
     console.log(`📁 Found ${accounts.length} account(s):\n`);
-    
+
     const tokens = [];
     const now = Date.now();
-    
+
     for (const accountId of accounts) {
         const accountDir = path.join(ACCOUNTS_PATH, accountId);
         const tokenFile = path.join(accountDir, 'token.txt');
-        
+
         if (!fs.existsSync(tokenFile)) {
             logWarn(`  ⚠️  ${accountId}: No token.txt file`);
             continue;
         }
-        
+
         try {
             const token = fs.readFileSync(tokenFile, 'utf8').trim();
-            
+
             if (!token) {
                 logWarn(`  ⚠️  ${accountId}: Empty token`);
                 continue;
             }
-            
+
             // Decode JWT expiry
             const expiryTime = decodeJwtExpiry(token);
             let expiryStatus = '✅ Valid';
-            
+
             if (expiryTime) {
                 const timeLeft = expiryTime - now;
                 if (timeLeft <= 0) {
@@ -110,7 +110,7 @@ function rebuildTokens() {
             } else {
                 expiryStatus = '⚠️  No expiry';
             }
-            
+
             // Build token entry
             const tokenEntry = {
                 id: accountId,
@@ -119,29 +119,29 @@ function rebuildTokens() {
                 invalid: false,
                 expiryTime: expiryTime
             };
-            
+
             tokens.push(tokenEntry);
             console.log(`  ✅ ${accountId}: ${expiryStatus}`);
-            
+
         } catch (error) {
             logError(`  ❌ ${accountId}: Error reading token`, error);
         }
     }
-    
-    console.log(`\n📊 Summary:`);
+
+    console.log('\n📊 Summary:');
     console.log(`   Total accounts: ${accounts.length}`);
     console.log(`   Valid tokens: ${tokens.length}`);
-    
+
     // Save tokens.json
     try {
         fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
-        console.log(`\n✅ tokens.json rebuilt successfully!`);
+        console.log('\n✅ tokens.json rebuilt successfully!');
         console.log(`📄 File: ${TOKENS_FILE}`);
     } catch (error) {
         logError('Failed to save tokens.json', error);
         process.exit(1);
     }
-    
+
     // Show token details
     console.log('\n📋 Token Details:');
     tokens.forEach((t, i) => {
@@ -150,7 +150,7 @@ function rebuildTokens() {
         console.log(`   Expires: ${expiryDate}`);
         console.log(`   Token: ${t.token.substring(0, 50)}...`);
     });
-    
+
     console.log('\n✨ Done! You can now start the server.');
 }
 

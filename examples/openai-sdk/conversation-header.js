@@ -5,7 +5,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({
     baseURL: 'http://localhost:3264/api',
-    apiKey: 'dummy-key', // Ключ не используется, но требуется для SDK
+    apiKey: 'dummy-key' // Ключ не используется, но требуется для SDK
 });
 
 async function conversationWithHeader() {
@@ -14,12 +14,12 @@ async function conversationWithHeader() {
 
         // Каждый уникальный x-chat-id создает отдельный диалог
         const conversationId1 = 'my-conversation-001';
-        
+
         const response1 = await openai.chat.completions.create({
             messages: [
                 { role: 'user', content: 'Меня зовут Алексей. Запомни это.' }
             ],
-            model: 'qwen-max-latest',
+            model: 'qwen-max-latest'
         }, {
             headers: {
                 'x-chat-id': conversationId1
@@ -37,7 +37,7 @@ async function conversationWithHeader() {
             messages: [
                 { role: 'user', content: 'Как меня зовут?' }
             ],
-            model: 'qwen-max-latest',
+            model: 'qwen-max-latest'
         }, {
             headers: {
                 'x-chat-id': conversationId1
@@ -50,12 +50,12 @@ async function conversationWithHeader() {
 
         // Новый x-chat-id - создается отдельный диалог
         const conversationId2 = 'my-conversation-002';
-        
+
         const response3 = await openai.chat.completions.create({
             messages: [
                 { role: 'user', content: 'Как меня зовут?' }
             ],
-            model: 'qwen-max-latest',
+            model: 'qwen-max-latest'
         }, {
             headers: {
                 'x-chat-id': conversationId2

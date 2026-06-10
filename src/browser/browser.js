@@ -18,10 +18,10 @@ let browserInstance = null;
 let browserContext = null;
 export let isAuthenticated = false;
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function initBrowser(visibleMode = true, skipManualRestart = false) {
-    if (browserInstance) return true;
+    if (browserInstance) {return true;}
 
     logInfo('Инициализация браузера с Puppeteer Stealth...');
     try {
@@ -117,11 +117,11 @@ async function saveSessionPuppeteer(page) {
     try {
         const cookies = await page.cookies();
         const sessionDir = path.join(process.cwd(), SESSION_DIR, ACCOUNTS_DIR);
-        if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
+        if (!fs.existsSync(sessionDir)) {fs.mkdirSync(sessionDir, { recursive: true });}
 
         const accountId = `acc_${Date.now()}`;
         const accountDir = path.join(sessionDir, accountId);
-        if (!fs.existsSync(accountDir)) fs.mkdirSync(accountDir, { recursive: true });
+        if (!fs.existsSync(accountDir)) {fs.mkdirSync(accountDir, { recursive: true });}
 
         fs.writeFileSync(path.join(accountDir, 'cookies.json'), JSON.stringify(cookies, null, 2));
         logInfo(`Cookies сохранены для аккаунта ${accountId}`);
@@ -151,7 +151,7 @@ async function startManualAuthenticationPuppeteer(page, skipManualRestart) {
         console.log('После успешной авторизации нажмите ENTER для продолжения...');
 
         await new Promise((resolve) => {
-            if (process.stdin.isTTY) process.stdin.setRawMode(false);
+            if (process.stdin.isTTY) {process.stdin.setRawMode(false);}
             process.stdin.resume();
             process.stdin.setEncoding('utf8');
             const onData = (key) => {
@@ -180,7 +180,7 @@ async function startManualAuthenticationPuppeteer(page, skipManualRestart) {
         } else {
             logWarn('Токен не найден в localStorage/sessionStorage');
             logInfo('Попытка извлечь токен из cookies...');
-            const tokenCookie = cookies.find(c => c.name.toLowerCase().includes('token') || c.name.toLowerCase().includes('auth'));
+            const tokenCookie = cookies.find((c) => c.name.toLowerCase().includes('token') || c.name.toLowerCase().includes('auth'));
             if (tokenCookie) {
                 logInfo(`Токен найден в cookie: ${tokenCookie.name}`);
                 saveAuthToken(tokenCookie.value);
@@ -188,12 +188,12 @@ async function startManualAuthenticationPuppeteer(page, skipManualRestart) {
         }
 
         const accountId = await saveSessionPuppeteer(page);
-        if (accountId) logInfo(`Сессия сохранена с ID: ${accountId}`);
+        if (accountId) {logInfo(`Сессия сохранена с ID: ${accountId}`);}
 
         setAuthenticationStatus(true);
         logInfo('Авторизация завершена успешно');
 
-        if (!skipManualRestart) await restartBrowserInHeadlessMode();
+        if (!skipManualRestart) {await restartBrowserInHeadlessMode();}
     } catch (error) {
         logError('Ошибка при ручной авторизации', error);
         throw error;
@@ -216,7 +216,7 @@ export async function shutdownBrowser() {
         if (browserInstance) {
             try {
                 const pages = await browserInstance.pages();
-                for (const page of pages) await page.close().catch(() => {});
+                for (const page of pages) {await page.close().catch(() => {});}
                 await browserInstance.close();
             } catch (e) { logError('Ошибка при закрытии браузера', e); }
         }

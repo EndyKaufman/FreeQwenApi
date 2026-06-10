@@ -16,7 +16,7 @@ function getSessionFilePath(accountId, fileName) {
 }
 
 function ensureDir(dirPath) {
-    if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+    if (!fs.existsSync(dirPath)) {fs.mkdirSync(dirPath, { recursive: true });}
 }
 
 export function initSessionDirectory() {
@@ -91,7 +91,7 @@ export function clearSession(accountId = null) {
         for (const p of paths) {
             if (fs.existsSync(p)) { fs.unlinkSync(p); cleared = true; }
         }
-        if (cleared) logInfo('Сессия очищена');
+        if (cleared) {logInfo('Сессия очищена');}
         return cleared;
     } catch (error) {
         logError('Ошибка при очистке сессии', error);
@@ -103,7 +103,7 @@ export function hasSession(accountId = null) {
     return [
         getSessionFilePath(accountId, 'state.json'),
         getSessionFilePath(accountId, 'cookies.json')
-    ].some(p => fs.existsSync(p));
+    ].some((p) => fs.existsSync(p));
 }
 
 export function saveAuthToken(token) {

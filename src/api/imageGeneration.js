@@ -1,6 +1,6 @@
 // imageGeneration.js - Модуль для генерации изображений через Qwen Image API
 import axios from 'axios';
-import { logInfo, logError, logDebug } from '../logger/index.js';
+import { logInfo, logError, logDebug, logWarn } from '../logger/index.js';
 import { sendMessage } from './chat.js';
 import { uploadFileToQwen } from './fileUpload.js';
 import { IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY } from '../config.js';
@@ -27,7 +27,7 @@ const IMAGE_GENERATION_MODELS = [
 export async function generateImage(prompt, model = 'qwen-image-plus', options = {}) {
     // Определяем режим генерации
     const mode = IMAGE_GENERATION_MODE;
-    
+
     if (mode === 'browser') {
         logInfo('🎨 Генерация изображения через browser mode...');
         return generateImageViaBrowser(prompt, model, options);
@@ -42,7 +42,7 @@ export async function generateImage(prompt, model = 'qwen-image-plus', options =
  */
 async function generateImageViaDashScope(prompt, model = 'qwen-image-plus', options = {}) {
     const apiKey = process.env.DASHSCOPE_API_KEY;
-    
+
     if (!apiKey) {
         logError('API ключ DASHSCOPE_API_KEY не установлен');
         return {
@@ -71,17 +71,17 @@ async function generateImageViaDashScope(prompt, model = 'qwen-image-plus', opti
         // Если есть изображение для image-to-image
         if (options.imagePath) {
             logInfo(`📸 Image-to-image mode: загружаем файл ${options.imagePath}`);
-            
+
             // Загружаем файл в Qwen и получаем URL
             const uploadResult = await uploadFileToQwen(options.imagePath);
-            
+
             // Проверяем успешность загрузки
             if (!uploadResult || uploadResult.success === false) {
                 const errorMsg = uploadResult?.error || 'Unknown error';
                 logError(`❌ Ошибка загрузки файла: ${errorMsg}`);
                 throw new Error(`Не удалось загрузить изображение: ${errorMsg}`);
             }
-            
+
             if (uploadResult.file_url || uploadResult.url) {
                 const fileUrl = uploadResult.file_url || uploadResult.url;
                 logInfo(`✅ Файл загружен: ${fileUrl}`);
@@ -94,7 +94,7 @@ async function generateImageViaDashScope(prompt, model = 'qwen-image-plus', opti
 
         // Асинхронный запрос для Wan моделей
         const isWanModel = model.startsWith('wan');
-        const endpoint = isWanModel 
+        const endpoint = isWanModel
             ? `${DASHSCOPE_API_BASE}/services/aigc/text2image/image-synthesis`
             : `${DASHSCOPE_API_BASE}/services/aigc/text2image/image-synthesis`;
 
@@ -154,17 +154,17 @@ async function generateImageViaBrowser(prompt, model = 'qwen-image-plus', option
         let files = null;
         if (options.imagePath) {
             logInfo(`📸 Image-to-image mode: загружаем файл ${options.imagePath}`);
-            
+
             // Загружаем файл в Qwen и получаем URL
             const uploadResult = await uploadFileToQwen(options.imagePath);
-            
+
             // Проверяем успешность загрузки
             if (!uploadResult || uploadResult.success === false) {
                 const errorMsg = uploadResult?.error || 'Unknown error';
                 logError(`❌ Ошибка загрузки файла: ${errorMsg}`);
                 throw new Error(`Не удалось загрузить изображение: ${errorMsg}`);
             }
-            
+
             if (uploadResult.file_url || uploadResult.url) {
                 const fileUrl = uploadResult.file_url || uploadResult.url;
                 logInfo(`✅ Файл загружен: ${fileUrl}`);
@@ -202,7 +202,7 @@ async function generateImageViaBrowser(prompt, model = 'qwen-image-plus', option
 
         // Извлекаем URL изображения из ответа
         let imageUrl = null;
-        
+
         // Проверяем разные форматы ответа
         if (result.imageUrl) {
             imageUrl = result.imageUrl;
@@ -232,15 +232,15 @@ async function generateImageViaBrowser(prompt, model = 'qwen-image-plus', option
         if (!imageUrl) {
             logError('❌ URL изображения не найден в ответе');
             logDebug('Response:', JSON.stringify(result, null, 2));
-            
+
             // Логируем структуру ошибки для отладки
-            if (result.error) logDebug('result.error exists:', JSON.stringify(result.error));
-            if (result.errorBody) logDebug('result.errorBody exists:', result.errorBody.substring(0, 200));
-            if (result.details) logDebug('result.details exists:', result.details.substring(0, 200));
-            
+            if (result.error) {logDebug('result.error exists:', JSON.stringify(result.error));}
+            if (result.errorBody) {logDebug('result.errorBody exists:', result.errorBody.substring(0, 200));}
+            if (result.details) {logDebug('result.details exists:', result.details.substring(0, 200));}
+
             // Проверяем, есть ли в ответе реальная ошибка
             let errorMessage = 'Image URL not found in response';
-            
+
             // Проверяем формат ошибки API (прямое поле error)
             if (result.error) {
                 // API вернул ошибку
@@ -325,7 +325,7 @@ async function generateImageViaBrowser(prompt, model = 'qwen-image-plus', option
                     // Не JSON, оставляем стандартное сообщение
                 }
             }
-            
+
             return {
                 error: errorMessage,
                 rawResponse: result
@@ -398,14 +398,14 @@ async function pollTaskStatus(taskId, apiKey) {
             }
 
             // PENDING или RUNNING - продолжаем опрос
-            await new Promise(resolve => setTimeout(resolve, pollInterval));
+            await new Promise((resolve) => setTimeout(resolve, pollInterval));
 
         } catch (error) {
             logError(`Ошибка при опросе задачи ${taskId}`, error);
             if (attempt === maxAttempts - 1) {
                 return { error: `Ошибка опроса: ${error.message}` };
             }
-            await new Promise(resolve => setTimeout(resolve, pollInterval));
+            await new Promise((resolve) => setTimeout(resolve, pollInterval));
         }
     }
 
@@ -426,7 +426,7 @@ export function getAvailableImageModels() {
  */
 export async function checkImageApiAvailability() {
     const mode = IMAGE_GENERATION_MODE;
-    
+
     // Browser mode всегда доступен (если браузер работает)
     if (mode === 'browser') {
         logDebug('🖼️ Browser mode: проверка через статус браузера');
@@ -435,10 +435,10 @@ export async function checkImageApiAvailability() {
         const isAuthenticated = getAuthenticationStatus();
         return !!(browserContext && isAuthenticated);
     }
-    
+
     // DashScope mode: проверяем API ключ
     const apiKey = DASHSCOPE_API_KEY;
-    
+
     if (!apiKey) {
         return false;
     }

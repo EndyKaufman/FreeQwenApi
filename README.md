@@ -1,5 +1,10 @@
 # FreeQwenApi
 
+[![npm version](https://badge.fury.io/js/qwen-api-proxy.svg)](https://badge.fury.io/js/qwen-api-proxy)
+[![npm downloads](https://img.shields.io/npm/dm/qwen-api-proxy.svg)](https://www.npmjs.com/package/qwen-api-proxy)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+
+> **📦 npm:** `npx qwen-api-proxy` или `npm install -g qwen-api-proxy`  
 > **🐳 Docker Hub:** https://hub.docker.com/r/endykaufman/qwen-api-proxy  
 > **🔧 Форк:** https://github.com/EndyKaufman/FreeQwenApi  
 > **🌐 Оригинал:** https://github.com/y13sint/FreeQwenApi
@@ -109,11 +114,12 @@ curl http://localhost:3264/api/chat/completions \
 ## Содержание
 
 1. [Быстрый старт](#быстрый-старт)
-2. [Docker Hub](#docker-hub) 🆕
-3. [Docker](#docker)
-4. [Управление аккаунтами](#управление-аккаунтами)
-5. [Авторизация API-ключами](#авторизация-api-ключами)
-6. [API Reference](#api-reference)
+2. [CLI команды](#-cli-команды) 🆕
+3. [Docker Hub](#docker-hub) 🆕
+4. [Docker](#docker)
+5. [Управление аккаунтами](#управление-аккаунтами)
+6. [Авторизация API-ключами](#авторизация-api-ключами)
+7. [API Reference](#api-reference)
    - [POST /api/chat](#post-apichat)
    - [POST /api/chat/completions](#post-apichatcompletions)
    - [GET /api/models](#get-apimodels)
@@ -122,18 +128,59 @@ curl http://localhost:3264/api/chat/completions \
    - [POST /api/files/upload](#post-apifilesupload)
    - [POST /api/files/getstsToken](#post-apifilesgetststoken)
    - [POST /api/images/generations](#post-apiimagesgenerations)
-7. [Работа с контекстом (API v2)](#работа-с-контекстом-api-v2)
-8. [Работа с изображениями](#работа-с-изображениями)
-9. [Генерация изображений](#генерация-изображений) 🆕
-10. [OpenAI SDK](#openai-sdk)
-11. [Python](#python-альтернативная-реализация)
-12. [Доступные модели](#доступные-модели)
-13. [Переменные окружения](#переменные-окружения)
-14. [Структура проекта](#структура-проекта)
+8. [Работа с контекстом (API v2)](#работа-с-контекстом-api-v2)
+9. [Работа с изображениями](#работа-с-изображениями)
+10. [Генерация изображений](#генерация-изображений) 🆕
+11. [OpenAI SDK](#openai-sdk)
+12. [Python](#python-альтернативная-реализация)
+13. [Доступные модели](#доступные-модели)
+14. [Переменные окружения](#переменные-окружения)
+15. [Структура проекта](#структура-проекта)
 
 ---
 
 ## Быстрый старт
+
+> 🆕 **Новые пользователи?** Начните с [QUICK_START.md](QUICK_START.md) - пошаговое руководство с устранением常见ных ошибок
+
+### 🌍 Кросс-платформенная поддержка
+
+Этот проект полностью поддерживает работу на:
+- ✅ **Windows** (10/11, Server 2019+)
+- ✅ **Linux** (Ubuntu 18.04+, Debian 10+, CentOS 8+)
+- ✅ **macOS** (10.15+, включая Apple Silicon)
+
+**Требования:**
+- Node.js >= 18.0.0 (рекомендуется 20.x или 22.x LTS)
+- Для команды `archive`: `zip` (Linux/macOS) или `zip`/`7-Zip`/PowerShell (Windows)
+
+> 📖 **Полное руководство:** [CROSS_PLATFORM.md](CROSS_PLATFORM.md)
+
+### 📦 Через npm (Рекомендуется)
+
+**Без установки (npx):**
+```bash
+# Инициализация директории
+npx qwen-api-proxy init
+
+# Запуск сервера
+npx qwen-api-proxy
+```
+
+**Глобальная установка:**
+```bash
+npm install -g qwen-api-proxy
+
+# Инициализация
+qwen-api-proxy init
+
+# Запуск сервера
+qwen-api-proxy
+```
+
+> 💡 **Подробнее:** [README_NPM.md](README_NPM.md) - полное руководство по npm пакету
+
+### 💻 Ручная установка
 
 ```bash
 # Node.js (Основной)
@@ -186,6 +233,62 @@ python main.py
 
 ---
 
+## 🛠️ CLI команды
+
+Все команды можно запускать через `npx` (без установки) или после глобальной установки:
+
+```bash
+# Без установки (рекомендуется для редкого использования)
+npx qwen-api-proxy <command>
+
+# После глобальной установки (для частого использования)
+qwen-api-proxy <command>
+```
+
+### Основные команды
+
+| Команда | Описание |
+|---------|----------|
+| `npx qwen-api-proxy` | Запуск сервера |
+| `npx qwen-api-proxy init` | Инициализация директории (без запуска) |
+| `npx qwen-api-proxy archive` | Создание архива сессии |
+| `npx qwen-api-proxy extend` | Продление сессий |
+| `npx qwen-api-proxy doctor` | Проверка здоровья системы |
+
+### Примеры использования
+
+```bash
+# Инициализация проекта
+npx qwen-api-proxy init
+
+# Создание архива сессии для backup
+npx qwen-api-proxy archive
+
+# Продление всех сессий
+npx qwen-api-proxy extend
+
+# Продление конкретного аккаунта
+npx qwen-api-proxy extend --account-id acc_1234567890
+
+# Проверка здоровья системы
+npx qwen-api-proxy doctor
+
+# С пользовательской директорией
+npx qwen-api-proxy archive --dir=/path/to/project
+```
+
+### 🔧 NPM Scripts (для разработчиков)
+
+```bash
+npm start                 # Запуск сервера
+npm run archive           # Создание архива
+npm run auth              # Добавить аккаунт
+npm run rebuild-tokens    # Перестроить tokens.json
+npm run check-sessions    # Проверить сессии
+```
+
+---
+
 ## Docker Hub
 
 Готовый Docker образ доступен на Docker Hub:
@@ -208,7 +311,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.10
+  endykaufman/qwen-api-proxy:1.0.13
 
 # 3. Смотрим логи
 docker logs -f qwen-proxy
@@ -217,7 +320,7 @@ docker logs -f qwen-proxy
 ### Доступные теги
 
 - `latest` - последняя стабильная версия
-- `1.0.10` - текущая версия
+- `1.0.13` - текущая версия
 - `1.0.x` - предыдущие версии
 
 > **💡 Важно:** Перед первым запуском добавьте аккаунт через `npm run auth` или загрузите сессию через Telegram бота.
@@ -238,7 +341,7 @@ docker logs -f qwen-proxy
 ```yaml
 services:
   qwen-proxy:
-    image: endykaufman/qwen-api-proxy:1.0.10
+    image: endykaufman/qwen-api-proxy:1.0.13
     container_name: qwen-proxy
     env_file:
       - .env
@@ -293,7 +396,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.10
+  endykaufman/qwen-api-proxy:1.0.13
 ```
 
 Файл `docker-compose.yml`:
@@ -302,7 +405,7 @@ docker run -d \
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:1.0.10
+    image: endykaufman/qwen-api-proxy:1.0.13
     container_name: qwen-proxy
     env_file:
       - .env  # Автоматическая загрузка переменных

@@ -19,7 +19,7 @@ npm run create-session-archive
 ### Using node directly
 
 ```bash
-node scripts/createSessionArchive.js
+npx qwen-api-proxy archive
 ```
 
 ## 📋 What It Does

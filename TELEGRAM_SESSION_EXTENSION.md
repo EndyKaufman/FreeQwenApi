@@ -263,7 +263,7 @@ Each account shows when it was last extended:
 |--------|---------|----------|------------|
 | **Telegram** | `/extend` | From phone | Manual |
 | **Console** | `npm run extend-session` | On server | Cron |
-| **Direct** | `node scripts/extendSession.js` | On server | Script |
+| **Direct** | `npx qwen-api-proxy extend` | On server | Script |
 
 ### When to Use Each
 

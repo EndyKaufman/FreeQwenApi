@@ -44,13 +44,13 @@ export async function sendTelegramNotification(message) {
     });
 
     const results = await Promise.all(notifications);
-    const successCount = results.filter(r => r).length;
-    
+    const successCount = results.filter((r) => r).length;
+
     if (successCount > 0) {
         logInfo(`Telegram уведомления отправлены: ${successCount}/${TELEGRAM_USER_IDS.length} успешно`);
         return true;
     }
-    
+
     logError('Не удалось отправить Telegram уведомления ни одному пользователю');
     return false;
 }
@@ -62,7 +62,7 @@ export async function sendTelegramNotification(message) {
  */
 export function formatTokenExpiryMessage(tokens) {
     const now = Date.now();
-    
+
     let message = '🚨 <b>FreeQwenApi - Проблема с токенами</b>\n\n';
     message += '❌ <b>Все токены недоступны:</b>\n\n';
 
@@ -70,9 +70,9 @@ export function formatTokenExpiryMessage(tokens) {
         const isInvalid = token.invalid === true;
         const resetTime = token.resetAt ? new Date(token.resetAt).getTime() : null;
         const isExpired = resetTime && resetTime > now;
-        
+
         message += `<b>${index + 1}. ${token.id}</b>\n`;
-        
+
         if (isInvalid) {
             message += '   Статус: ❌ Недействителен\n';
         } else if (isExpired) {
@@ -82,7 +82,7 @@ export function formatTokenExpiryMessage(tokens) {
         } else {
             message += '   Статус: ❓ Неизвестно\n';
         }
-        
+
         message += '\n';
     });
 

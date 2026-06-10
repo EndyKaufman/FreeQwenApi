@@ -2,13 +2,13 @@
 
 /**
  * Session Archive Creator
- * 
+ *
  * This script:
  * 1. Opens browser for Qwen authentication
  * 2. Waits for user to login
  * 3. Saves session cookies and tokens
  * 4. Creates a ZIP archive of the session folder
- * 
+ *
  * Usage:
  *   npm run create-session-archive
  *   or
@@ -30,13 +30,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
 const SESSION_PATH = path.resolve(ROOT_DIR, SESSION_DIR);
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Prompt user for input
  */
 function promptUser(question) {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
         process.stdout.write(question);
         const onData = (data) => {
             process.stdin.removeListener('data', onData);
@@ -116,7 +116,7 @@ async function main() {
         // Step 1: Initialize browser
         console.log('\n🌐 Шаг 1/4: Открытие браузера...');
         const browserOk = await initBrowser(true, true);
-        
+
         if (!browserOk) {
             throw new Error('Не удалось инициализировать браузер');
         }
@@ -136,7 +136,7 @@ async function main() {
 
         // Step 3: Extract and save session
         console.log('\n💾 Шаг 3/4: Сохранение сессии...');
-        
+
         const ctx = getBrowserContext();
         let token = await extractAuthToken(ctx, true);
 
@@ -153,7 +153,7 @@ async function main() {
             // Save token
             const accountId = 'acc_' + Date.now();
             const accountDir = path.resolve(SESSION_PATH, 'accounts', accountId);
-            
+
             if (!fs.existsSync(accountDir)) {
                 fs.mkdirSync(accountDir, { recursive: true });
             }
@@ -201,20 +201,20 @@ async function main() {
     } catch (error) {
         logError('Ошибка при создании архива сессии', error);
         console.error('\n❌ Произошла ошибка:', error.message);
-        
+
         // Try to cleanup
         try {
             await shutdownBrowser();
         } catch (e) {
             // ignore
         }
-        
+
         process.exit(1);
     }
 }
 
 // Run
-main().catch(error => {
+main().catch((error) => {
     logError('Fatal error', error);
     process.exit(1);
 });

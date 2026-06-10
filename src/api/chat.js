@@ -33,7 +33,7 @@ let authKeys = null;
 let browserTokenRateLimited = false;
 let resolvedDefaultModel = null; // Будет установлен при загрузке моделей
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ─── Page helpers ────────────────────────────────────────────────────────────
 
@@ -114,7 +114,7 @@ export const pagePool = {
 
     releasePage(page) {
         try {
-            if (page.isClosed()) return;
+            if (page.isClosed()) {return;}
         } catch { return; }
 
         const baseContext = getBrowserContext();
@@ -126,14 +126,14 @@ export const pagePool = {
         if (this.pages.length < this.maxSize) {
             this.pages.push(page);
         } else {
-            page.close().catch(e => logError('Ошибка при закрытии страницы', e));
+            page.close().catch((e) => logError('Ошибка при закрытии страницы', e));
         }
     },
 
     async clear() {
         const baseContext = getBrowserContext();
         for (const page of this.pages) {
-            if (page === baseContext) continue;
+            if (page === baseContext) {continue;}
             try { await page.close(); } catch (e) {
                 logError('Ошибка при закрытии страницы в пуле', e);
             }
@@ -171,7 +171,7 @@ export async function pollTaskStatus(taskId, page, token, maxAttempts = TASK_POL
 
             if (!result.success) {
                 logWarn(`Ошибка при проверке статуса (попытка ${attempt}/${maxAttempts}): ${result.error}`);
-                if (attempt < maxAttempts) await delay(interval);
+                if (attempt < maxAttempts) {await delay(interval);}
                 continue;
             }
 
@@ -189,10 +189,10 @@ export async function pollTaskStatus(taskId, page, token, maxAttempts = TASK_POL
                 return { success: false, status: 'failed', error: taskData.error || taskData.message || 'Task failed', data: taskData };
             }
 
-            if (attempt < maxAttempts) await delay(interval);
+            if (attempt < maxAttempts) {await delay(interval);}
         } catch (error) {
             logError(`Ошибка при опросе задачи (попытка ${attempt}/${maxAttempts})`, error);
-            if (attempt < maxAttempts) await delay(interval);
+            if (attempt < maxAttempts) {await delay(interval);}
         }
     }
 
@@ -203,7 +203,7 @@ export async function pollTaskStatus(taskId, page, token, maxAttempts = TASK_POL
 // ─── Token extraction ────────────────────────────────────────────────────────
 
 export async function extractAuthToken(context, forceRefresh = false) {
-    if (authToken && !forceRefresh) return authToken;
+    if (authToken && !forceRefresh) {return authToken;}
 
     try {
         const page = await getPage(context);
@@ -213,7 +213,7 @@ export async function extractAuthToken(context, forceRefresh = false) {
             await delay(RETRY_DELAY);
 
             const newToken = await page.evaluate(() => localStorage.getItem('token'));
-            if (shouldClosePage) await page.close();
+            if (shouldClosePage) {await page.close();}
 
             if (newToken) {
                 authToken = newToken;
@@ -224,7 +224,7 @@ export async function extractAuthToken(context, forceRefresh = false) {
             logError('Токен авторизации не найден в браузере');
             return null;
         } catch (error) {
-            if (shouldClosePage) await page.close().catch(() => { });
+            if (shouldClosePage) {await page.close().catch(() => { });}
             throw error;
         }
     } catch (error) {
@@ -248,7 +248,7 @@ export async function fetchModelsFromAPI() {
         if (!MODELS_API_URL.includes('?')) {
             // Qwen API использует limit для пагинации
             const params = new URLSearchParams({
-                limit: '1000'  // Максимальное количество моделей
+                limit: '1000' // Максимальное количество моделей
             });
             modelsUrl = `${MODELS_API_URL}?${params.toString()}`;
             logDebug(`URL с параметрами пагинации: ${modelsUrl}`);
@@ -311,13 +311,13 @@ export async function fetchModelsFromAPI() {
                 logDebug(`Извлечены модели: data.models (${data.models.length} элементов)`);
             } else {
                 logWarn(`⚠️ Не удалось распознать формат ответа API. Keys: ${Object.keys(data).join(', ')}`);
-                logWarn(`Полный JSON ответ от API:`);
+                logWarn('Полный JSON ответ от API:');
                 logWarn(JSON.stringify(data, null, 2));
             }
 
             // Извлекаем ID моделей
-            const modelIds = models.map(m => {
-                if (typeof m === 'string') return m;
+            const modelIds = models.map((m) => {
+                if (typeof m === 'string') {return m;}
                 return m.id || m.model_id || m.name;
             }).filter(Boolean);
 
@@ -396,7 +396,7 @@ export async function ensureModelsLoaded() {
                 modelsLoadedFromAPI = true;
                 logInfo(`✅ Загружено ${apiModels.length} моделей с Qwen API`);
                 logInfo('===== ДОСТУПНЫЕ МОДЕЛИ (API) =====');
-                apiModels.forEach(m => logInfo(`- ${m}`));
+                apiModels.forEach((m) => logInfo(`- ${m}`));
                 logInfo('===================================');
 
                 // Устанавливаем default model как первую из API, если не задана в .env
@@ -414,7 +414,7 @@ export async function ensureModelsLoaded() {
             logDebug(`loadModelsFromFile вернул: ${fileModels ? fileModels.length + ' моделей' : 'null'}`);
             return fileModels;
         } catch (error) {
-            logError(`❌ Ошибка загрузки моделей из API`, error);
+            logError('❌ Ошибка загрузки моделей из API', error);
             logWarn('⚠️ Используем резервный список из AvailableModels.txt');
             const fileModels = loadModelsFromFile();
             logDebug(`loadModelsFromFile (catch) вернул: ${fileModels ? fileModels.length + ' моделей' : 'null'}`);
@@ -447,8 +447,8 @@ function loadModelsFromFile() {
 
         const models = fileContent
             .split('\n')
-            .map(l => l.trim())
-            .filter(l => l && !l.startsWith('#'));
+            .map((l) => l.trim())
+            .filter((l) => l && !l.startsWith('#'));
 
         logDebug(`Распознано моделей: ${models.length}`);
 
@@ -457,7 +457,7 @@ function loadModelsFromFile() {
             modelsLoadedFromAPI = false;
 
             logInfo('===== ДОСТУПНЫЕ МОДЕЛИ (ФАЙЛ) =====');
-            models.forEach(m => logInfo(`- ${m}`));
+            models.forEach((m) => logInfo(`- ${m}`));
             logInfo('====================================');
 
             // Устанавливаем default model как первую из файла, если не задана в .env
@@ -471,7 +471,7 @@ function loadModelsFromFile() {
 
         return models;
     } catch (error) {
-        logError(`❌ Ошибка при чтении файла с моделями`, error);
+        logError('❌ Ошибка при чтении файла с моделями', error);
         const fallback = resolvedDefaultModel ? [resolvedDefaultModel] : [getActiveModel()];
         logDebug(`Fallback модели после ошибки: ${fallback.join(', ')}`);
         return fallback;
@@ -493,7 +493,7 @@ export function getAvailableModelsFromFile() {
 function getAuthKeysFromFile() {
     try {
         if (!fs.existsSync(AUTH_KEYS_FILE)) {
-            const template = `# Файл API-ключей для прокси\n# --------------------------------------------\n# В этом файле перечислены токены, которые\n# прокси будет считать «действительными».\n# Один ключ — одна строка без пробелов.\n#\n# 1) Хотите ОТКЛЮЧИТЬ авторизацию целиком?\n#    Оставьте файл пустым — сервер перестанет\n#    проверять заголовок Authorization.\n#\n# 2) Хотите разрешить доступ нескольким людям?\n#    Впишите каждый ключ в отдельной строке:\n#      d35ab3e1-a6f9-4d...\n#      f2b1cd9c-1b2e-4a...\n#\n# Пустые строки и строки, начинающиеся с «#»,\n# игнорируются.`;
+            const template = '# Файл API-ключей для прокси\n# --------------------------------------------\n# В этом файле перечислены токены, которые\n# прокси будет считать «действительными».\n# Один ключ — одна строка без пробелов.\n#\n# 1) Хотите ОТКЛЮЧИТЬ авторизацию целиком?\n#    Оставьте файл пустым — сервер перестанет\n#    проверять заголовок Authorization.\n#\n# 2) Хотите разрешить доступ нескольким людям?\n#    Впишите каждый ключ в отдельной строке:\n#      d35ab3e1-a6f9-4d...\n#      f2b1cd9c-1b2e-4a...\n#\n# Пустые строки и строки, начинающиеся с «#»,\n# игнорируются.';
             try {
                 fs.writeFileSync(AUTH_KEYS_FILE, template, { encoding: 'utf8', flag: 'wx' });
                 logInfo(`Создан шаблон файла ключей: ${AUTH_KEYS_FILE}`);
@@ -504,8 +504,8 @@ function getAuthKeysFromFile() {
         }
         return fs.readFileSync(AUTH_KEYS_FILE, 'utf8')
             .split('\n')
-            .map(l => l.trim())
-            .filter(l => l && !l.startsWith('#'));
+            .map((l) => l.trim())
+            .filter((l) => l && !l.startsWith('#'));
     } catch (error) {
         logError('Ошибка при чтении файла с ключами авторизации', error);
         return [];
@@ -513,7 +513,7 @@ function getAuthKeysFromFile() {
 }
 
 export function isValidModel(modelName) {
-    if (!availableModels) availableModels = getAvailableModelsFromFile();
+    if (!availableModels) {availableModels = getAvailableModelsFromFile();}
     return availableModels.includes(modelName);
 }
 
@@ -523,9 +523,9 @@ export function getDefaultModel() {
 }
 
 export function getAllModels() {
-    if (!availableModels) availableModels = getAvailableModelsFromFile();
+    if (!availableModels) {availableModels = getAvailableModelsFromFile();}
     return {
-        models: availableModels.map(model => ({
+        models: availableModels.map((model) => ({
             id: model,
             name: model,
             description: `Модель ${model}`
@@ -534,7 +534,7 @@ export function getAllModels() {
 }
 
 export function getApiKeys() {
-    if (!authKeys) authKeys = getAuthKeysFromFile();
+    if (!authKeys) {authKeys = getAuthKeysFromFile();}
     return authKeys;
 }
 
@@ -544,14 +544,14 @@ function validateAndPrepareMessage(message) {
     if (message === null || message === undefined) {
         return { error: 'Сообщение не может быть пустым' };
     }
-    if (typeof message === 'string') return { content: message };
+    if (typeof message === 'string') {return { content: message };}
     if (Array.isArray(message)) {
-        const isValid = message.every(item =>
+        const isValid = message.every((item) =>
             (item.type === 'text' && typeof item.text === 'string') ||
             (item.type === 'image' && typeof item.image === 'string') ||
             (item.type === 'file' && typeof item.file === 'string')
         );
-        if (!isValid) return { error: 'Некорректная структура составного сообщения' };
+        if (!isValid) {return { error: 'Некорректная структура составного сообщения' };}
         return { content: message };
     }
     return { error: 'Неподдерживаемый формат сообщения' };
@@ -620,7 +620,7 @@ async function resolveAuthToken(browserContext) {
     if (!getAuthenticationStatus()) {
         logInfo('Проверка авторизации...');
         const authCheck = await checkAuthentication(browserContext);
-        if (!authCheck) return null;
+        if (!authCheck) {return null;}
     }
 
     if (!authToken) {
@@ -674,7 +674,7 @@ function buildPayloadV2(messageContent, model, chatId, parentId, files, systemMe
         timestamp: Math.floor(Date.now() / 1000)
     };
 
-    if (size) payload.size = size;
+    if (size) {payload.size = size;}
 
     if (systemMessage) {
         payload.system_message = systemMessage;
@@ -721,8 +721,8 @@ function parseNonSseCompletionBody(body) {
 
 async function executeApiRequestWithNodeStreaming(apiUrl, payload, token, onChunk) {
     try {
-        if (!token) return { success: false, error: 'Токен авторизации не найден' };
-        if (typeof fetch !== 'function') return { success: false, error: 'Fetch API is unavailable' };
+        if (!token) {return { success: false, error: 'Токен авторизации не найден' };}
+        if (typeof fetch !== 'function') {return { success: false, error: 'Fetch API is unavailable' };}
 
         const response = await fetchWithQwenProxy(apiUrl, {
             method: 'POST',
@@ -770,7 +770,7 @@ async function executeApiRequestWithNodeStreaming(apiUrl, payload, token, onChun
 
         while (!finished) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {break;}
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
@@ -778,10 +778,10 @@ async function executeApiRequestWithNodeStreaming(apiUrl, payload, token, onChun
 
             for (const rawLine of lines) {
                 const line = rawLine.trim();
-                if (!line || !line.startsWith('data:')) continue;
+                if (!line || !line.startsWith('data:')) {continue;}
 
                 const jsonStr = line.substring(5).trim();
-                if (!jsonStr) continue;
+                if (!jsonStr) {continue;}
                 if (jsonStr === '[DONE]') {
                     finished = true;
                     break;
@@ -801,8 +801,8 @@ async function executeApiRequestWithNodeStreaming(apiUrl, payload, token, onChun
                         break;
                     }
 
-                    if (chunk['response.created']) responseId = chunk['response.created'].response_id;
-                    if (chunk.response_id) responseId = chunk.response_id;
+                    if (chunk['response.created']) {responseId = chunk['response.created'].response_id;}
+                    if (chunk.response_id) {responseId = chunk.response_id;}
 
                     if (chunk.choices && chunk.choices[0]) {
                         const delta = chunk.choices[0].delta;
@@ -813,11 +813,11 @@ async function executeApiRequestWithNodeStreaming(apiUrl, payload, token, onChun
                                 hasStreamedChunks = true;
                             }
                         }
-                        if (delta && delta.status === 'finished') finished = true;
-                        if (chunk.choices[0].finish_reason) finished = true;
+                        if (delta && delta.status === 'finished') {finished = true;}
+                        if (chunk.choices[0].finish_reason) {finished = true;}
                     }
 
-                    if (chunk.usage) usage = chunk.usage;
+                    if (chunk.usage) {usage = chunk.usage;}
                 } catch {
                     // Ignore broken chunks, keep reading stream.
                 }
@@ -872,7 +872,7 @@ async function executeApiRequest(page, apiUrl, payload, token, onChunk = null) {
     return page.evaluate(async (data) => {
         try {
             const t = data.token;
-            if (!t) return { success: false, error: 'Токен авторизации не найден' };
+            if (!t) {return { success: false, error: 'Токен авторизации не найден' };}
 
             const response = await fetch(data.apiUrl, {
                 method: 'POST',
@@ -936,15 +936,15 @@ async function executeApiRequest(page, apiUrl, payload, token, onChunk = null) {
 
                 while (!finished) {
                     const { done, value } = await reader.read();
-                    if (done) break;
+                    if (done) {break;}
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split('\n');
                     buffer = lines.pop() || '';
 
                     for (const line of lines) {
-                        if (!line.trim() || !line.startsWith('data: ')) continue;
+                        if (!line.trim() || !line.startsWith('data: ')) {continue;}
                         const jsonStr = line.substring(6).trim();
-                        if (!jsonStr) continue;
+                        if (!jsonStr) {continue;}
                         try {
                             const chunk = JSON.parse(jsonStr);
 
@@ -959,13 +959,13 @@ async function executeApiRequest(page, apiUrl, payload, token, onChunk = null) {
                                 break;
                             }
 
-                            if (chunk['response.created']) responseId = chunk['response.created'].response_id;
+                            if (chunk['response.created']) {responseId = chunk['response.created'].response_id;}
                             if (chunk.choices && chunk.choices[0]) {
                                 const delta = chunk.choices[0].delta;
-                                if (delta && delta.content) fullContent += delta.content;
-                                if (delta && delta.status === 'finished') finished = true;
+                                if (delta && delta.content) {fullContent += delta.content;}
+                                if (delta && delta.status === 'finished') {finished = true;}
                             }
-                            if (chunk.usage) usage = chunk.usage;
+                            if (chunk.usage) {usage = chunk.usage;}
                         } catch { /* ignore parse errors for individual chunks */ }
                     }
                 }
@@ -1005,10 +1005,10 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
     logError(`Ошибка при получении ответа: ${errorMessage}`);
 
     // Логируем дополнительную информацию для отладки
-    if (response.status) logDebug(`HTTP статус: ${response.status}`);
-    if (response.errorBody) logDebug(`Тело ответа с ошибкой: ${response.errorBody.substring(0, 500)}${response.errorBody.length > 500 ? '...' : ''}`);
-    if (response.error) logDebug(`Ошибка из response: ${response.error}`);
-    if (response.statusText) logDebug(`StatusText: ${response.statusText}`);
+    if (response.status) {logDebug(`HTTP статус: ${response.status}`);}
+    if (response.errorBody) {logDebug(`Тело ответа с ошибкой: ${response.errorBody.substring(0, 500)}${response.errorBody.length > 500 ? '...' : ''}`);}
+    if (response.error) {logDebug(`Ошибка из response: ${response.error}`);}
+    if (response.statusText) {logDebug(`StatusText: ${response.statusText}`);}
     logDebug(`Полный объект ответа: ${JSON.stringify(response, null, 2).substring(0, 1000)}`);
 
     if (response.html && response.html.includes('Verification')) {
@@ -1085,7 +1085,7 @@ async function handleApiError(response, tokenObj, message, model, chatId, parent
 // ─── Main public API ─────────────────────────────────────────────────────────
 
 export async function sendMessage(message, model = null, chatId = null, parentId = null, files = null, tools = null, toolChoice = null, systemMessage = null, chatType = 't2t', size = null, waitForCompletion = true, retryCount = 0, onChunk = null) {
-    if (!availableModels) availableModels = getAvailableModelsFromFile();
+    if (!availableModels) {availableModels = getAvailableModelsFromFile();}
 
     if (!chatId) {
         const newChatResult = await createChatV2(model);
@@ -1119,10 +1119,10 @@ export async function sendMessage(message, model = null, chatId = null, parentId
     }
 
     const browserContext = getBrowserContext();
-    if (!browserContext) return { error: 'Браузер не инициализирован', chatId };
+    if (!browserContext) {return { error: 'Браузер не инициализирован', chatId };}
 
     const tokenObj = await resolveAuthToken(browserContext);
-    if (!tokenObj) return { error: 'Ошибка авторизации: не удалось получить токен', chatId };
+    if (!tokenObj) {return { error: 'Ошибка авторизации: не удалось получить токен', chatId };}
 
     let page = null;
     try {
@@ -1136,7 +1136,7 @@ export async function sendMessage(message, model = null, chatId = null, parentId
         if (!authToken) {
             logWarn('Токен отсутствует перед отправкой запроса');
             authToken = await page.evaluate(() => localStorage.getItem('token'));
-            if (!authToken) return { error: 'Токен авторизации не найден. Требуется перезапуск в ручном режиме.', chatId };
+            if (!authToken) {return { error: 'Токен авторизации не найден. Требуется перезапуск в ручном режиме.', chatId };}
             saveAuthToken(authToken);
         }
 
@@ -1245,15 +1245,15 @@ export async function sendMessage(message, model = null, chatId = null, parentId
 
 function extractTaskId(data) {
     const firstMsg = data.data?.messages?.[0];
-    if (firstMsg?.extra?.wanx?.task_id) return firstMsg.extra.wanx.task_id;
+    if (firstMsg?.extra?.wanx?.task_id) {return firstMsg.extra.wanx.task_id;}
     return data.id || data.task_id || data.response_id || data.data?.message_id || null;
 }
 
 function extractVideoUrl(taskData) {
-    if (taskData.content) return taskData.content;
-    if (typeof taskData.result === 'string') return taskData.result;
-    if (taskData.result?.url) return taskData.result.url;
-    if (taskData.result?.video_url) return taskData.result.video_url;
+    if (taskData.content) {return taskData.content;}
+    if (typeof taskData.result === 'string') {return taskData.result;}
+    if (taskData.result?.url) {return taskData.result.url;}
+    if (taskData.result?.video_url) {return taskData.result.video_url;}
     return null;
 }
 
@@ -1269,7 +1269,7 @@ export function getAuthToken() {
 
 export async function createChatV2(model = getDefaultModel(), title = 'Новый чат', retryCount = 0) {
     const browserContext = getBrowserContext();
-    if (!browserContext) return { error: 'Браузер не инициализирован' };
+    if (!browserContext) {return { error: 'Браузер не инициализирован' };}
 
     // Используем безопасный токен
     const tokenObj = await getSafeToken(TOKEN_EXPIRY_WARNING_MS);
@@ -1291,7 +1291,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
     if (!authToken) {
         logInfo('Получение токена авторизации для создания чата...');
         authToken = await extractAuthToken(browserContext);
-        if (!authToken) return { error: 'Не удалось получить токен авторизации' };
+        if (!authToken) {return { error: 'Не удалось получить токен авторизации' };}
     }
 
     let page = null;
@@ -1308,7 +1308,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.token}` },
                     body: JSON.stringify(data.payload)
                 });
-                if (response.ok) return { success: true, data: await response.json() };
+                if (response.ok) {return { success: true, data: await response.json() };}
                 return { success: false, status: response.status, errorBody: await response.text() };
             } catch (error) {
                 return { success: false, error: error.toString() };
@@ -1349,7 +1349,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
 
 export async function testToken(token) {
     const browserContext = getBrowserContext();
-    if (!browserContext) return 'ERROR';
+    if (!browserContext) {return 'ERROR';}
 
     let page;
     let shouldClosePage = false;
@@ -1377,16 +1377,16 @@ export async function testToken(token) {
             }
         }, requestBody);
 
-        if (result.ok || result.status === 400) return 'OK';
-        if (result.status === 401 || result.status === 403) return 'UNAUTHORIZED';
-        if (result.status === 429) return 'RATELIMIT';
+        if (result.ok || result.status === 400) {return 'OK';}
+        if (result.status === 401 || result.status === 403) {return 'UNAUTHORIZED';}
+        if (result.status === 429) {return 'RATELIMIT';}
         return 'ERROR';
     } catch (e) {
         logError('testToken error', e);
         return 'ERROR';
     } finally {
         if (page) {
-            try { if (shouldClosePage) await page.close(); } catch { }
+            try { if (shouldClosePage) {await page.close();} } catch { }
         }
     }
 }

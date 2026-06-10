@@ -22,10 +22,10 @@ function hasFileChanged() {
         if (!fs.existsSync(SETTINGS_FILE)) {
             return true; // Файл не существует, нужно перечитать
         }
-        
+
         const stats = fs.statSync(SETTINGS_FILE);
         const currentMTime = stats.mtimeMs;
-        
+
         // Если кэш пуст или время изменения отличается - файл изменился
         return !settingsCacheMTime || currentMTime !== settingsCacheMTime;
     } catch (error) {
@@ -52,20 +52,20 @@ export function loadBotSettings() {
             settingsCacheMTime = null;
             return defaultSettings;
         }
-        
+
         // Проверяем изменился ли файл
         if (!hasFileChanged() && settingsCache) {
             // Файл не изменился, возвращаем кэш
             return settingsCache;
         }
-        
+
         // Файл изменился или кэш пуст - читаем файл
         const stats = fs.statSync(SETTINGS_FILE);
         settingsCacheMTime = stats.mtimeMs;
-        
+
         const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
         settingsCache = settings;
-        
+
         logInfo(`✅ Настройки бота загружены из файла: модель=${settings.activeModel || 'default'}, LLM=${settings.llmChatEnabled}`);
         return settings;
     } catch (error) {
@@ -95,15 +95,15 @@ export function saveBotSettings(settings) {
         }
 
         settings.lastUpdated = new Date().toISOString();
-        
+
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
-        
+
         // Обновляем кэш
         settingsCache = settings;
         // Обновляем время модификации
         const stats = fs.statSync(SETTINGS_FILE);
         settingsCacheMTime = stats.mtimeMs;
-        
+
         logInfo(`💾 Настройки бота сохранены: модель=${settings.activeModel || 'default'}, LLM=${settings.llmChatEnabled}`);
         return true;
     } catch (error) {
@@ -144,23 +144,23 @@ export function clearSettingsCache() {
 export function getActiveModel() {
     try {
         const settings = loadBotSettings();
-        
+
         // Если есть activeModel в настройках бота - используем его
         if (settings && settings.activeModel) {
             return settings.activeModel;
         }
-        
+
         // Иначе используем DEFAULT_MODEL из .env
         if (DEFAULT_MODEL) {
             return DEFAULT_MODEL;
         }
-        
+
         // Fallback: первая модель из списка доступных
         try {
             const modelsFile = path.join(process.cwd(), 'src', 'AvailableModels.txt');
             if (fs.existsSync(modelsFile)) {
                 const modelsContent = fs.readFileSync(modelsFile, 'utf8');
-                const models = modelsContent.split('\n').map(m => m.trim()).filter(m => m && !m.startsWith('#'));
+                const models = modelsContent.split('\n').map((m) => m.trim()).filter((m) => m && !m.startsWith('#'));
                 if (models.length > 0) {
                     return models[0];
                 }
@@ -168,7 +168,7 @@ export function getActiveModel() {
         } catch (e) {
             // Если не удалось загрузить список моделей
         }
-        
+
         // Последний fallback
         return 'qwen3.5-plus';
     } catch (error) {

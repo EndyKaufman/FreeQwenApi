@@ -142,8 +142,8 @@ npm start
 ### NPM Команды
 ```json
 {
-  "extend-session": "node scripts/extendSession.js",
-  "create-session-archive": "node scripts/createSessionArchive.js"
+  "extend-session": "npx qwen-api-proxy extend",
+  "create-session-archive": "npx qwen-api-proxy archive"
 }
 ```
 

@@ -15,7 +15,7 @@ import { checkPermissions } from './src/utils/permissionChecker.js';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import { SESSION_DIR } from './src/config.js';
+import { SESSION_DIR, ACCOUNTS_DIR } from './src/config.js';
 
 const app = express();
 
@@ -27,7 +27,7 @@ if (Number.isNaN(port) || port <= 0 || port > 65535) {
 }
 
 function toBoolean(value) {
-    if (typeof value !== 'string') return false;
+    if (typeof value !== 'string') {return false;}
     return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
@@ -42,7 +42,7 @@ function ensureNonInteractiveTokens() {
         return false;
     }
     const now = Date.now();
-    const validTokens = tokens.filter(t => (!t.resetAt || new Date(t.resetAt).getTime() <= now) && !t.invalid);
+    const validTokens = tokens.filter((t) => (!t.resetAt || new Date(t.resetAt).getTime() <= now) && !t.invalid);
     if (!validTokens.length) {
         logWarn('⚠️ Все аккаунты недоступны. Сервер работает в режиме Telegram бота.');
         logWarn('📦 Отправьте архив с сессиями через Telegram бот для обновления аккаунтов.');
@@ -75,7 +75,7 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    if (req.method === 'OPTIONS') {return res.sendStatus(200);}
     next();
 });
 
@@ -108,13 +108,14 @@ async function handleShutdown() {
 }
 
 /**
- * Создает ZIP архив папки session/
+ * Создает ZIP архив папки session/ (cross-platform)
  */
 function createSessionArchive() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const archiveName = `session_backup_${timestamp}.zip`;
     const archivePath = path.resolve(process.cwd(), archiveName);
     const sessionPath = path.resolve(process.cwd(), SESSION_DIR);
+    const isWindows = process.platform === 'win32';
 
     console.log('\n📦 Создание архива сессии...');
     console.log(`📂 Путь к сессии: ${sessionPath}`);
@@ -132,10 +133,52 @@ function createSessionArchive() {
             throw new Error('Папка сессии пуста. Сначала выполните авторизацию.');
         }
 
-        // Создаем ZIP архив
-        const command = `cd "${process.cwd()}" && zip -r "${archiveName}" "${SESSION_DIR}/"`;
-        logInfo(`Выполнение команды: ${command}`);
-        execSync(command, { stdio: 'inherit' });
+        // Проверяем, есть ли реальные данные (accounts, tokens.json, и т.д.)
+        const hasAccounts = fs.existsSync(path.join(sessionPath, 'accounts')) &&
+                           fs.readdirSync(path.join(sessionPath, 'accounts')).length > 0;
+        const hasTokens = fs.existsSync(path.join(sessionPath, 'tokens.json'));
+
+        if (!hasAccounts && !hasTokens) {
+            throw new Error('Папка сессии не содержит данных аккаунтов.');
+        }
+
+        // Показываем статистику
+        console.log('\n📊 Найденные данные:');
+        if (hasAccounts) {
+            const accounts = fs.readdirSync(path.join(sessionPath, 'accounts'));
+            console.log(`   ✓ Аккаунты: ${accounts.length} (${accounts.join(', ')})`);
+        }
+        if (hasTokens) {
+            try {
+                const tokens = JSON.parse(fs.readFileSync(path.join(sessionPath, 'tokens.json'), 'utf8'));
+                console.log(`   ✓ Токены: ${Array.isArray(tokens) ? tokens.length : 0} записей`);
+            } catch (e) {
+                console.log('   ⚠ tokens.json не удалось прочитать');
+            }
+        }
+
+        // Создаем ZIP архив (cross-platform)
+        let command;
+        if (isWindows) {
+            // Try zip first, fallback to PowerShell Compress-Archive
+            try {
+                command = `cd /d "${process.cwd()}" && zip -r "${archiveName}" "${SESSION_DIR}"`;
+                logInfo(`Выполнение команды: ${command}`);
+                execSync(command, { stdio: 'inherit' });
+            } catch (zipError) {
+                // Fallback to PowerShell Compress-Archive
+                logInfo('zip не найден, используем PowerShell Compress-Archive');
+                const psCommand = `Compress-Archive -Path "${sessionPath}" -DestinationPath "${archivePath}" -Force`;
+                command = `powershell -Command "${psCommand}"`;
+                logInfo(`Выполнение команды: ${command}`);
+                execSync(command, { stdio: 'inherit' });
+            }
+        } else {
+            // Unix-like systems (Linux, macOS)
+            command = `cd "${process.cwd()}" && zip -r "${archiveName}" "${SESSION_DIR}/"`;
+            logInfo(`Выполнение команды: ${command}`);
+            execSync(command, { stdio: 'inherit' });
+        }
 
         // Проверяем создание архива
         if (!fs.existsSync(archivePath)) {
@@ -169,29 +212,29 @@ function validateGitignore() {
         'session_backup',
         'session_backup_*'
     ];
-    
+
     if (!fs.existsSync(gitignorePath)) {
         logWarn('⚠️  Файл .gitignore не найден в корневой директории');
         logWarn('   Рекомендуется создать .gitignore для защиты чувствительных данных');
         return false;
     }
-    
+
     const content = fs.readFileSync(gitignorePath, 'utf8');
-    const lines = content.split('\n').map(line => line.trim());
+    const lines = content.split('\n').map((line) => line.trim());
     const missingEntries = [];
-    
-    requiredEntries.forEach(entry => {
+
+    requiredEntries.forEach((entry) => {
         if (!lines.includes(entry)) {
             missingEntries.push(entry);
         }
     });
-    
+
     if (missingEntries.length > 0) {
         logWarn(`⚠️  .gitignore отсутствует: ${missingEntries.join(', ')}`);
         logWarn('   Добавьте эти записи в .gitignore для защиты данных');
         return false;
     }
-    
+
     logInfo('✅ .gitignore проверен - все записи на месте');
     return true;
 }
@@ -215,6 +258,68 @@ async function handleCLICommand() {
         console.log('╚══════════════════════════════════════════════════════════╝\n');
 
         try {
+            // Проверяем, есть ли уже аккаунты
+            const tokensPath = path.join(process.cwd(), SESSION_DIR, 'tokens.json');
+            const accountsPath = path.join(process.cwd(), SESSION_DIR, ACCOUNTS_DIR);
+
+            let hasAccounts = false;
+
+            if (fs.existsSync(tokensPath)) {
+                try {
+                    const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'));
+                    if (Array.isArray(tokens) && tokens.length > 0) {
+                        hasAccounts = true;
+                    }
+                } catch (e) {
+                    // tokens.json corrupted
+                }
+            }
+
+            if (!hasAccounts && fs.existsSync(accountsPath)) {
+                const accounts = fs.readdirSync(accountsPath);
+                if (accounts.length > 0) {
+                    hasAccounts = true;
+                }
+            }
+
+            // Если аккаунтов нет, предлагаем добавить
+            if (!hasAccounts) {
+                console.log('📝 Аккаунты не найдены. Необходимо добавить аккаунт перед созданием архива.\n');
+                console.log('🔹 Вариант 1: Добавить аккаунт сейчас (откроется браузер)');
+                console.log('🔹 Вариант 2: Отправить файл сессии через Telegram бота');
+                console.log('🔹 Вариант 3: Выйти и запустить вручную: npx qwen-api-proxy\n');
+
+                const { prompt } = await import('./src/utils/prompt.js');
+                const choice = await prompt('Ваш выбор (1/2/3, Enter = 1): ');
+
+                if (choice === '2') {
+                    console.log('\n💡 Для использования Telegram бота:');
+                    console.log('   1. Добавьте TELEGRAM_BOT_TOKEN в .env файл');
+                    console.log('   2. Запустите: npx qwen-api-proxy');
+                    console.log('   3. Отправьте файл сессии боту\n');
+                    process.exit(0);
+                } else if (choice === '3') {
+                    console.log('\n👋 Выход. Запустите "npx qwen-api-proxy" для добавления аккаунта.\n');
+                    process.exit(0);
+                }
+
+                // choice === '1' или Enter - добавляем аккаунт
+                console.log('\n🔐 Запуск браузера для добавления аккаунта...\n');
+
+                const { addAccountInteractive } = await import('./src/utils/accountSetup.js');
+                const accountId = await addAccountInteractive();
+
+                if (!accountId) {
+                    console.log('\n❌ Аккаунт не был добавлен. Архив не создан.\n');
+                    process.exit(1);
+                }
+
+                console.log(`\n✅ Аккаунт ${accountId} успешно добавлен!\n`);
+            } else {
+                console.log('✅ Найден существующий аккаунт\n');
+            }
+
+            // Теперь создаем архив
             const archivePath = createSessionArchive();
             console.log('\n🎉 ГОТОВО!');
             console.log(`📄 Архив: ${archivePath}`);
@@ -301,7 +406,7 @@ async function startServer() {
             console.log('4 - Удалить аккаунт');
 
             let choice = await prompt('Ваш выбор (Enter = 3): ');
-            if (!choice) choice = '3';
+            if (!choice) {choice = '3';}
 
             if (choice === '1') {
                 await addAccountInteractive();
@@ -309,9 +414,9 @@ async function startServer() {
                 const { reloginAccountInteractive } = await import('./src/utils/accountSetup.js');
                 await reloginAccountInteractive();
             } else if (choice === '3') {
-                const hasValidToken = tokens.some(t => {
-                    if (t.invalid) return false;
-                    if (!t.resetAt) return true;
+                const hasValidToken = tokens.some((t) => {
+                    if (t.invalid) {return false;}
+                    if (!t.resetAt) {return true;}
                     return new Date(t.resetAt).getTime() <= Date.now();
                 });
                 if (!tokens.length || !hasValidToken) {
@@ -403,7 +508,7 @@ async function startServer() {
             logInfo('🔍 Начинаем загрузку списка моделей...');
             const apiModels = await fetchModelsFromAPI();
             logDebug(`fetchModelsFromAPI вернул: ${apiModels ? apiModels.length + ' моделей' : 'null'}`);
-            
+
             if (apiModels && apiModels.length > 0) {
                 logInfo(`✅ Загружено ${apiModels.length} моделей с Qwen API`);
                 logDebug(`Первые 5 моделей: ${apiModels.slice(0, 5).join(', ')}`);
@@ -414,11 +519,11 @@ async function startServer() {
                 const fileModels = getAvailableModelsFromFile();
                 logDebug(`getAvailableModelsFromFile вернул: ${fileModels ? fileModels.length + ' моделей' : 'null'}`);
             }
-            
+
             const defaultModel = getDefaultModel();
             logInfo(`🎯 Модель по умолчанию: ${defaultModel}`);
             logDebug(`getDefaultModel() вернул: ${defaultModel}`);
-            
+
             getApiKeys();
         });
     } catch (err) {
@@ -432,10 +537,10 @@ async function startServer() {
 }
 
 // Проверяем CLI команды перед запуском сервера
-handleCLICommand().then(hasCommand => {
+handleCLICommand().then((hasCommand) => {
     if (!hasCommand) {
         // Нет команды CLI, запускаем сервер как обычно
-        startServer().catch(async error => {
+        startServer().catch(async (error) => {
             logError('Ошибка при запуске сервера', error);
             await shutdownBrowser();
             process.exit(1);

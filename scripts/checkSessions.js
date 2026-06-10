@@ -2,13 +2,13 @@
 
 /**
  * Session Diagnostics Tool
- * 
+ *
  * This script checks all accounts and reports:
  * - Which accounts have cookies.json
  * - Which accounts have token.txt
  * - Token expiry information
  * - Overall session health
- * 
+ *
  * Usage:
  *   npm run check-sessions
  *   or
@@ -31,7 +31,7 @@ const SESSION_PATH = path.resolve(ROOT_DIR, SESSION_DIR);
  */
 function checkSessionHealth() {
     const tokens = loadTokens();
-    
+
     if (tokens.length === 0) {
         console.log('⚠️  No accounts found in tokens.json');
         console.log('\n💡 To create a new session:');
@@ -39,8 +39,8 @@ function checkSessionHealth() {
         return;
     }
 
-    console.log(`\n📊 Session Health Report`);
-    console.log(`═`.repeat(60));
+    console.log('\n📊 Session Health Report');
+    console.log('═'.repeat(60));
     console.log(`Total accounts: ${tokens.length}\n`);
 
     let healthyCount = 0;
@@ -54,21 +54,21 @@ function checkSessionHealth() {
 
         const hasTokenFile = fs.existsSync(tokenFile);
         const hasCookies = fs.existsSync(cookiesFile);
-        
+
         let tokenStatus = '❌';
         let expiryInfo = '';
-        
+
         if (token.expiryTime) {
             const now = Date.now();
             const timeLeft = token.expiryTime - now;
-            
+
             if (timeLeft <= 0) {
                 tokenStatus = '⚠️';
                 expiryInfo = 'EXPIRED';
             } else {
                 const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
                 const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-                
+
                 if (hoursLeft > 24) {
                     const days = Math.floor(hoursLeft / 24);
                     tokenStatus = '✅';
@@ -102,36 +102,36 @@ function checkSessionHealth() {
         console.log(`   Token file: ${hasTokenFile ? '✅' : '❌'}`);
         console.log(`   Cookies:    ${hasCookies ? '✅' : '❌'}`);
         console.log(`   Token:      ${tokenStatus} ${expiryInfo}`);
-        
+
         if (!hasCookies) {
-            console.log(`   ⚠️  WARNING: Cannot extend session without cookies!`);
-            console.log(`   💡 Run: npm run create-session-archive`);
+            console.log('   ⚠️  WARNING: Cannot extend session without cookies!');
+            console.log('   💡 Run: npm run create-session-archive');
         }
-        
+
         console.log('');
     });
 
-    console.log(`═`.repeat(60));
-    console.log(`Summary:`);
+    console.log('═'.repeat(60));
+    console.log('Summary:');
     console.log(`  ✅ Healthy:  ${healthyCount}`);
     console.log(`  ⚠️  Warnings: ${warningCount}`);
     console.log(`  ❌ Errors:   ${errorCount}`);
-    console.log(`═`.repeat(60));
+    console.log('═'.repeat(60));
 
     if (warningCount > 0 || errorCount > 0) {
-        console.log(`\n💡 Recommendations:`);
-        
+        console.log('\n💡 Recommendations:');
+
         if (warningCount > 0) {
             console.log(`   - ${warningCount} account(s) missing cookies.json`);
-            console.log(`   - These accounts cannot be extended via /extend command`);
-            console.log(`   - Solution: Run npm run create-session-archive`);
+            console.log('   - These accounts cannot be extended via /extend command');
+            console.log('   - Solution: Run npm run create-session-archive');
         }
-        
+
         if (errorCount > 0) {
             console.log(`   - ${errorCount} account(s) have critical issues`);
-            console.log(`   - May need re-authentication`);
+            console.log('   - May need re-authentication');
         }
-        
+
         console.log('');
     }
 }

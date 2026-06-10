@@ -4,20 +4,20 @@ import { extractAuthToken } from '../api/chat.js';
 import { logInfo, logError, logWarn } from '../logger/index.js';
 import { CHAT_PAGE_URL, AUTH_SIGNIN_URL, PAGE_TIMEOUT, RETRY_DELAY } from '../config.js';
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function isPlaywright(context) {
     return context && typeof context.newPage === 'function';
 }
 
 async function getPage(context) {
-    if (context && typeof context.goto === 'function') return context;
-    if (context && typeof context.newPage === 'function') return await context.newPage();
+    if (context && typeof context.goto === 'function') {return context;}
+    if (context && typeof context.newPage === 'function') {return await context.newPage();}
     throw new Error('Неверный контекст: не страница Puppeteer, не контекст Playwright');
 }
 
 async function promptUser(question) {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
         process.stdout.write(question);
         const onData = (data) => {
             process.stdin.removeListener('data', onData);
@@ -30,13 +30,13 @@ async function promptUser(question) {
 }
 
 async function countLoginContainers(page, isPW) {
-    if (isPW) return page.locator('.login-container').count();
+    if (isPW) {return page.locator('.login-container').count();}
     return (await page.$$('.login-container')).length;
 }
 
 export async function checkAuthentication(context) {
     try {
-        if (getAuthenticationStatus()) return true;
+        if (getAuthenticationStatus()) {return true;}
 
         const page = await getPage(context);
         const isPW = isPlaywright(context);
@@ -45,7 +45,7 @@ export async function checkAuthentication(context) {
 
         try {
             await page.goto(CHAT_PAGE_URL, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
-            if (isPW) await page.waitForLoadState('domcontentloaded');
+            if (isPW) {await page.waitForLoadState('domcontentloaded');}
             await delay(RETRY_DELAY);
 
             const pageTitle = await page.title();
@@ -65,7 +65,7 @@ export async function checkAuthentication(context) {
                     await saveSession(context);
                     logInfo('Сессия обновлена');
                 } catch (e) { logError('Не удалось обновить сессию', e); }
-                if (isPW) await page.close();
+                if (isPW) {await page.close();}
                 return true;
             }
 
@@ -90,7 +90,7 @@ export async function checkAuthentication(context) {
                 setAuthenticationStatus(true);
                 await saveSession(context);
                 await extractAuthToken(context, true);
-                if (isPW) await page.close();
+                if (isPW) {await page.close();}
                 return true;
             }
 
@@ -98,7 +98,7 @@ export async function checkAuthentication(context) {
             setAuthenticationStatus(false);
             return false;
         } catch (error) {
-            if (isPW) await page.close().catch(() => {});
+            if (isPW) {await page.close().catch(() => {});}
             throw error;
         }
     } catch (error) {
@@ -139,8 +139,8 @@ export async function startManualAuthentication(context, skipRestart = false) {
                 await saveSession(context);
                 await extractAuthToken(context, true);
                 logInfo('Сессия сохранена успешно!');
-                if (isPW) await page.close();
-                if (!skipRestart) await restartBrowserInHeadlessMode();
+                if (isPW) {await page.close();}
+                if (!skipRestart) {await restartBrowserInHeadlessMode();}
                 return true;
             }
 
@@ -148,7 +148,7 @@ export async function startManualAuthentication(context, skipRestart = false) {
             setAuthenticationStatus(false);
             return false;
         } catch (error) {
-            if (isPW) await page.close().catch(() => {});
+            if (isPW) {await page.close().catch(() => {});}
             throw error;
         }
     } catch (error) {

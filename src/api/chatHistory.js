@@ -157,9 +157,9 @@ export function addUserMessage(chatId, content) {
     let contentDesc;
     if (Array.isArray(content)) {
         // Составное сообщение (текст + изображения)
-        const textParts = content.filter(item => item.type === 'text');
-        const imageParts = content.filter(item => item.type === 'image');
-        const fileParts = content.filter(item => item.type === 'file');
+        const textParts = content.filter((item) => item.type === 'text');
+        const imageParts = content.filter((item) => item.type === 'image');
+        const fileParts = content.filter((item) => item.type === 'file');
 
         contentDesc = `составное сообщение (${textParts.length} текст., ${imageParts.length} изобр., ${fileParts.length} файл.)`;
     } else if (typeof content === 'object' && content !== null) {
@@ -170,10 +170,10 @@ export function addUserMessage(chatId, content) {
 
     const message = {
         id: messageId,
-        role: "user",
+        role: 'user',
         content: content,
         timestamp: timestamp,
-        chat_type: "t2t"
+        chat_type: 't2t'
     };
 
     logInfo(`Добавление сообщения пользователя в чат ${chatId}: ${contentDesc}`);
@@ -186,11 +186,11 @@ export function addAssistantMessage(chatId, content, info = {}) {
 
     const message = {
         id: messageId,
-        role: "assistant",
+        role: 'assistant',
         content: content,
         timestamp: timestamp,
         info: info,
-        chat_type: "t2t"
+        chat_type: 't2t'
     };
 
     logInfo(`Добавление ответа ассистента в чат ${chatId}, длина: ${content.length}`);
@@ -225,8 +225,8 @@ export function getAllChats() {
 
         let convertedCount = 0;
         const chats = files
-            .filter(file => file.endsWith('.json'))
-            .map(file => {
+            .filter((file) => file.endsWith('.json'))
+            .map((file) => {
                 const chatId = file.replace('.json', '');
                 const chatData = loadHistory(chatId);
 
@@ -240,7 +240,7 @@ export function getAllChats() {
                     created: chatData.created || 0,
                     messageCount: chatData.messages ? chatData.messages.length : 0,
                     userMessageCount: chatData.messages ?
-                        chatData.messages.filter(m => m.role === 'user').length : 0
+                        chatData.messages.filter((m) => m.role === 'user').length : 0
                 };
             });
 
@@ -285,24 +285,24 @@ export function deleteChatsAutomatically(criteria = {}) {
         // Фильтрация по возрасту (в миллисекундах)
         if (olderThan) {
             const cutoffTime = Date.now() - olderThan;
-            const oldChatsCount = chatsToDelete.filter(chat => chat.created < cutoffTime).length;
+            const oldChatsCount = chatsToDelete.filter((chat) => chat.created < cutoffTime).length;
             logInfo(`Чатов старше ${olderThan}мс (${new Date(cutoffTime).toLocaleString()}): ${oldChatsCount}`);
-            chatsToDelete = chatsToDelete.filter(chat => chat.created < cutoffTime);
+            chatsToDelete = chatsToDelete.filter((chat) => chat.created < cutoffTime);
         }
 
         if (userMessageCountLessThan !== undefined) {
-            const lowUserMsgChatsCount = chatsToDelete.filter(chat =>
+            const lowUserMsgChatsCount = chatsToDelete.filter((chat) =>
                 chat.userMessageCount < userMessageCountLessThan).length;
             logInfo(`Чатов с менее чем ${userMessageCountLessThan} сообщений пользователя: ${lowUserMsgChatsCount}`);
-            chatsToDelete = chatsToDelete.filter(chat =>
+            chatsToDelete = chatsToDelete.filter((chat) =>
                 chat.userMessageCount < userMessageCountLessThan);
         }
 
         if (messageCountLessThan !== undefined) {
-            const lowMsgChatsCount = chatsToDelete.filter(chat =>
+            const lowMsgChatsCount = chatsToDelete.filter((chat) =>
                 chat.messageCount < messageCountLessThan).length;
             logInfo(`Чатов с менее чем ${messageCountLessThan} сообщений всего: ${lowMsgChatsCount}`);
-            chatsToDelete = chatsToDelete.filter(chat =>
+            chatsToDelete = chatsToDelete.filter((chat) =>
                 chat.messageCount < messageCountLessThan);
         }
 
@@ -311,8 +311,8 @@ export function deleteChatsAutomatically(criteria = {}) {
             const sortedChats = [...chats].sort((a, b) => a.created - b.created);
             const oldestChats = sortedChats.slice(0, chats.length - maxChats);
 
-            oldestChats.forEach(chat => {
-                if (!chatsToDelete.some(c => c.id === chat.id)) {
+            oldestChats.forEach((chat) => {
+                if (!chatsToDelete.some((c) => c.id === chat.id)) {
                     chatsToDelete.push(chat);
                 }
             });
@@ -341,4 +341,4 @@ export function deleteChatsAutomatically(criteria = {}) {
             error: error.message
         };
     }
-} 
+}

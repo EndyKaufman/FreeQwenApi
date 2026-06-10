@@ -2,6 +2,79 @@
 
 A powerful proxy server that provides OpenAI-compatible API access to Qwen (通义千问) models through browser emulation. Features include chat completions, image generation, file uploads, and a Telegram bot for session management.
 
+## CLI Commands
+
+All commands can be run with `npx` (no installation) or after global install:
+
+```bash
+# Using npx (recommended for occasional use)
+npx qwen-api-proxy <command>
+
+# After global install (recommended for frequent use)
+qwen-api-proxy <command>
+```
+
+### Available Commands
+
+#### Start Server
+
+```bash
+npx qwen-api-proxy
+```
+
+#### Initialize Directory (Without Starting Server)
+
+```bash
+npx qwen-api-proxy init
+```
+
+Creates all necessary directories and `.env` file without starting the server.
+
+#### Create Session Archive
+
+```bash
+npx qwen-api-proxy archive
+```
+
+Creates a ZIP archive of the session directory for backup or transfer.
+
+#### Extend Session
+
+```bash
+# Extend all sessions
+npx qwen-api-proxy extend
+
+# Extend specific account
+npx qwen-api-proxy extend --account-id acc_1234567890
+
+# Verbose output
+npx qwen-api-proxy extend --verbose
+```
+
+Extends session expiration dates for configured accounts.
+
+#### System Health Check
+
+```bash
+npx qwen-api-proxy doctor
+```
+
+Comprehensive system health check including:
+- Node.js version
+- Required directories
+- File permissions
+- Disk space
+- Account configuration
+- Dependencies
+
+#### Custom Working Directory
+
+```bash
+npx qwen-api-proxy --dir=/path/to/project
+npx qwen-api-proxy archive --dir=/path/to/project
+npx qwen-api-proxy doctor --dir=/path/to/project
+```
+
 ## Features
 
 - 🔄 **OpenAI-Compatible API** - Drop-in replacement for OpenAI SDK
@@ -56,6 +129,10 @@ nvm use
 When you run the command for the first time, it will automatically create all necessary directories:
 
 ```bash
+# Using npx (no installation required)
+npx qwen-api-proxy
+
+# Or after global install
 qwen-api-proxy
 ```
 

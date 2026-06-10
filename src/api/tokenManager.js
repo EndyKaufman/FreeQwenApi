@@ -13,8 +13,8 @@ const TOKENS_FILE = path.join(SESSION_PATH, 'tokens.json');
 let pointer = 0;
 
 function ensureSessionDir() {
-    if (!fs.existsSync(SESSION_PATH)) fs.mkdirSync(SESSION_PATH, { recursive: true });
-    if (!fs.existsSync(ACCOUNTS_PATH)) fs.mkdirSync(ACCOUNTS_PATH, { recursive: true });
+    if (!fs.existsSync(SESSION_PATH)) {fs.mkdirSync(SESSION_PATH, { recursive: true });}
+    if (!fs.existsSync(ACCOUNTS_PATH)) {fs.mkdirSync(ACCOUNTS_PATH, { recursive: true });}
 }
 
 /**
@@ -34,28 +34,28 @@ export function hasCookies(accountId) {
  */
 function decodeJwtExpiry(token) {
     try {
-        if (!token || typeof token !== 'string') return null;
-        
+        if (!token || typeof token !== 'string') {return null;}
+
         const parts = token.split('.');
-        if (parts.length !== 3) return null;
-        
+        if (parts.length !== 3) {return null;}
+
         // Декодируем payload (вторая часть JWT)
         // JWT использует URL-safe base64, нужно заменить - на + и _ на /
         let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        
+
         // Добавляем padding если нужно
         while (base64.length % 4) {
             base64 += '=';
         }
-        
+
         const payload = Buffer.from(base64, 'base64').toString('utf8');
         const decoded = JSON.parse(payload);
-        
+
         // JWT использует поле 'exp' для времени истечения (в секундах)
         if (decoded.exp) {
             return decoded.exp * 1000; // Конвертируем в миллисекунды
         }
-        
+
         return null;
     } catch (error) {
         // Если не удалось декодировать, возвращаем null
@@ -65,12 +65,12 @@ function decodeJwtExpiry(token) {
 
 export function loadTokens() {
     ensureSessionDir();
-    if (!fs.existsSync(TOKENS_FILE)) return [];
+    if (!fs.existsSync(TOKENS_FILE)) {return [];}
     try {
         const tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8'));
-        
+
         // Добавляем expiryTime для каждого токена, если его нет
-        return tokens.map(token => {
+        return tokens.map((token) => {
             if (!token.expiryTime && token.token) {
                 token.expiryTime = decodeJwtExpiry(token.token);
             }
@@ -99,25 +99,25 @@ export function saveTokens(tokens) {
 export async function getAvailableToken() {
     const tokens = loadTokens();
     const now = Date.now();
-    
+
     // Фильтруем токены: не rate-limited, не invalid, JWT не истёк, и есть cookies
-    const valid = tokens.filter(t => {
+    const valid = tokens.filter((t) => {
         // Пропускаем недействительные токены
-        if (t.invalid) return false;
-        
+        if (t.invalid) {return false;}
+
         // Пропускаем токены с rate limit в будущем
-        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
-        
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) {return false;}
+
         // Пропускаем токены с истёкшим JWT
-        if (t.expiryTime && t.expiryTime <= now) return false;
-        
+        if (t.expiryTime && t.expiryTime <= now) {return false;}
+
         // Пропускаем токены без cookies.json
-        if (!hasCookies(t.id)) return false;
-        
+        if (!hasCookies(t.id)) {return false;}
+
         return true;
     });
-    
-    if (!valid.length) return null;
+
+    if (!valid.length) {return null;}
     const token = valid[pointer % valid.length];
     pointer = (pointer + 1) % valid.length;
     return token;
@@ -126,28 +126,28 @@ export async function getAvailableToken() {
 export function hasValidTokens() {
     const tokens = loadTokens();
     const now = Date.now();
-    
+
     // Проверяем, есть ли хотя бы один валидный токен с cookies
-    return tokens.some(t => {
+    return tokens.some((t) => {
         // Пропускаем недействительные токены
-        if (t.invalid) return false;
-        
+        if (t.invalid) {return false;}
+
         // Пропускаем токены с rate limit в будущем
-        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
-        
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) {return false;}
+
         // Пропускаем токены с истёкшим JWT
-        if (t.expiryTime && t.expiryTime <= now) return false;
-        
+        if (t.expiryTime && t.expiryTime <= now) {return false;}
+
         // Пропускаем токены без cookies.json
-        if (!hasCookies(t.id)) return false;
-        
+        if (!hasCookies(t.id)) {return false;}
+
         return true;
     });
 }
 
 export function markRateLimited(id, hours = 24) {
     const tokens = loadTokens();
-    const idx = tokens.findIndex(t => t.id === id);
+    const idx = tokens.findIndex((t) => t.id === id);
     if (idx !== -1) {
         tokens[idx].resetAt = new Date(Date.now() + hours * 3600 * 1000).toISOString();
         saveTokens(tokens);
@@ -155,24 +155,24 @@ export function markRateLimited(id, hours = 24) {
 }
 
 export function removeToken(id) {
-    saveTokens(loadTokens().filter(t => t.id !== id));
+    saveTokens(loadTokens().filter((t) => t.id !== id));
 }
 
 export { removeToken as removeInvalidToken };
 
 export function markInvalid(id) {
     const tokens = loadTokens();
-    const idx = tokens.findIndex(t => t.id === id);
+    const idx = tokens.findIndex((t) => t.id === id);
     if (idx !== -1) { tokens[idx].invalid = true; saveTokens(tokens); }
 }
 
 export function markValid(id, newToken) {
     const tokens = loadTokens();
-    const idx = tokens.findIndex(t => t.id === id);
+    const idx = tokens.findIndex((t) => t.id === id);
     if (idx !== -1) {
         tokens[idx].invalid = false;
         tokens[idx].resetAt = null;
-        if (newToken) tokens[idx].token = newToken;
+        if (newToken) {tokens[idx].token = newToken;}
         saveTokens(tokens);
     }
 }
@@ -188,20 +188,20 @@ export function listTokens() {
 export function getValidTokens() {
     const tokens = loadTokens();
     const now = Date.now();
-    
-    return tokens.filter(t => {
+
+    return tokens.filter((t) => {
         // Пропускаем недействительные токены
-        if (t.invalid) return false;
-        
+        if (t.invalid) {return false;}
+
         // Пропускаем токены с rate limit в будущем
-        if (t.resetAt && new Date(t.resetAt).getTime() > now) return false;
-        
+        if (t.resetAt && new Date(t.resetAt).getTime() > now) {return false;}
+
         // Пропускаем токены с истёкшим JWT
-        if (t.expiryTime && t.expiryTime <= now) return false;
-        
+        if (t.expiryTime && t.expiryTime <= now) {return false;}
+
         // Пропускаем токены без cookies.json
-        if (!hasCookies(t.id)) return false;
-        
+        if (!hasCookies(t.id)) {return false;}
+
         return true;
     });
 }
@@ -215,14 +215,14 @@ export function getValidTokens() {
  */
 export function checkTokenExpiry(tokenId, warningMs = TOKEN_EXPIRY_WARNING_MS) {
     const tokens = loadTokens();
-    const token = tokens.find(t => t.id === tokenId);
-    
+    const token = tokens.find((t) => t.id === tokenId);
+
     if (!token) {
         return { willExpireSoon: false, expiresAt: null, timeLeft: null, tokenFound: false };
     }
 
     const now = Date.now();
-    
+
     // Если токен помечен как недействительный
     if (token.invalid) {
         return { willExpireSoon: true, expiresAt: null, timeLeft: null, tokenFound: true, isInvalid: true };
@@ -231,25 +231,25 @@ export function checkTokenExpiry(tokenId, warningMs = TOKEN_EXPIRY_WARNING_MS) {
     // Проверяем JWT expiry time (если есть)
     if (token.expiryTime) {
         const jwtTimeLeft = token.expiryTime - now;
-        
+
         // Если JWT уже истёк
         if (jwtTimeLeft <= 0) {
-            return { 
-                willExpireSoon: true, 
-                expiresAt: new Date(token.expiryTime), 
-                timeLeft: 0, 
-                tokenFound: true, 
+            return {
+                willExpireSoon: true,
+                expiresAt: new Date(token.expiryTime),
+                timeLeft: 0,
+                tokenFound: true,
                 isExpired: true,
                 expiredType: 'jwt'
             };
         }
-        
+
         // Если JWT истекает в ближайшее время
         if (jwtTimeLeft <= warningMs) {
-            return { 
-                willExpireSoon: true, 
-                expiresAt: new Date(token.expiryTime), 
-                timeLeft: jwtTimeLeft, 
+            return {
+                willExpireSoon: true,
+                expiresAt: new Date(token.expiryTime),
+                timeLeft: jwtTimeLeft,
                 tokenFound: true,
                 isExpiringSoon: true,
                 expiredType: 'jwt'
@@ -261,35 +261,35 @@ export function checkTokenExpiry(tokenId, warningMs = TOKEN_EXPIRY_WARNING_MS) {
     if (token.resetAt) {
         const resetTime = new Date(token.resetAt).getTime();
         const timeLeft = resetTime - now;
-        
+
         // Если уже истёк или истекает в ближайшее время
         if (timeLeft <= 0) {
-            return { 
-                willExpireSoon: true, 
-                expiresAt: new Date(token.resetAt), 
-                timeLeft: 0, 
-                tokenFound: true, 
+            return {
+                willExpireSoon: true,
+                expiresAt: new Date(token.resetAt),
+                timeLeft: 0,
+                tokenFound: true,
                 isExpired: true,
                 expiredType: 'rate_limit'
             };
         }
-        
+
         if (timeLeft <= warningMs) {
-            return { 
-                willExpireSoon: true, 
-                expiresAt: new Date(token.resetAt), 
-                timeLeft, 
+            return {
+                willExpireSoon: true,
+                expiresAt: new Date(token.resetAt),
+                timeLeft,
                 tokenFound: true,
                 isExpiringSoon: true,
                 expiredType: 'rate_limit'
             };
         }
-        
-        return { 
-            willExpireSoon: false, 
-            expiresAt: new Date(token.resetAt), 
-            timeLeft, 
-            tokenFound: true 
+
+        return {
+            willExpireSoon: false,
+            expiresAt: new Date(token.resetAt),
+            timeLeft,
+            tokenFound: true
         };
     }
 
@@ -305,13 +305,13 @@ export function checkTokenExpiry(tokenId, warningMs = TOKEN_EXPIRY_WARNING_MS) {
 export function checkAllTokensExpiry(warningMs = TOKEN_EXPIRY_WARNING_MS) {
     const tokens = loadTokens();
     const now = Date.now();
-    
+
     const expiringTokens = [];
     let activeTokens = 0;
 
-    tokens.forEach(token => {
+    tokens.forEach((token) => {
         const expiryInfo = checkTokenExpiry(token.id, warningMs);
-        
+
         if (expiryInfo.willExpireSoon) {
             expiringTokens.push({
                 ...token,
@@ -340,15 +340,15 @@ export function checkAllTokensExpiry(warningMs = TOKEN_EXPIRY_WARNING_MS) {
 export async function getSafeToken(warningMs = TOKEN_EXPIRY_WARNING_MS) {
     const tokens = loadTokens();
     const now = Date.now();
-    
+
     // Фильтруем токены, которые не истекают в ближайшее время и имеют cookies
-    const safeTokens = tokens.filter(t => {
+    const safeTokens = tokens.filter((t) => {
         // Пропускаем недействительные токены
-        if (t.invalid) return false;
-        
+        if (t.invalid) {return false;}
+
         // Пропускаем токены без cookies.json
-        if (!hasCookies(t.id)) return false;
-        
+        if (!hasCookies(t.id)) {return false;}
+
         // Проверяем rate limit reset time
         if (t.resetAt) {
             const resetTime = new Date(t.resetAt).getTime();
@@ -357,7 +357,7 @@ export async function getSafeToken(warningMs = TOKEN_EXPIRY_WARNING_MS) {
                 return false;
             }
         }
-        
+
         // Проверяем JWT expiry time (если есть)
         if (t.expiryTime) {
             const jwtTimeLeft = t.expiryTime - now;
@@ -366,7 +366,7 @@ export async function getSafeToken(warningMs = TOKEN_EXPIRY_WARNING_MS) {
                 return false;
             }
         }
-        
+
         return true;
     });
 
@@ -376,7 +376,7 @@ export async function getSafeToken(warningMs = TOKEN_EXPIRY_WARNING_MS) {
 
     const token = safeTokens[pointer % safeTokens.length];
     pointer = (pointer + 1) % safeTokens.length;
-    
+
     logInfo(`Использован безопасный токен: ${token.id}`);
     return token;
 }

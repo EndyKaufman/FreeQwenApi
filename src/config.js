@@ -24,9 +24,9 @@ if (dotenvResult.error) {
 // Все значения читаются из env-переменных с фоллбэками на дефолты.
 
 function toBoolean(value) {
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'number') return value === 1;
-    if (typeof value !== 'string') return false;
+    if (typeof value === 'boolean') {return value;}
+    if (typeof value === 'number') {return value === 1;}
+    if (typeof value !== 'string') {return false;}
     return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
@@ -92,7 +92,7 @@ export const LOG_MAX_FILES = Number(process.env.LOG_MAX_FILES) || 5;
 // ─── Telegram уведомления ───────────────────────────────────────────────────
 export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || null;
 export const TELEGRAM_USER_IDS = process.env.TELEGRAM_USER_IDS
-    ? process.env.TELEGRAM_USER_IDS.split(',').map(id => id.trim()).filter(id => id)
+    ? process.env.TELEGRAM_USER_IDS.split(',').map((id) => id.trim()).filter((id) => id)
     : [];
 export const TOKEN_EXPIRY_WARNING_MS = Number(process.env.TOKEN_EXPIRY_WARNING_MS) || 3600000; // 1 hour
 

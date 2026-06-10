@@ -23,7 +23,7 @@ npm run extend-session
 ### Extend Specific Account
 
 ```bash
-node scripts/extendSession.js --account-id acc_1234567890
+npx qwen-api-proxy extend --account-id acc_1234567890
 ```
 
 ## 📋 How It Works
@@ -122,7 +122,7 @@ node scripts/extendSession.js --account-id acc_1718123456789
 
 ```bash
 # Show detailed logs
-node scripts/extendSession.js --verbose
+npx qwen-api-proxy extend --verbose
 ```
 
 ## ⏰ Automated Scheduling
@@ -193,7 +193,7 @@ sudo systemctl start qwen-session-extend.timer
 ## 🔧 Command Line Options
 
 ```
-Usage: node scripts/extendSession.js [options]
+Usage: npx qwen-api-proxy extend [options]
 
 Options:
   --account-id <id>  Extend specific account (e.g., acc_1234567890)
@@ -206,10 +206,10 @@ Examples:
   npm run extend-session
 
   # Extend specific account
-  node scripts/extendSession.js --account-id acc_1234567890
+  npx qwen-api-proxy extend --account-id acc_1234567890
 
   # Extend all with verbose output
-  node scripts/extendSession.js --all --verbose
+  npx qwen-api-proxy extend --all --verbose
 ```
 
 ## 📊 Session States
@@ -303,7 +303,7 @@ ls session/accounts/
 cat session/tokens.json | jq '.[] | {id, lastExtended}'
 
 # Extend specific account
-node scripts/extendSession.js --account-id acc_XXXX
+npx qwen-api-proxy extend --account-id acc_XXXX
 ```
 
 ## 📁 Files Modified

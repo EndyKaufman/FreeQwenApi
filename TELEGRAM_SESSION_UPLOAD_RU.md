@@ -20,7 +20,7 @@ Telegram бот позволяет **удаленно загружать сес�
 npm run extend-session
 
 # Продлить конкретный аккаунт
-node scripts/extendSession.js --account-id acc_1234567890
+npx qwen-api-proxy extend --account-id acc_1234567890
 ```
 
 **Как это работает:**

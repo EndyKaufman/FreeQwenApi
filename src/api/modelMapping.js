@@ -9,182 +9,174 @@ const __dirname = path.dirname(__filename);
 const MODELS_FILE = path.join(__dirname, '..', 'AvailableModels.txt');
 
 const CANONICAL_MODELS = Object.freeze([
-    "qwen3.5-plus",
-    "qwen3.5-397b-a17b",
-    "qwen3-max",
-    "qwen3-vl-plus",
-    "qwen3-coder-plus",
-    "qwen3-omni-flash",
-    "qwen3-omni-flash-2025-12-01",
-    "qwen-max-latest",
-    "qwen-plus-2025-09-11",
-    "qwen-plus-2025-01-25",
-    "qwq-32b",
-    "qwen3-235b-a22b",
-    "qwen3-30b-a3b",
-    "qwen3-coder-30b-a3b-instruct",
-    "qwen-turbo-2025-02-11",
-    "qwen2.5-omni-7b",
-    "qvq-72b-preview-0310",
-    "qwen2.5-vl-32b-instruct",
-    "qwen2.5-14b-instruct-1m",
-    "qwen2.5-coder-32b-instruct",
-    "qwen2.5-72b-instruct",
-    "qwen3.5-plus",
-    "qwen3.5-flash",
-    "qwen3.5-397b-a17b",
-    "qwen3.5-122b-a10b",
-    "qwen3.5-27b",
-    "qwen3.5-35b-a3b"
+    'qwen3.5-plus',
+    'qwen3.5-397b-a17b',
+    'qwen3-max',
+    'qwen3-vl-plus',
+    'qwen3-coder-plus',
+    'qwen3-omni-flash',
+    'qwen3-omni-flash-2025-12-01',
+    'qwen-max-latest',
+    'qwen-plus-2025-09-11',
+    'qwen-plus-2025-01-25',
+    'qwq-32b',
+    'qwen3-235b-a22b',
+    'qwen3-30b-a3b',
+    'qwen3-coder-30b-a3b-instruct',
+    'qwen-turbo-2025-02-11',
+    'qwen2.5-omni-7b',
+    'qvq-72b-preview-0310',
+    'qwen2.5-vl-32b-instruct',
+    'qwen2.5-14b-instruct-1m',
+    'qwen2.5-coder-32b-instruct',
+    'qwen2.5-72b-instruct',
+    'qwen3.5-plus',
+    'qwen3.5-flash',
+    'qwen3.5-397b-a17b',
+    'qwen3.5-122b-a10b',
+    'qwen3.5-27b',
+    'qwen3.5-35b-a3b'
 ]);
 
 const CANONICAL_MODEL_SET = new Set(CANONICAL_MODELS);
 
 const ALIAS_GROUPS = Object.freeze({
-    "qwen3.5-plus": [
-        "qwen3.5",
-        "Qwen3.5-Plus",
-        "qwen3.5-plus-latest"
+    'qwen3.5-plus': [
+        'qwen3.5',
+        'Qwen3.5-Plus',
+        'qwen3.5-plus-latest'
     ],
-    "qwen3.5-397b-a17b": [
-        "qwen3.5-397b",
-        "Qwen3.5-397B-A17B"
+    'qwen3-max': [
+        'qwen-max',
+        'Qwen3-Max',
+        'Qwen3-Maximum',
+        'qwen3-max-preview',
+        'Qwen3-Max-Preview'
     ],
-    "qwen3-max": [
-        "qwen-max",
-        "Qwen3-Max",
-        "Qwen3-Maximum",
-        "qwen3-max-preview",
-        "Qwen3-Max-Preview"
+    'qwen3-vl-plus': [
+        'qwen-vl',
+        'qwen-vl-plus',
+        'qwen-vl-plus-latest',
+        'qwen-vl-max',
+        'qwen-vl-max-latest',
+        'Qwen3-VL-235B-A22B',
+        'qwen3-vl-235b-a22b'
     ],
-    "qwen3-vl-plus": [
-        "qwen-vl",
-        "qwen-vl-plus",
-        "qwen-vl-plus-latest",
-        "qwen-vl-max",
-        "qwen-vl-max-latest",
-        "Qwen3-VL-235B-A22B",
-        "qwen3-vl-235b-a22b"
+    'qwen3-coder-plus': [
+        'qwen3-coder',
+        'qwen-coder-plus',
+        'qwen-coder-plus-latest',
+        'Qwen3-Coder-Plus',
+        'qwen2.5-coder-3b-instruct',
+        'qwen2.5-coder-1.5b-instruct',
+        'qwen2.5-coder-0.5b-instruct',
+        'Qwen3-Coder'
     ],
-    "qwen3-coder-plus": [
-        "qwen3-coder",
-        "qwen-coder-plus",
-        "qwen-coder-plus-latest",
-        "Qwen3-Coder-Plus",
-        "qwen2.5-coder-3b-instruct",
-        "qwen2.5-coder-1.5b-instruct",
-        "qwen2.5-coder-0.5b-instruct",
-        "Qwen3-Coder"
+    'qwen3-omni-flash': [
+        'qwen3-omni',
+        'qwen3-omni-latest',
+        'Qwen3-omni-flash',
+        'Qwen3-Omni-Flash',
+        'Qwen3-Omni'
     ],
-    "qwen3-omni-flash": [
-        "qwen3-omni",
-        "qwen3-omni-latest",
-        "Qwen3-omni-flash",
-        "Qwen3-Omni-Flash",
-        "Qwen3-Omni"
+    'qwen3-omni-flash-2025-12-01': [
+        'Qwen3-Omni-Flash-2025-12-01'
     ],
-    "qwen3-omni-flash-2025-12-01": [
-        "Qwen3-Omni-Flash-2025-12-01"
+    'qwen-plus-2025-09-11': [
+        'qwen-plus',
+        'qwen-plus-latest',
+        'Qwen3-Next',
+        'Qwen3-Next-80B-A3B',
+        'qwen3-next',
+        'qwen3-next-80b-a3b'
     ],
-    "qwen-plus-2025-09-11": [
-        "qwen-plus",
-        "qwen-plus-latest",
-        "Qwen3-Next",
-        "Qwen3-Next-80B-A3B",
-        "qwen3-next",
-        "qwen3-next-80b-a3b"
+    'qwen3-235b-a22b': [
+        'qwen3',
+        'qwen-3',
+        'qwen3-235b',
+        'Qwen3-235B-A22B',
+        'Qwen3-235B-A22B-2507',
+        'qwen3-235b-a22b-2507'
     ],
-    "qwen3-235b-a22b": [
-        "qwen3",
-        "qwen-3",
-        "qwen3-235b",
-        "Qwen3-235B-A22B",
-        "Qwen3-235B-A22B-2507",
-        "qwen3-235b-a22b-2507"
+    'qwen3-30b-a3b': [
+        'qwen3-plus',
+        'qwen3-30b',
+        'Qwen3-30B-A3B',
+        'Qwen3-30B-A3B-2507',
+        'qwen3-30b-a3b-2507'
     ],
-    "qwen3-30b-a3b": [
-        "qwen3-plus",
-        "qwen3-30b",
-        "Qwen3-30B-A3B",
-        "Qwen3-30B-A3B-2507",
-        "qwen3-30b-a3b-2507"
+    'qwen3-coder-30b-a3b-instruct': [
+        'qwen3-coder-flash',
+        'Qwen3-Coder-Flash',
+        'qwen3-coder-30b',
+        'Qwen3-Coder-30B-A3B-Instruct'
     ],
-    "qwen3-coder-30b-a3b-instruct": [
-        "qwen3-coder-flash",
-        "Qwen3-Coder-Flash",
-        "qwen3-coder-30b",
-        "Qwen3-Coder-30B-A3B-Instruct"
+    'qwen-max-latest': [
+        'Qwen2.5-Max',
+        'qwen2.5-max'
     ],
-    "qwen-max-latest": [
-        "Qwen2.5-Max",
-        "qwen2.5-max"
+    'qwen-plus-2025-01-25': [
+        'Qwen2.5-Plus',
+        'qwen2.5-plus'
     ],
-    "qwen-plus-2025-01-25": [
-        "Qwen2.5-Plus",
-        "qwen2.5-plus"
+    'qwq-32b': [
+        'qwq',
+        'QwQ-32B',
+        'qwq-32b-preview'
     ],
-    "qwq-32b": [
-        "qwq",
-        "QwQ-32B",
-        "qwq-32b-preview"
+    'qwen-turbo-2025-02-11': [
+        'qwen-turbo',
+        'qwen-turbo-latest',
+        'Qwen2.5-Turbo'
     ],
-    "qwen-turbo-2025-02-11": [
-        "qwen-turbo",
-        "qwen-turbo-latest",
-        "Qwen2.5-Turbo"
+    'qwen2.5-omni-7b': [
+        'qwen2.5-omni',
+        'Qwen2.5-Omni-7B',
+        'qwen-omni-7b'
     ],
-    "qwen2.5-omni-7b": [
-        "qwen2.5-omni",
-        "Qwen2.5-Omni-7B",
-        "qwen-omni-7b"
+    'qvq-72b-preview-0310': [
+        'qvq',
+        'QVQ-Max',
+        'qvq-72b'
     ],
-    "qvq-72b-preview-0310": [
-        "qvq",
-        "QVQ-Max",
-        "qvq-72b"
+    'qwen2.5-vl-32b-instruct': [
+        'qwen2.5-vl',
+        'Qwen2.5-VL-32B-Instruct'
     ],
-    "qwen2.5-vl-32b-instruct": [
-        "qwen2.5-vl",
-        "Qwen2.5-VL-32B-Instruct"
+    'qwen2.5-14b-instruct-1m': [
+        'qwen2.5-14b',
+        'qwen2.5-coder-14b-instruct',
+        'Qwen2.5-14B-Instruct-1M'
     ],
-    "qwen2.5-14b-instruct-1m": [
-        "qwen2.5-14b",
-        "qwen2.5-coder-14b-instruct",
-        "Qwen2.5-14B-Instruct-1M"
+    'qwen2.5-coder-32b-instruct': [
+        'qwen2.5-coder',
+        'qwen2.5-coder-plus',
+        'Qwen2.5-Coder-32B-Instruct'
     ],
-    "qwen2.5-coder-32b-instruct": [
-        "qwen2.5-coder",
-        "qwen2.5-coder-plus",
-        "Qwen2.5-Coder-32B-Instruct"
+    'qwen2.5-72b-instruct': [
+        'qwen2.5-72b',
+        'Qwen2.5-72B-Instruct'
     ],
-    "qwen2.5-72b-instruct": [
-        "qwen2.5-72b",
-        "Qwen2.5-72B-Instruct"
+    'qwen3.5-flash': [
+        'qwen3.5-flash-latest',
+        'Qwen3.5-Flash'
     ],
-    "qwen3.5-plus": [
-        "qwen3.5-plus-latest",
-        "Qwen3.5-Plus"
+    'qwen3.5-397b-a17b': [
+        'qwen3.5-397b',
+        'Qwen3.5-397B-A17B',
+        'qwen3.5-huge'
     ],
-    "qwen3.5-flash": [
-        "qwen3.5-flash-latest",
-        "Qwen3.5-Flash"
+    'qwen3.5-122b-a10b': [
+        'qwen3.5-122b',
+        'Qwen3.5-122B-A10B'
     ],
-    "qwen3.5-397b-a17b": [
-        "qwen3.5-397b",
-        "Qwen3.5-397B-A17B",
-        "qwen3.5-huge"
+    'qwen3.5-27b': [
+        'qwen3.5-27b-instruct',
+        'Qwen3.5-27B'
     ],
-    "qwen3.5-122b-a10b": [
-        "qwen3.5-122b",
-        "Qwen3.5-122B-A10B"
-    ],
-    "qwen3.5-27b": [
-        "qwen3.5-27b-instruct",
-        "Qwen3.5-27B"
-    ],
-    "qwen3.5-35b-a3b": [
-        "qwen3.5-35b",
-        "Qwen3.5-35B-A3B"
+    'qwen3.5-35b-a3b': [
+        'qwen3.5-35b',
+        'Qwen3.5-35B-A3B'
     ]
 });
 
@@ -201,7 +193,7 @@ const buildModelMapping = () => {
         }
 
         for (const alias of aliases) {
-            if (!alias) continue;
+            if (!alias) {continue;}
             mapping[alias] = target;
         }
     }
@@ -222,8 +214,8 @@ function getAvailableModelsList() {
         }
         return fs.readFileSync(MODELS_FILE, 'utf8')
             .split('\n')
-            .map(l => l.trim())
-            .filter(l => l && !l.startsWith('#'));
+            .map((l) => l.trim())
+            .filter((l) => l && !l.startsWith('#'));
     } catch (error) {
         return [];
     }
@@ -248,7 +240,7 @@ export function isValidModel(modelName) {
 export function getMappedModel(requestedModel, defaultModel = null) {
     // Если defaultModel не передан, используем динамический default
     const effectiveDefault = defaultModel || getActiveModel();
-    if (!requestedModel) return effectiveDefault;
+    if (!requestedModel) {return effectiveDefault;}
 
     // Проверяем точное соответствие в словаре
     if (MODEL_MAPPING[requestedModel]) {
@@ -268,7 +260,7 @@ export function getMappedModel(requestedModel, defaultModel = null) {
     // Если запрошенная модель не найдена, логируем предупреждение
     logWarn(`Модель "${requestedModel}" не найдена в списке доступных.`);
     logWarn(`Используем модель по умолчанию: ${effectiveDefault}`);
-    
+
     // Возвращаем модель по умолчанию
     return effectiveDefault;
-} 
+}

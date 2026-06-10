@@ -36,18 +36,18 @@ async function testStreaming() {
 
     while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {break;}
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-            if (!line.trim() || !line.startsWith('data: ')) continue;
+            if (!line.trim() || !line.startsWith('data: ')) {continue;}
             if (line === 'data: [DONE]') {
                 const endTime = Date.now();
                 console.log('\n\n✅ Стриминг завершён');
-                console.log(`📊 Статистика:`);
+                console.log('📊 Статистика:');
                 console.log(`   - Получено чанков: ${chunkCount}`);
                 console.log(`   - Время до первого чанка: ${firstChunkTime - startTime}мс`);
                 console.log(`   - Общее время: ${endTime - startTime}мс`);
@@ -58,7 +58,7 @@ async function testStreaming() {
 
             try {
                 const jsonStr = line.substring(6).trim();
-                if (!jsonStr) continue;
+                if (!jsonStr) {continue;}
 
                 const chunk = JSON.parse(jsonStr);
                 const content = chunk.choices?.[0]?.delta?.content || '';

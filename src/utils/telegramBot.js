@@ -1,5 +1,5 @@
 import { logInfo, logError, logWarn, logDebug } from '../logger/index.js';
-import { TELEGRAM_BOT_TOKEN, TELEGRAM_USER_IDS, SESSION_DIR, DEFAULT_MODEL, TELEGRAM_PROXY, TELEGRAM_PROXY_URL } from '../config.js';
+import { TELEGRAM_BOT_TOKEN, TELEGRAM_USER_IDS, SESSION_DIR, DEFAULT_MODEL, TELEGRAM_PROXY, TELEGRAM_PROXY_URL, TELEGRAM_TIMEOUT } from '../config.js';
 import { getActiveModel as getBotSettingsModel } from './botSettings.js';
 import { loadBotSettings, saveBotSettings, loadChatModels, setChatModel, getChatModel } from './botSettings.js';
 import { fetchWithQwenProxy } from './proxy.js';
@@ -8,11 +8,68 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import AdmZip from 'adm-zip';
-import { ProxyAgent } from 'undici';
+import { ProxyAgent as UndiciProxyAgent } from 'undici';
+import nodeFetch from 'node-fetch';
 import { loadTokens, saveTokens } from '../api/tokenManager.js';
 
-// Use global fetch (available in Node 18+) instead of undici's fetch
-const globalFetch = globalThis.fetch;
+// Compatibility layer for Node.js 18-24
+// Native fetch (Node.js 18+) uses undici's dispatcher
+// node-fetch uses agent option
+const useNativeFetch = typeof globalThis.fetch !== 'undefined';
+
+/**
+ * Создает правильный агент для текущей версии Node.js
+ * @param {string} proxyUrl - URL прокси
+ * @returns {Object} - агент для node-fetch ИЛИ dispatcher для native fetch
+ */
+function createTelegramProxyAgent(proxyUrl) {
+    // Для native fetch (Node.js 18+) используем Undici ProxyAgent
+    if (useNativeFetch) {
+        return new UndiciProxyAgent(proxyUrl);
+    }
+    // Для node-fetch используем undici (импортирован выше как ProxyAgent)
+    return new UndiciProxyAgent(proxyUrl);
+}
+
+/**
+ * Универсальный fetch с поддержкой прокси для Node.js 18-24
+ * @param {string} url - URL для запроса
+ * @param {Object} options - Опции fetch
+ * @param {Object} proxyAgent - Прокси агент (если есть)
+ * @returns {Promise<Response>} - Response от fetch
+ */
+async function universalTelegramFetch(url, options = {}, proxyAgent = null) {
+    const controller = new AbortController();
+    const timeout = options.timeout || TELEGRAM_TIMEOUT; // Using TELEGRAM_TIMEOUT from .env (default: 5 minutes)
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const fetchOptions = {
+            ...options,
+            signal: controller.signal
+        };
+
+        // Если есть прокси агент
+        if (proxyAgent) {
+            if (useNativeFetch) {
+                // Native fetch (Node.js 18+) использует dispatcher
+                fetchOptions.dispatcher = proxyAgent;
+            } else {
+                // node-fetch использует agent
+                fetchOptions.agent = proxyAgent;
+            }
+        }
+
+        // Используем соответствующий fetch
+        const fetchFn = useNativeFetch ? globalThis.fetch : nodeFetch;
+        const response = await fetchFn(url, fetchOptions);
+        clearTimeout(timeoutId);
+        return response;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+    }
+}
 
 
 const execAsync = promisify(exec);
@@ -165,16 +222,14 @@ export async function configureProxy() {
         logInfo('🔧 Telegram прокси настроен');
         logInfo(`📍 Прокси URL: ${proxyUrl.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')}`); // СкрываемCredentials
         try {
-            proxyAgent = new ProxyAgent(proxyUrl);
+            proxyAgent = createTelegramProxyAgent(proxyUrl);
             logInfo('✅ Прокси агент создан успешно');
 
-            // Тестируем соединение с прокси
+            // Тестируем соединение с прокси через universalTelegramFetch (совместимо с Node.js 18-24)
             logInfo('🔍 Тестирование соединения с прокси...');
             const testUrl = 'https://api.telegram.org/bot';
-            await globalFetch(testUrl, {
-                dispatcher: proxyAgent,
-                signal: AbortSignal.timeout(10000)
-            });
+            
+            await universalTelegramFetch(testUrl, { agent: proxyAgent }, proxyAgent);
             logInfo('✅ Соединение с прокси установлено');
         } catch (error) {
             logError('❌ Ошибка создания прокси агента', error);
@@ -577,21 +632,17 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
  * Выполняет fetch запрос с учетом прокси
  */
 async function fetchWithProxy(url, options = {}, skipLog = false) {
-    const fetchOptions = {
-        ...options
-    };
-
     // Добавляем прокси агент только если он существует
     if (proxyAgent) {
-        fetchOptions.dispatcher = proxyAgent;
         if (proxyConfigured && !skipLog) {
             logInfo('🌐 Запрос через прокси...');
         }
+        // Используем universalTelegramFetch для прокси (совместимо с Node.js 18-24)
+        return universalTelegramFetch(url, options, proxyAgent);
     }
 
-    fetchOptions.timeout = 30000; // 30 секунд таймаут
-
-    return fetch(url, fetchOptions);
+    // Без прокси тоже используем universalTelegramFetch для консистентности
+    return universalTelegramFetch(url, options, null);
 }
 
 /**

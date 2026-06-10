@@ -1,4 +1,4 @@
-# Quick Reference - FreeQwenApi v1.0.16
+# Quick Reference - FreeQwenApi v1.0.17
 
 ## 🚀 Quick Start
 
@@ -17,7 +17,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.16
+  endykaufman/qwen-api-proxy:1.0.17
 ```
 
 ### Option 2: Docker Compose

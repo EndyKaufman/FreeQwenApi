@@ -10,11 +10,58 @@ import { generateImage, getAvailableImageModels, checkImageApiAvailability } fro
 import { MAX_FILE_SIZE, UPLOADS_DIR, STREAMING_CHUNK_DELAY, ALLOW_UNSCOPED_SESSION_CHAT_RESTORE, IMAGE_GENERATION_MODE, DASHSCOPE_API_KEY, FORCE_NEW_CHAT_PER_REQUEST, SESSION_DIR } from '../config.js';
 import { getActiveModel } from '../utils/botSettings.js';
 import { getFileDownloadProxyAgent } from '../utils/proxy.js';
+import { ProxyAgent as UndiciProxyAgent } from 'undici';
+import nodeFetch from 'node-fetch';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { listTokens, markInvalid, markRateLimited, markValid } from './tokenManager.js';
+
+// Compatibility layer for Node.js 18-24
+const useNativeFetch = typeof globalThis.fetch !== 'undefined';
+
+/**
+ * Создает правильный агент для текущей версии Node.js
+ */
+function createRoutesProxyAgent(proxyUrl) {
+    if (useNativeFetch) {
+        return new UndiciProxyAgent(proxyUrl);
+    }
+    return new UndiciProxyAgent(proxyUrl);
+}
+
+/**
+ * Универсальный fetch с поддержкой прокси для Node.js 18-24
+ */
+async function universalRoutesFetch(url, options = {}, proxyAgent = null) {
+    const controller = new AbortController();
+    const timeout = options.timeout || 30000;
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const fetchOptions = {
+            ...options,
+            signal: controller.signal
+        };
+
+        if (proxyAgent) {
+            if (useNativeFetch) {
+                fetchOptions.dispatcher = proxyAgent;
+            } else {
+                fetchOptions.agent = proxyAgent;
+            }
+        }
+
+        const fetchFn = useNativeFetch ? globalThis.fetch : nodeFetch;
+        const response = await fetchFn(url, fetchOptions);
+        clearTimeout(timeoutId);
+        return response;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+    }
+}
 
 // ─── Helpers: File processing ────────────────────────────────────────────────
 
@@ -74,22 +121,18 @@ async function processFilesForQwen(files) {
                         const downloadProxyAgent = getFileDownloadProxyAgent();
 
                         let response;
-
-                        if (downloadProxyAgent) {
-                            // Используем node-fetch с прокси
-                            const { default: nodeFetch } = await import('node-fetch');
-                            logInfo(`🔗 Используем прокси для скачивания: ${file.url}`);
-                            response = await nodeFetch(file.url, {
-                                agent: downloadProxyAgent,
-                                redirect: 'follow',
-                                timeout: 30000
-                            });
-                        } else {
-                            // Используем нативный fetch без прокси
-                            logWarn(`⚠️ Прокси не настроен, скачиваем напрямую: ${file.url}`);
-                            response = await fetch(file.url, {
-                                redirect: 'follow'
-                            });
+                        try {
+                            if (downloadProxyAgent) {
+                                // Используем universalRoutesFetch с прокси (совместимо с Node.js 18-24)
+                                logInfo(`🔗 Используем прокси для скачивания: ${file.url}`);
+                                response = await universalRoutesFetch(file.url, { redirect: 'follow' }, downloadProxyAgent);
+                            } else {
+                                // Используем universalRoutesFetch без прокси
+                                logWarn(`⚠️ Прокси не настроен, скачиваем напрямую: ${file.url}`);
+                                response = await universalRoutesFetch(file.url, { redirect: 'follow' }, null);
+                            }
+                        } finally {
+                            // Таймаут уже обработан в universalRoutesFetch
                         }
 
                         if (!response.ok) {

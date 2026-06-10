@@ -1,6 +1,67 @@
-import { ProxyAgent } from 'proxy-agent';
+import { ProxyAgent as UndiciProxyAgent } from 'undici';
+import { ProxyAgent as ProxyAgentPackage } from 'proxy-agent';
+import nodeFetch from 'node-fetch';
 import { TELEGRAM_PROXY, QWEN_PROXY, FILE_DOWNLOAD_PROXY } from '../config.js';
 import { logInfo, logWarn, logDebug, logError } from '../logger/index.js';
+
+// Compatibility layer for Node.js 18-24
+// Native fetch (Node.js 18+) uses undici's dispatcher
+// node-fetch uses agent option
+const useNativeFetch = typeof globalThis.fetch !== 'undefined';
+
+/**
+ * Создает правильный агент для текущей версии Node.js
+ * @param {string} proxyUrl - URL прокси
+ * @returns {Object} - агент для node-fetch ИЛИ dispatcher для native fetch
+ */
+function createProxyAgent(proxyUrl) {
+    // Для native fetch (Node.js 18+) используем Undici ProxyAgent
+    if (useNativeFetch) {
+        return new UndiciProxyAgent(proxyUrl);
+    }
+    // Для node-fetch используем proxy-agent
+    return new ProxyAgentPackage(proxyUrl);
+}
+
+/**
+ * Универсальный fetch с поддержкой прокси для Node.js 18-24
+ * @param {string} url - URL для запроса
+ * @param {Object} options - Опции fetch
+ * @param {Object} proxyAgent - Прокси агент (если есть)
+ * @returns {Promise<Response>} - Response от fetch
+ */
+async function universalFetch(url, options = {}, proxyAgent = null) {
+    const controller = new AbortController();
+    const timeout = options.timeout || 30000;
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const fetchOptions = {
+            ...options,
+            signal: controller.signal
+        };
+
+        // Если есть прокси агент
+        if (proxyAgent) {
+            if (useNativeFetch) {
+                // Native fetch (Node.js 18+) использует dispatcher
+                fetchOptions.dispatcher = proxyAgent;
+            } else {
+                // node-fetch использует agent
+                fetchOptions.agent = proxyAgent;
+            }
+        }
+
+        // Используем соответствующий fetch
+        const fetchFn = useNativeFetch ? globalThis.fetch : nodeFetch;
+        const response = await fetchFn(url, fetchOptions);
+        clearTimeout(timeoutId);
+        return response;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+    }
+}
 
 // Кэш прокси агентов (создаются один раз)
 let telegramProxyAgent = null;
@@ -13,7 +74,7 @@ let fileDownloadProxyInitialized = false;
 /**
  * Получить ProxyAgent для Telegram
  * Агент кэшируется для повторного использования
- * @returns {ProxyAgent|null} - ProxyAgent или null если прокси не настроен
+ * @returns {Object|null} - ProxyAgent или null если прокси не настроен
  */
 function getTelegramProxyAgent() {
     if (telegramProxyInitialized) {
@@ -28,7 +89,7 @@ function getTelegramProxyAgent() {
 
     try {
         logInfo(`📱 Инициализация прокси для Telegram: ${maskProxyUrl(TELEGRAM_PROXY)}`);
-        telegramProxyAgent = new ProxyAgent(TELEGRAM_PROXY);
+        telegramProxyAgent = createProxyAgent(TELEGRAM_PROXY);
         telegramProxyInitialized = true;
         logInfo('✅ Прокси для Telegram успешно инициализирован');
         return telegramProxyAgent;
@@ -43,7 +104,7 @@ function getTelegramProxyAgent() {
 /**
  * Получить ProxyAgent для Qwen LLM
  * Агент кэшируется для повторного использования
- * @returns {ProxyAgent|null} - ProxyAgent или null если прокси не настроен
+ * @returns {Object|null} - ProxyAgent или null если прокси не настроен
  */
 function getQwenProxyAgent() {
     if (qwenProxyInitialized) {
@@ -58,7 +119,7 @@ function getQwenProxyAgent() {
 
     try {
         logInfo(`🧠 Инициализация прокси для Qwen LLM: ${maskProxyUrl(QWEN_PROXY)}`);
-        qwenProxyAgent = new ProxyAgent(QWEN_PROXY);
+        qwenProxyAgent = createProxyAgent(QWEN_PROXY);
         qwenProxyInitialized = true;
         logInfo('✅ Прокси для Qwen LLM успешно инициализирован');
         return qwenProxyAgent;
@@ -73,7 +134,7 @@ function getQwenProxyAgent() {
 /**
  * Получить ProxyAgent для скачивания файлов
  * Агент кэшируется для повторного использования
- * @returns {ProxyAgent|null} - ProxyAgent или null если прокси не настроен
+ * @returns {Object|null} - ProxyAgent или null если прокси не настроен
  */
 export function getFileDownloadProxyAgent() {
     if (fileDownloadProxyInitialized) {
@@ -90,7 +151,7 @@ export function getFileDownloadProxyAgent() {
 
     try {
         logInfo(`📥 Инициализация прокси для скачивания файлов: ${maskProxyUrl(FILE_DOWNLOAD_PROXY)}`);
-        fileDownloadProxyAgent = new ProxyAgent(FILE_DOWNLOAD_PROXY);
+        fileDownloadProxyAgent = createProxyAgent(FILE_DOWNLOAD_PROXY);
         fileDownloadProxyInitialized = true;
         logInfo('✅ Прокси для скачивания файлов успешно инициализирован');
         return fileDownloadProxyAgent;
@@ -122,56 +183,33 @@ function maskProxyUrl(url) {
 
 /**
  * Выполнить fetch запрос к Telegram через прокси (если настроен)
+ * Совместимо с Node.js 18-24
  * @param {string} url - URL для запроса
  * @param {Object} options - Опции fetch
+ * @param {number} timeout - Таймаут в мс (по умолчанию 30000)
  * @returns {Promise<Response>} - Response от fetch
  */
-export async function fetchWithTelegramProxy(url, options = {}) {
+export async function fetchWithTelegramProxy(url, options = {}, timeout = 30000) {
     const proxyAgent = getTelegramProxyAgent();
-
-    // Если прокси не настроен, используем обычный fetch
-    if (!proxyAgent) {
-        return fetch(url, options);
-    }
-
-    // Используем node-fetch с agent опцией
-    const { default: nodeFetch } = await import('node-fetch');
-
-    logDebug(`📱 Запрос к Telegram через прокси: ${url}`);
-
-    return nodeFetch(url, {
-        ...options,
-        agent: proxyAgent
-    });
+    return universalFetch(url, { ...options, timeout }, proxyAgent);
 }
 
 /**
  * Выполнить fetch запрос к Qwen LLM через прокси (если настроен)
+ * Совместимо с Node.js 18-24
  * @param {string} url - URL для запроса
  * @param {Object} options - Опции fetch
+ * @param {number} timeout - Таймаут в мс (по умолчанию 30000)
  * @returns {Promise<Response>} - Response от fetch
  */
-export async function fetchWithQwenProxy(url, options = {}) {
+export async function fetchWithQwenProxy(url, options = {}, timeout = 30000) {
     const proxyAgent = getQwenProxyAgent();
-
-    // Если прокси не настроен, используем обычный fetch
-    if (!proxyAgent) {
-        return fetch(url, options);
-    }
-
-    // Используем node-fetch с agent опцией
-    const { default: nodeFetch } = await import('node-fetch');
-
-    logDebug(`🧠 Запрос к Qwen LLM через прокси: ${url}`);
-
-    return nodeFetch(url, {
-        ...options,
-        agent: proxyAgent
-    });
+    return universalFetch(url, { ...options, timeout }, proxyAgent);
 }
 
 /**
  * Проверить доступен ли прокси для Telegram
+ * Совместимо с Node.js 18-24
  * @returns {Promise<boolean>} - true если прокси доступен
  */
 export async function checkTelegramProxyAvailability() {
@@ -185,13 +223,8 @@ export async function checkTelegramProxyAvailability() {
             return false;
         }
 
-        const { default: nodeFetch } = await import('node-fetch');
-
-        // Тестовый запрос к Telegram API
-        const response = await nodeFetch('https://api.telegram.org/bot', {
-            agent: proxyAgent,
-            timeout: 5000
-        });
+        // Тестовый запрос к Telegram API (совместимо с Node.js 18-24)
+        const response = await universalFetch('https://api.telegram.org/bot', { timeout: 5000 }, proxyAgent);
 
         return response.ok || response.status === 404; // 404 ok for this endpoint
     } catch (error) {
@@ -202,6 +235,7 @@ export async function checkTelegramProxyAvailability() {
 
 /**
  * Проверить доступен ли прокси для Qwen LLM
+ * Совместимо с Node.js 18-24
  * @returns {Promise<boolean>} - true если прокси доступен
  */
 export async function checkQwenProxyAvailability() {
@@ -215,13 +249,8 @@ export async function checkQwenProxyAvailability() {
             return false;
         }
 
-        const { default: nodeFetch } = await import('node-fetch');
-
-        // Тестовый запрос к Qwen API
-        const response = await nodeFetch('https://chat.qwen.ai', {
-            agent: proxyAgent,
-            timeout: 5000
-        });
+        // Тестовый запрос к Qwen API (совместимо с Node.js 18-24)
+        const response = await universalFetch('https://chat.qwen.ai', { timeout: 5000 }, proxyAgent);
 
         return response.ok || response.status === 302; // 302 is ok for redirect
     } catch (error) {

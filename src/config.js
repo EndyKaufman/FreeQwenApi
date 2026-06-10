@@ -48,6 +48,7 @@ export const AUTH_TIMEOUT = Number(process.env.AUTH_TIMEOUT) || 120_000;
 export const NAVIGATION_TIMEOUT = Number(process.env.NAVIGATION_TIMEOUT) || 60_000;
 export const RETRY_DELAY = Number(process.env.RETRY_DELAY) || 2_000;
 export const STREAMING_CHUNK_DELAY = Number(process.env.STREAMING_CHUNK_DELAY) || 20;
+export const TELEGRAM_TIMEOUT = Number(process.env.TELEGRAM_TIMEOUT) || 300_000; // 5 minutes
 
 // ─── Лимиты ─────────────────────────────────────────────────────────────────
 export const PAGE_POOL_SIZE = Number(process.env.PAGE_POOL_SIZE) || 3;

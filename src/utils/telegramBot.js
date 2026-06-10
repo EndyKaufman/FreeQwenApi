@@ -1567,27 +1567,55 @@ async function extractZip(zipPath, sessionPath, chatId) {
             const zip = new AdmZip(zipPath);
             const zipEntries = zip.getEntries();
 
+            // Нормализуем пути: заменяем обратные слеши на прямые (Windows -> Unix)
+            const normalizedEntries = zipEntries.map((entry) => ({
+                ...entry,
+                normalizedPath: entry.entryName.replace(/\\/g, '/'),
+            }));
+
             // Для отладки: показываем первые несколько записей в архиве
-            const firstEntries = zipEntries.slice(0, 20).map((e) => e.entryName);
+            const firstEntries = normalizedEntries.slice(0, 20).map((e) => e.normalizedPath);
             logInfo('📂 Первые 20 записей в ZIP архиве:');
             logInfo(firstEntries.join('\n'));
 
-            // Проверяем что есть папка session
-            const hasSessionFolder = zipEntries.some((entry) =>
-                entry.entryName.startsWith('session/') || entry.entryName === 'session'
-            );
+            // Проверяем что есть папка session (с нормализованными путями)
+            // Поддерживаем разные варианты:
+            // 1. "session/" - папка session в корне
+            // 2. "session" - ровно папка session (без слеша)
+            // 3. "session/accounts/..." - содержимое session
+            const hasSessionFolder = normalizedEntries.some((entry) => {
+                const p = entry.normalizedPath;
+                // Точное совпадение "session" или "session/"
+                if (p === 'session' || p === 'session/') return true;
+                // Начинается с "session/"
+                if (p.startsWith('session/')) return true;
+                // Для ZIP созданных на Windows может быть "session\" который уже нормализован
+                return false;
+            });
+
+            if (hasSessionFolder) {
+                logInfo('✅ Найдена папка session в корне архива');
+                // Логируем пример найденного пути для отладки
+                const sampleEntry = normalizedEntries.find((e) => {
+                    const p = e.normalizedPath;
+                    return p === 'session' || p === 'session/' || p.startsWith('session/');
+                });
+                if (sampleEntry) {
+                    logInfo(`📂 Пример: ${sampleEntry.normalizedPath}`);
+                }
+            }
 
             if (!hasSessionFolder) {
                 // Пытаемся найти session в любом месте архива
-                const sessionEntries = zipEntries.filter((e) =>
-                    e.entryName.includes('session') || e.entryName.includes('Session')
+                const sessionEntries = normalizedEntries.filter((e) =>
+                    e.normalizedPath.includes('session') || e.normalizedPath.includes('Session')
                 );
 
                 if (sessionEntries.length > 0) {
                     logInfo('🔍 Найдены записи содержащие \'session\':');
-                    logInfo(sessionEntries.slice(0, 10).map((e) => e.entryName).join('\n'));
+                    logInfo(sessionEntries.slice(0, 10).map((e) => e.normalizedPath).join('\n'));
                     reject(new Error(
-                        `Архив содержит '${sessionEntries[0].entryName}', но не содержит 'session/' в корне. ` +
+                        `Архив содержит '${sessionEntries[0].normalizedPath}', но не содержит 'session/' в корне. ` +
                         'Переместите папку session/ в корень архива'
                     ));
                 } else {
@@ -1595,8 +1623,6 @@ async function extractZip(zipPath, sessionPath, chatId) {
                 }
                 return;
             }
-
-            logInfo('✅ Найдена папка session в корне архива');
 
             // Создаем папку session если не существует
             if (!fs.existsSync(sessionPath)) {
@@ -1607,10 +1633,10 @@ async function extractZip(zipPath, sessionPath, chatId) {
             let successCount = 0;
             let errorCount = 0;
 
-            zipEntries.forEach((entry) => {
-                if (entry.entryName.startsWith('session/')) {
+            normalizedEntries.forEach((entry) => {
+                if (entry.normalizedPath.startsWith('session/')) {
                     try {
-                        const relativePath = entry.entryName.substring('session/'.length);
+                        const relativePath = entry.normalizedPath.substring('session/'.length);
                         if (relativePath) {
                             const targetPath = path.join(sessionPath, relativePath);
 
@@ -1631,7 +1657,7 @@ async function extractZip(zipPath, sessionPath, chatId) {
                         }
                     } catch (err) {
                         errorCount++;
-                        logWarn(`⚠️ Ошибка распаковки ${entry.entryName}: ${err.message}`);
+                        logWarn(`⚠️ Ошибка распаковки ${entry.normalizedPath}: ${err.message}`);
                     }
                 }
             });

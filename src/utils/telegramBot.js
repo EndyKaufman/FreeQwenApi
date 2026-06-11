@@ -2648,9 +2648,26 @@ async function handleExtendSession(chatId) {
                     saveTokens(tokens);
                 }
 
-                // Сохраняем обновленные cookies
+                // Сохраняем обновленные cookies и автоматически извлекаем токен
                 const newCookies = await ctx.cookies();
-                fs.writeFileSync(cookiesPath, JSON.stringify(newCookies, null, 2));
+                logInfo(`📝 ${token.id}: Получено ${newCookies.length} cookies`);
+                
+                try {
+                    fs.writeFileSync(cookiesPath, JSON.stringify(newCookies, null, 2));
+                    logInfo(`✅ ${token.id}: Cookies.json сохранён (${newCookies.length} cookies)`);
+                } catch (error) {
+                    logError(`❌ ${token.id}: Ошибка сохранения cookies.json: ${error.message}`);
+                }
+                
+                // Извлекаем токен из cookies
+                const tokenCookie = newCookies.find((cookie) => cookie.name === 'token');
+                if (tokenCookie && tokenCookie.value) {
+                    const tokenFile = path.join(process.cwd(), SESSION_DIR, 'accounts', token.id, 'token.txt');
+                    fs.writeFileSync(tokenFile, tokenCookie.value, 'utf8');
+                    logInfo(`✅ ${token.id}: Токен автоматически извлечён из cookies`);
+                } else {
+                    logWarn(`⚠️ ${token.id}: Токен не найден в cookies (${newCookies.length} cookies получено)`);
+                }
 
                 // Закрываем браузер
                 await shutdownBrowser();

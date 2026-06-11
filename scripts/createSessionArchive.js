@@ -161,11 +161,22 @@ async function main() {
             fs.writeFileSync(path.join(accountDir, 'token.txt'), token, 'utf8');
             saveAuthToken(token);
 
-            // Save cookies
+            // Save cookies и автоматически извлекаем токен
             try {
                 const cookies = await ctx.cookies();
+                logInfo(`📝 ${accountId}: Получено ${cookies.length} cookies`);
+                
                 fs.writeFileSync(path.join(accountDir, 'cookies.json'), JSON.stringify(cookies, null, 2));
-                logInfo(`Cookies сохранены для аккаунта ${accountId} (${cookies.length} cookies)`);
+                logInfo(`✅ ${accountId}: Cookies.json сохранён (${cookies.length} cookies)`);
+                
+                // Извлекаем токен из cookies
+                const tokenCookie = cookies.find((cookie) => cookie.name === 'token');
+                if (tokenCookie && tokenCookie.value) {
+                    fs.writeFileSync(path.join(accountDir, 'token.txt'), tokenCookie.value, 'utf8');
+                    logInfo(`✅ ${accountId}: Токен автоматически извлечён из cookies`);
+                } else {
+                    logWarn(`⚠️ ${accountId}: Токен не найден в cookies (${cookies.length} cookies получено)`);
+                }
             } catch (error) {
                 logWarn('Не удалось сохранить cookies, но токен сохранен', error);
             }

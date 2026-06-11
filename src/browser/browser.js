@@ -100,7 +100,7 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false,
                 '--start-maximized',
                 '--disable-infobars',
                 '--disable-extensions',
-                // '--disable-gpu',
+                '--disable-gpu',
                 '--no-first-run',
                 '--no-default-browser-check',
                 '--ignore-certificate-errors',
@@ -213,7 +213,16 @@ async function saveSessionPuppeteer(page) {
         if (!fs.existsSync(accountDir)) { fs.mkdirSync(accountDir, { recursive: true }); }
 
         fs.writeFileSync(path.join(accountDir, 'cookies.json'), JSON.stringify(cookies, null, 2));
-        logInfo(`Cookies сохранены для аккаунта ${accountId}`);
+        logInfo(`📝 ${accountId}: Получено ${cookies.length} cookies`);
+        
+        // Автоматически извлекаем и сохраняем токен из cookies
+        const tokenCookie = cookies.find((cookie) => cookie.name === 'token');
+        if (tokenCookie && tokenCookie.value) {
+            fs.writeFileSync(path.join(accountDir, 'token.txt'), tokenCookie.value, 'utf8');
+            logInfo(`✅ Cookies сохранены для аккаунта ${accountId}, токен автоматически извлечён`);
+        } else {
+            logInfo(`📝 Cookies сохранены для аккаунта ${accountId} (${cookies.length} cookies)`);
+        }
         return accountId;
     } catch (error) {
         logError('Ошибка при сохранении сессии', error);

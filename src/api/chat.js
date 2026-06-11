@@ -1501,8 +1501,7 @@ async function handleCaptchaDetected(page, reason, ocrText = null) {
 
         caption += '\n\n💡 <b>Действия:</b>\n';
         caption += '1. Браузер будет перезапущен автоматически\n';
-        caption += '2. Если CAPTCHA повторяется, проверьте токены\n';
-        caption += `3. Скриншот сохранен: \`${screenshotPath}\``;
+        caption += '2. Если CAPTCHA повторяется, проверьте токены';
 
         // Отправляем скриншот как фото в Telegram
         const photoSent = await sendTelegramPhoto(caption, screenshotPath);

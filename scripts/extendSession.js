@@ -172,10 +172,27 @@ async function extendAccountSession(accountId) {
             saveTokens(tokens);
         }
 
-        // Save updated cookies
+        // Save updated cookies и автоматически извлекаем токен
         const newCookies = await ctx.cookies();
+        logInfo(`📝 ${accountId}: Получено ${newCookies.length} cookies`);
+        
         const cookiesPath = path.join(SESSION_PATH, 'accounts', accountId, 'cookies.json');
-        fs.writeFileSync(cookiesPath, JSON.stringify(newCookies, null, 2));
+        try {
+            fs.writeFileSync(cookiesPath, JSON.stringify(newCookies, null, 2));
+            logInfo(`✅ ${accountId}: Cookies.json сохранён (${newCookies.length} cookies)`);
+        } catch (error) {
+            logError(`❌ ${accountId}: Ошибка сохранения cookies.json: ${error.message}`);
+        }
+        
+        // Извлекаем токен из cookies
+        const tokenCookie = newCookies.find((cookie) => cookie.name === 'token');
+        if (tokenCookie && tokenCookie.value) {
+            const tokenFile = path.join(SESSION_PATH, 'accounts', accountId, 'token.txt');
+            fs.writeFileSync(tokenFile, tokenCookie.value, 'utf8');
+            logInfo(`✅ ${accountId}: Токен автоматически извлечён из cookies`);
+        } else {
+            logWarn(`⚠️ ${accountId}: Токен не найден в cookies (${newCookies.length} cookies получено)`);
+        }
 
         // Close browser
         await shutdownBrowser();

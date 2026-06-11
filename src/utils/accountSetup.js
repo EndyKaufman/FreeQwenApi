@@ -44,9 +44,22 @@ export async function addAccountInteractive() {
         return null;
     }
 
+    const id = 'acc_' + Date.now();
+
+    // Save cookies before shutting down browser
+    try {
+        const cookies = await ctx.cookies();
+        const accountDir = path.resolve(__dirname, '..', '..', SESSION_DIR, ACCOUNTS_DIR);
+        const accDir = path.join(accountDir, id);
+        if (!fs.existsSync(accDir)) {fs.mkdirSync(accDir, { recursive: true });}
+        fs.writeFileSync(path.join(accDir, 'cookies.json'), JSON.stringify(cookies, null, 2), 'utf8');
+        logInfo(`Cookies сохранены для аккаунта ${id} (${cookies.length} cookies)`);
+    } catch (error) {
+        logWarn('Не удалось сохранить cookies, но токен был сохранен', error);
+    }
+
     await shutdownBrowser();
 
-    const id = 'acc_' + Date.now();
     ensureAccountDir(id);
     fs.writeFileSync(path.resolve(__dirname, '..', '..', SESSION_DIR, ACCOUNTS_DIR, id, 'token.txt'), token, 'utf8');
 
@@ -94,7 +107,21 @@ export async function reloginAccountInteractive() {
     const ok = await initBrowser(true, true);
     if (!ok) { logError('Не удалось запустить браузер.'); return; }
 
-    const token = await extractAuthToken(getBrowserContext(), true);
+    const ctx = getBrowserContext();
+    const token = await extractAuthToken(ctx, true);
+
+    // Save cookies before shutting down browser
+    try {
+        const cookies = await ctx.cookies();
+        const accountDir = path.resolve(__dirname, '..', '..', SESSION_DIR, ACCOUNTS_DIR);
+        const accDir = path.join(accountDir, account.id);
+        if (!fs.existsSync(accDir)) {fs.mkdirSync(accDir, { recursive: true });}
+        fs.writeFileSync(path.join(accDir, 'cookies.json'), JSON.stringify(cookies, null, 2), 'utf8');
+        logInfo(`Cookies обновлены для аккаунта ${account.id} (${cookies.length} cookies)`);
+    } catch (error) {
+        logWarn('Не удалось сохранить cookies, но токен был обновлен', error);
+    }
+
     await shutdownBrowser();
 
     if (!token) { logError('Не удалось извлечь токен.'); return; }

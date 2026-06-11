@@ -15,6 +15,23 @@ function getSessionFilePath(accountId, fileName) {
         : path.join(SESSION_PATH, fileName);
 }
 
+/**
+ * Извлекает JWT токен из cookies.json
+ * @param {Array} cookies - Массив cookies
+ * @returns {string|null} - JWT токен или null
+ */
+function extractTokenFromCookiesData(cookies) {
+    try {
+        const tokenCookie = cookies.find((cookie) => cookie.name === 'token');
+        if (tokenCookie && tokenCookie.value) {
+            return tokenCookie.value;
+        }
+        return null;
+    } catch (error) {
+        return null;
+    }
+}
+
 function ensureDir(dirPath) {
     if (!fs.existsSync(dirPath)) {fs.mkdirSync(dirPath, { recursive: true });}
 }
@@ -34,7 +51,17 @@ export async function saveSession(context, accountId = null) {
             const sessionPath = getSessionFilePath(accountId, 'cookies.json');
             ensureDir(path.dirname(sessionPath));
             fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
-            logInfo('Сессия Puppeteer сохранена');
+            logInfo(`📝 Получено ${cookies.length} cookies`);
+            
+            // Автоматически извлекаем и сохраняем токен из cookies
+            const token = extractTokenFromCookiesData(cookies);
+            if (token) {
+                const tokenPath = getSessionFilePath(accountId, 'token.txt');
+                fs.writeFileSync(tokenPath, token, 'utf8');
+                logInfo('✅ Сессия Puppeteer сохранена, токен автоматически извлечён');
+            } else {
+                logInfo(`📝 Сессия Puppeteer сохранена (${cookies.length} cookies)`);
+            }
             return true;
         }
 

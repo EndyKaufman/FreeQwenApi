@@ -95,6 +95,7 @@ export async function sendTelegramNotification(message) {
             return true;
         } catch (error) {
             logError(`Ошибка отправки Telegram пользователю ${userId}: ${error.message}`);
+            logError(`📋 Сообщение (${message.length} символов): ${message.substring(0, 500)}${message.length > 500 ? '...' : ''}`);
             return false;
         }
     });
@@ -162,7 +163,33 @@ export async function sendTelegramFile(caption, filePathOrUrl, options = {}) {
             }
             return true;
         } catch (error) {
+            // Log detailed information about what was being sent
             logError(`❌ Ошибка отправки файла Telegram пользователю ${userId}:`, error);
+            logError('📋 Детали отправки:');
+            logError(`   - Caption (${caption.length} символов): ${caption.substring(0, 500)}${caption.length > 500 ? '...' : ''}`);
+            logError(`   - Файл: ${filePathOrUrl}`);
+            logError(`   - Тип: ${isUrl ? 'URL' : 'Локальный файл'}`);
+
+            if (!isUrl && fs.existsSync(filePathOrUrl)) {
+                const stats = fs.statSync(filePathOrUrl);
+                logError(`   - Размер файла: ${(stats.size / 1024 / 1024).toFixed(2)} MB (${stats.size} байт)`);
+            } else if (!isUrl) {
+                logError('   - ⚠️ Файл не существует!');
+            }
+
+            // Log raw error details if available (from node-telegram-bot-api response)
+            if (error.response) {
+                logError('🔍 Сырой ответ от Telegram API:');
+                logError(`   - Status: ${error.response.statusCode || error.response.status}`);
+                logError(`   - Headers: ${JSON.stringify(error.response.headers, null, 2)}`);
+                logError(`   - Body (raw): ${error.response.body}`);
+                logError(`   - Body (type): ${typeof error.response.body}`);
+            }
+
+            if (error.cause) {
+                logError('🔍 Причина ошибки (cause):', error.cause);
+            }
+
             return false;
         }
     });

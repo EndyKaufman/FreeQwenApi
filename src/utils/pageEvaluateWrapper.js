@@ -118,6 +118,9 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
         return await page.evaluate(pageFunction, ...args);
     }
 
+    // Create screencasts directory in logs folder
+    const screencastDir = path.join(process.cwd(), LOGS_DIR, 'screencasts');
+
     const startTime = Date.now();
     let screencastStarted = false;
     let screencastStopper = null;
@@ -129,8 +132,6 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
     let ocrText = null;
 
     try {
-        // Create screencasts directory in logs folder
-        const screencastDir = path.join(process.cwd(), LOGS_DIR, 'screencasts');
         if (!fs.existsSync(screencastDir)) {
             fs.mkdirSync(screencastDir, { recursive: true });
         }
@@ -191,6 +192,7 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
                                         }
 
                                         const elapsed = Date.now() - startTime;
+                                        let caption = '';
                                         try {
                                             const fileSize = fs.statSync(screencastFilepath).size;
                                             const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
@@ -210,7 +212,7 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
                                                 }
 
                                                 // Build caption with OCR text
-                                                const caption = await buildScreencastCaption(
+                                                caption = await buildScreencastCaption(
                                                     'maxDuration',
                                                     elapsed,
                                                     fileSizeMB,
@@ -237,6 +239,17 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
                                         } catch (telegramError) {
                                             logError('❌ Ошибка при отправке записи в Telegram:', telegramError);
                                             logError('   Error stack:', telegramError.stack);
+
+                                            // Log raw caption and file details for debugging
+                                            logError('📋 Сырые данные отправки:');
+                                            logError(`   - Caption (полный текст):\n${caption}`);
+                                            logError(`   - Файл: ${screencastFilepath}`);
+
+                                            if (telegramError.response) {
+                                                logError('🔍 Сырой ответ Telegram API:');
+                                                logError(`   - Status: ${telegramError.response.statusCode || telegramError.response.status}`);
+                                                logError(`   - Body: ${telegramError.response.body}`);
+                                            }
                                         }
                                     } else {
                                         logWarn('⚠️ Видео не отправлено: файл не существует или путь не установлен');
@@ -442,7 +455,7 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
  * @returns {string} Escaped text
  */
 function escapeHtml(text) {
-    if (!text) return '';
+    if (!text) { return ''; }
     return text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -466,17 +479,17 @@ async function buildScreencastCaption(reason, elapsed, fileSizeMB, ocrText, erro
 
     // Add header based on reason
     switch (reason) {
-        case 'maxDuration':
-            caption = '⏱️ page.evaluate() превышает максимальную длительность\n';
-            break;
-        case 'protocolTimeout':
-            caption = '⏱️ Долгая операция page.evaluate()\n';
-            break;
-        case 'error':
-            caption = '❌ Ошибка page.evaluate()\n';
-            break;
-        default:
-            caption = '⏱️ page.evaluate() timeout\n';
+    case 'maxDuration':
+        caption = '⏱️ page.evaluate() превышает максимальную длительность\n';
+        break;
+    case 'protocolTimeout':
+        caption = '⏱️ Долгая операция page.evaluate()\n';
+        break;
+    case 'error':
+        caption = '❌ Ошибка page.evaluate()\n';
+        break;
+    default:
+        caption = '⏱️ page.evaluate() timeout\n';
     }
 
     // Add account info

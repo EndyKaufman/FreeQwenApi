@@ -1,4 +1,4 @@
-import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus, simulateHumanMouseMovement, getDedicatedPage, isProfileMode, isTabReady, initializeTabWithUI } from '../browser/browser.js';
+import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus, simulateHumanMouseMovement, getDedicatedPage, isProfileMode, isTabReady, initializeTabWithUI, updateLastActivePage } from '../browser/browser.js';
 import { checkAuthentication, checkVerification } from '../browser/auth.js';
 import { shutdownBrowser, initBrowser } from '../browser/browser.js';
 import { saveAuthToken, loadSession, saveSession } from '../browser/session.js';
@@ -42,6 +42,8 @@ async function getPage(context) {
         const page = await context.newPage();
         // Simulate human-like mouse movement after tab creation
         await simulateHumanMouseMovement(page);
+        // Обновляем последнюю активную страницу для скриншотов
+        try { updateLastActivePage(page); } catch (e) { /* ignore */ }
         return page;
     }
 
@@ -56,6 +58,8 @@ async function getPage(context) {
                     const page = await browser.newPage();
                     // Simulate human-like mouse movement after tab creation
                     await simulateHumanMouseMovement(page);
+                    // Обновляем последнюю активную страницу для скриншотов
+                    try { updateLastActivePage(page); } catch (e) { /* ignore */ }
                     return page;
                 }
             } catch (error) {

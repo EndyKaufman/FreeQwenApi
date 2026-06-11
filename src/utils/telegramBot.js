@@ -5,12 +5,14 @@ import { loadBotSettings, saveBotSettings, loadChatModels, setChatModel, getChat
 import { fetchWithQwenProxy } from './proxy.js';
 import { generateImage } from '../api/imageGeneration.js';
 import { getVersionInfo } from './versionChecker.js';
-import { initBrowser, shutdownBrowser, getBrowserContext, isProfileMode } from '../browser/browser.js';
+import { initBrowser, shutdownBrowser, getBrowserContext, getDedicatedPage, isProfileMode } from '../browser/browser.js';
 import { extractAuthToken, sendMessage as sendQwenMessage } from '../api/chat.js';
 import { loadSession, saveSession, saveAuthToken } from '../browser/session.js';
 import { loadTokens, saveTokens } from '../api/tokenManager.js';
-import { CHAT_PAGE_URL } from '../config.js';
+import { CHAT_PAGE_URL, LOGS_DIR } from '../config.js';
 import { getAvailableModelsFromFile } from '../api/chat.js';
+import { takeScreenshotAndOCR, setScreencastDisabled } from './pageEvaluateWrapper.js';
+import { sendTelegramVideo, sendTelegramPhoto } from './telegramNotifier.js';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
@@ -146,17 +148,26 @@ async function checkAIHealth(tokens) {
         }];
     }
 
+    // Отключаем screencast во время проверки здоровья
+    setScreencastDisabled(true);
+
     try {
         logInfo('🧪 Тестирование AI нейросети (ping pong)...');
 
         // Используем функцию sendMessage для прямого запроса к Qwen
         const testModel = getBotSettingsModel();
 
-        // Делаем запрос напрямую к Qwen API через наш модуль
+        // Делаем запрос напрямую к Qwen API через наш модуль с таймаутом 20 секунд
         const startTime = Date.now();
-        const result = await sendQwenMessage(`Output must be exactly:
+        const HEALTH_CHECK_TIMEOUT = 20000; // 20 секунд
 
-pong`, testModel, null, null, null, null, null, null, 't2t', null, true, 0);
+        const result = await Promise.race([
+            sendQwenMessage(`Output must be exactly:
+
+pong`, testModel, null, null, null, null, null, null, 't2t', null, true, 0),
+            new Promise((resolve) => setTimeout(() => resolve({ error: 'Превышен таймаут 20 секунд' }), HEALTH_CHECK_TIMEOUT))
+        ]);
+
         const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
         if (result && !result.error) {
@@ -226,6 +237,9 @@ pong`, testModel, null, null, null, null, null, null, 't2t', null, true, 0);
             status: false,
             details: `❌ Ошибка подключения: ${error.message.substring(0, 80)}`
         }];
+    } finally {
+        // Включаем screencast обратно после проверки здоровья
+        setScreencastDisabled(false);
     }
 }
 
@@ -919,6 +933,7 @@ async function processUpdate(update) {
  * @param {string} imagePath - Путь к файлу изображения (опционально, для image-to-image)
  */
 async function handleImageGeneration(chatId, prompt, imagePath = null) {
+    let statusMessageId = null;
     try {
         logInfo(`🎨 Telegram: запрошена генерация изображения: ${prompt.substring(0, 100)}...`);
         if (imagePath) {
@@ -926,7 +941,7 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
         }
 
         // Отправляем сообщение о начале генерации
-        await sendMessage(chatId,
+        statusMessageId = await sendMessage(chatId,
             '🎨 <b>Генерация изображения...</b>\n\n' +
             `📝 Запрос: ${prompt}\n` +
             (imagePath ? '📸 Режим: Image-to-Image\n' : '') +
@@ -952,6 +967,11 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
         if (result.success && result.imageUrl) {
             logInfo(`✅ Изображение сгенерировано за ${generationTime}с: ${result.imageUrl}`);
 
+            // Удаляем временное сообщение
+            if (statusMessageId) {
+                await deleteMessage(chatId, statusMessageId);
+            }
+
             // Отправляем изображение как фото
             try {
                 await sendPhoto(chatId, result.imageUrl, prompt);
@@ -976,6 +996,11 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
             }
         } else {
             logError(`❌ Ошибка генерации изображения: ${result.error}`);
+
+            // Удаляем временное сообщение
+            if (statusMessageId) {
+                await deleteMessage(chatId, statusMessageId);
+            }
 
             // Проверяем, это rate limit?
             if (result.rateLimit) {
@@ -1056,6 +1081,10 @@ async function handleImageGeneration(chatId, prompt, imagePath = null) {
         }
     } catch (error) {
         logError('❌ Ошибка в handleImageGeneration', error);
+        // Удаляем временное сообщение при ошибке
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
+        }
         await sendMessage(chatId,
             '❌ <b>Произошла ошибка</b>\n\n' +
             `⚠️ ${error.message}\n\n` +
@@ -1121,71 +1150,71 @@ async function handleCommand(chatId, text) {
     }
 
     switch (command) {
-    case '/start':
-    case '/help':
-        await sendHelpMessage(chatId);
-        break;
+        case '/start':
+        case '/help':
+            await sendHelpMessage(chatId);
+            break;
 
-    case '/status':
-        await sendStatusMessage(chatId);
-        break;
+        case '/status':
+            await sendStatusMessage(chatId);
+            break;
 
-    case '/restart':
-        await handleRestart(chatId);
-        break;
+        case '/restart':
+            await handleRestart(chatId);
+            break;
 
-    case '/chat':
-        await showLLMChatStatus(chatId);
-        break;
+        case '/chat':
+            await showLLMChatStatus(chatId);
+            break;
 
-    case '/togglechat':
-        await toggleLLMChat(chatId);
-        break;
+        case '/togglechat':
+            await toggleLLMChat(chatId);
+            break;
 
-    case '/model':
-        await showModelInfo(chatId);
-        break;
+        case '/model':
+            await showModelInfo(chatId);
+            break;
 
-    case '/setmodel':
-        await showModelInfo(chatId);
-        break;
+        case '/setmodel':
+            await showModelInfo(chatId);
+            break;
 
-    case '/clear':
-        await clearChatContext(chatId);
-        break;
+        case '/clear':
+            await clearChatContext(chatId);
+            break;
 
-    case '/setup':
-        await sendSetupMessage(chatId);
-        break;
+        case '/setup':
+            await sendSetupMessage(chatId);
+            break;
 
-    case '/connect':
-        await sendConnectMessage(chatId);
-        break;
+        case '/connect':
+            await sendConnectMessage(chatId);
+            break;
 
-    case '/about':
-        await sendAboutMessage(chatId);
-        break;
+        case '/about':
+            await sendAboutMessage(chatId);
+            break;
 
-    case '/archive':
-        await sendArchiveInstructions(chatId);
-        break;
+        case '/archive':
+            await sendArchiveInstructions(chatId);
+            break;
 
-    case '/extend':
-        // 🔧 ВРЕМЕННО ОТКЛЮЧЕНО
-        await sendMessage(chatId,
-            '🔧 <b>Команда /extend временно отключена</b>\n\n' +
+        case '/extend':
+            // 🔧 ВРЕМЕННО ОТКЛЮЧЕНО
+            await sendMessage(chatId,
+                '🔧 <b>Команда /extend временно отключена</b>\n\n' +
                 'Функция продления сессий находится на техническом обслуживании.\n\n' +
                 '📦 <b>Что делать:</b>\n' +
                 '1. Создайте новую сессию: <code>npm run create-session-archive</code>\n' +
                 '2. Отправьте архив через бота\n\n' +
                 '⏳ Функция будет доступна в ближайшее время.'
-        );
-        break;
+            );
+            break;
 
-    case '/image':
-    case '/imagine':
-        await sendMessage(chatId,
-            '🎨 <b>Генерация изображений</b>\n\n' +
+        case '/image':
+        case '/imagine':
+            await sendMessage(chatId,
+                '🎨 <b>Генерация изображений</b>\n\n' +
                 '💬 <b>Текстовый режим:</b>\n' +
                 '/image &lt;описание&gt; - генерация по описанию\n\n' +
                 '📸 <b>Режим Image-to-Image:</b>\n' +
@@ -1194,21 +1223,301 @@ async function handleCommand(chatId, text) {
                 '📝 Примеры:\n' +
                 '• /image A beautiful sunset\n' +
                 '• Отправьте фото с текстом "Улучши это"'
-        );
-        break;
+            );
+            break;
 
-    default:
-        // Проверяем, начинается ли сообщение с /image или /imagine с аргументами
-        if (text.startsWith('/image ') || text.startsWith('/imagine ')) {
-            const prompt = text.substring(text.indexOf(' ') + 1).trim();
-            if (prompt) {
-                await handleImageGeneration(chatId, prompt);
+        case '/screencast':
+        case '/record':
+            await handleScreencastCommand(chatId, text);
+            break;
+
+        case '/screenshot':
+        case '/scr':
+            await handleScreenshotCommand(chatId, text);
+            break;
+
+        default:
+            // Проверяем, начинается ли сообщение с /image или /imagine с аргументами
+            if (text.startsWith('/image ') || text.startsWith('/imagine ')) {
+                const prompt = text.substring(text.indexOf(' ') + 1).trim();
+                if (prompt) {
+                    await handleImageGeneration(chatId, prompt);
+                } else {
+                    await sendMessage(chatId, '🎨 Пожалуйста, укажите описание изображения\n\nПример: /image A beautiful sunset over the ocean');
+                }
             } else {
-                await sendMessage(chatId, '🎨 Пожалуйста, укажите описание изображения\n\nПример: /image A beautiful sunset over the ocean');
+                await sendMessage(chatId, '❓ Неизвестная команда. Используйте /help для списка команд');
             }
-        } else {
-            await sendMessage(chatId, '❓ Неизвестная команда. Используйте /help для списка команд');
+    }
+}
+
+/**
+ * Обрабатывает команду /screencast - запись экрана браузера
+ */
+async function handleScreencastCommand(chatId, text) {
+    let statusMessageId = null;
+    try {
+        // Парсим аргументы
+        const parts = text.trim().split(/\s+/);
+        let durationSeconds = 30; // Значение по умолчанию
+
+        if (parts.length > 1) {
+            durationSeconds = parseInt(parts[1], 10);
         }
+
+        // Валидация длительности (20-60 секунд)
+        if (isNaN(durationSeconds) || durationSeconds < 20 || durationSeconds > 60) {
+            await sendMessage(chatId,
+                '🎥 <b>Запись экрана</b>\n\n' +
+                '❌ Некорректная длительность\n\n' +
+                '⏱️ Укажите время от 20 до 60 секунд:\n' +
+                '<code>/screencast &lt;секунды&gt;</code>\n\n' +
+                '📝 Примеры:\n' +
+                '• /screencast 30 - запись 30 секунд\n' +
+                '• /record 60 - запись 60 секунд\n\n' +
+                '💡 Без параметров: 30 секунд'
+            );
+            return;
+        }
+
+        logInfo(`🎥 Запрос записи экрана: ${durationSeconds} секунд`);
+
+        statusMessageId = await sendMessage(chatId,
+            '🎥 <b>Начинаю запись экрана...</b>\n\n' +
+            `⏱️ Длительность: ${durationSeconds} секунд\n` +
+            '⏳ Пожалуйста, подождите...'
+        );
+
+        // Получаем страницу браузера
+        const page = getDedicatedPage();
+        if (!page || page.isClosed()) {
+            if (statusMessageId) {
+                await deleteMessage(chatId, statusMessageId);
+            }
+            await sendMessage(chatId,
+                '❌ <b>Ошибка</b>\n\n' +
+                '🔒 Браузер не запущен или страница закрыта\n' +
+                '💡 Убедитесь, что сервис запущен и авторизован'
+            );
+            return;
+        }
+
+        const startTime = Date.now();
+        const durationMs = durationSeconds * 1000;
+
+        // Создаем директории для записей
+        const screencastDir = path.join(process.cwd(), LOGS_DIR, 'screencasts');
+        if (!fs.existsSync(screencastDir)) {
+            fs.mkdirSync(screencastDir, { recursive: true });
+        }
+
+        // Генерируем имя файла
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `screencast-cmd-${timestamp}.webm`;
+        const screencastFilepath = path.join(screencastDir, filename);
+
+        // Начинаем запись
+        logInfo(`🎥 Начало записи: ${screencastFilepath}`);
+        const screencastStopper = await page.screencast({
+            path: screencastFilepath,
+            format: 'webm'
+        });
+
+        // Ждем указанную длительность
+        await new Promise((resolve) => setTimeout(resolve, durationMs));
+
+        // Останавливаем запись
+        await screencastStopper.stop();
+        const elapsed = Date.now() - startTime;
+        logInfo(`🎥 Запись остановлена через ${elapsed}ms`);
+
+        // Ждем немного для завершения записи файла
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Проверяем файл
+        if (!fs.existsSync(screencastFilepath)) {
+            if (statusMessageId) {
+                await deleteMessage(chatId, statusMessageId);
+            }
+            await sendMessage(chatId, '❌ Ошибка: файл записи не создан');
+            return;
+        }
+
+        const fileSize = fs.statSync(screencastFilepath).size;
+        const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+
+        if (fileSize < 1024) {
+            if (statusMessageId) {
+                await deleteMessage(chatId, statusMessageId);
+            }
+            await sendMessage(chatId,
+                '❌ <b>Ошибка записи</b>\n\n' +
+                '📁 Файл слишком маленький, запись не удалась\n' +
+                '💡 Попробуйте еще раз'
+            );
+            return;
+        }
+
+        // Получаем URL страницы для caption
+        let pageUrl = 'unknown';
+        try {
+            pageUrl = page.url();
+        } catch (error) {
+            logDebug('Не удалось получить URL страницы:', error);
+        }
+
+        // Формируем caption
+        const escapedPageUrl = pageUrl
+            ? pageUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            : 'N/A';
+
+        const caption = '🎥 <b>Запись экрана</b>\n\n' +
+            `⏱️ Длительность: ${durationSeconds} сек\n` +
+            `📊 Файл: ${fileSizeMB} MB\n` +
+            `🔗 URL: ${escapedPageUrl}`;
+
+        // Отправляем видео в Telegram
+        logInfo(`📤 Отправка записи в Telegram: ${fileSizeMB} MB`);
+        const sendResult = await sendTelegramVideo(caption, screencastFilepath);
+
+        // Удаляем статусное сообщение
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
+        }
+
+        if (sendResult) {
+            logInfo('✅ Запись успешно отправлена в Telegram');
+        } else {
+            await sendMessage(chatId,
+                '⚠️ <b>Предупреждение</b>\n\n' +
+                '📁 Запись создана, но не удалось отправить\n' +
+                `📂 Файл сохранен: <code>${screencastFilepath}</code>`
+            );
+        }
+    } catch (error) {
+        logError('❌ Ошибка при записи экрана:', error);
+        // Удаляем статусное сообщение при ошибке (если оно есть)
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
+        }
+        await sendMessage(chatId,
+            '❌ <b>Ошибка записи экрана</b>\n\n' +
+            `📋 ${error.message}\n\n` +
+            '💡 Попробуйте еще раз'
+        );
+    }
+}
+
+/**
+ * Обрабатывает команду /screenshot - скриншот с OCR
+ */
+async function handleScreenshotCommand(chatId, text) {
+    let statusMessageId = null;
+    try {
+        logInfo('📸 Запрос скриншота с OCR');
+
+        statusMessageId = await sendMessage(chatId,
+            '📸 <b>Делаю скриншот...</b>\n\n' +
+            '⏳ Пожалуйста, подождите...'
+        );
+
+        // Получаем страницу браузера
+        const page = getDedicatedPage();
+        if (!page || page.isClosed()) {
+            if (statusMessageId) {
+                await deleteMessage(chatId, statusMessageId);
+            }
+            await sendMessage(chatId,
+                '❌ <b>Ошибка</b>\n\n' +
+                '🔒 Браузер не запущен или страница закрыта\n' +
+                '💡 Убедитесь, что сервис запущен и авторизован'
+            );
+            return;
+        }
+
+        // Создаем директорию для скриншотов
+        const screenshotDir = path.join(process.cwd(), LOGS_DIR, 'screenshots');
+        if (!fs.existsSync(screenshotDir)) {
+            fs.mkdirSync(screenshotDir, { recursive: true });
+        }
+
+        // Генерируем имя файла
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const screenshotPath = path.join(screenshotDir, `screenshot-cmd-${timestamp}.png`);
+
+        // Делаем скриншот и выполняем OCR
+        logInfo(`📸 Создание скриншота: ${screenshotPath}`);
+        const ocrText = await takeScreenshotAndOCR(page, screenshotPath);
+
+        // Проверяем файл
+        if (!fs.existsSync(screenshotPath)) {
+            if (statusMessageId) {
+                await deleteMessage(chatId, statusMessageId);
+            }
+            await sendMessage(chatId, '❌ Ошибка: файл скриншота не создан');
+            return;
+        }
+
+        const fileSize = fs.statSync(screenshotPath).size;
+        const fileSizeKB = (fileSize / 1024).toFixed(2);
+
+        // Получаем URL страницы
+        let pageUrl = 'unknown';
+        try {
+            pageUrl = page.url();
+        } catch (error) {
+            logDebug('Не удалось получить URL страницы:', error);
+        }
+
+        // Формируем caption с OCR текстом
+        const escapedPageUrl = pageUrl
+            ? pageUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            : 'N/A';
+
+        let caption = '📸 <b>Скриншот</b>\n\n' +
+            `🔗 URL: ${escapedPageUrl}\n` +
+            `📊 Размер: ${fileSizeKB} KB`;
+
+        if (ocrText && ocrText.trim()) {
+            const escapedOcrText = ocrText.trim().substring(0, 1000)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            caption += `\n\n🔤 <b>Распознанный текст:</b>\n<code>${escapedOcrText}</code>`;
+        } else {
+            caption += '\n\n🔤 Текст не обнаружен';
+        }
+
+        // Отправляем фото в Telegram
+        logInfo(`📤 Отправка скриншота в Telegram: ${fileSizeKB} KB`);
+        const sendResult = await sendTelegramPhoto(caption, screenshotPath);
+
+        // Удаляем статусное сообщение
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
+        }
+
+        if (sendResult) {
+            logInfo('✅ Скриншот успешно отправлен в Telegram');
+        } else {
+            await sendMessage(chatId,
+                '⚠️ <b>Предупреждение</b>\n\n' +
+                '📁 Скриншот создан, но не удалось отправить\n' +
+                `📂 Файл сохранен: <code>${screenshotPath}</code>`
+            );
+        }
+    } catch (error) {
+        logError('❌ Ошибка при создании скриншота:', error);
+        // Удаляем статусное сообщение при ошибке (если оно есть)
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
+        }
+        await sendMessage(chatId,
+            '❌ <b>Ошибка создания скриншота</b>\n\n' +
+            `📋 ${error.message}\n\n` +
+            '💡 Попробуйте еще раз'
+        );
     }
 }
 
@@ -1216,6 +1525,7 @@ async function handleCommand(chatId, text) {
  * Обрабатывает фотографии для генерации изображений (image-to-image)
  */
 async function handlePhoto(chatId, photos, caption = '') {
+    let statusMessageId = null;
     try {
         logInfo(`📸 Получено фото с caption: "${caption.substring(0, 50)}${caption.length > 50 ? '...' : ''}"`);
 
@@ -1242,7 +1552,7 @@ async function handlePhoto(chatId, photos, caption = '') {
 
         logInfo(`📸 Загрузка фото из Telegram (file_id: ${fileId}, size: ${fileSize} bytes)`);
 
-        await sendMessage(chatId,
+        statusMessageId = await sendMessage(chatId,
             '🎨 <b>Обработка изображения...</b>\n\n' +
             `📝 Запрос: ${prompt}\n` +
             '⏳ Пожалуйста, подождите...'
@@ -1252,6 +1562,9 @@ async function handlePhoto(chatId, photos, caption = '') {
         const tempFilePath = await downloadTelegramFileToTemp(fileId);
 
         if (!tempFilePath) {
+            if (statusMessageId) {
+                await deleteMessage(chatId, statusMessageId);
+            }
             throw new Error('Не удалось скачать фото из Telegram');
         }
 
@@ -1259,6 +1572,11 @@ async function handlePhoto(chatId, photos, caption = '') {
 
         // Генерируем изображение с использованием фото
         await handleImageGeneration(chatId, prompt, tempFilePath);
+
+        // Удаляем временное сообщение после успешной генерации
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
+        }
 
         // Удаляем временный файл
         try {
@@ -1270,6 +1588,10 @@ async function handlePhoto(chatId, photos, caption = '') {
 
     } catch (error) {
         logError('❌ Ошибка в handlePhoto', error);
+        // Удаляем временное сообщение при ошибке
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
+        }
         await sendMessage(chatId,
             '❌ <b>Ошибка обработки фото</b>\n\n' +
             `⚠️ ${error.message}\n\n` +
@@ -1655,9 +1977,9 @@ async function extractZip(zipPath, sessionPath, chatId) {
             const hasSessionFolder = normalizedEntries.some((entry) => {
                 const p = entry.normalizedPath;
                 // Точное совпадение "session" или "session/"
-                if (p === 'session' || p === 'session/') {return true;}
+                if (p === 'session' || p === 'session/') { return true; }
                 // Начинается с "session/"
-                if (p.startsWith('session/')) {return true;}
+                if (p.startsWith('session/')) { return true; }
                 // Для ZIP созданных на Windows может быть "session\" который уже нормализован
                 return false;
             });
@@ -2094,6 +2416,12 @@ async function sendHelpMessage(chatId) {
         '📏 <b>Лимиты:</b>\n' +
         '• Максимальный размер файла: 50MB\n' +
         '• Поддерживаемые форматы: .zip, .7z\n\n' +
+        '🎥 <b>Диагностика браузера:</b>\n\n' +
+        '/screencast &lt;секунды&gt; - Запись экрана (20-60 сек)\n' +
+        '/record &lt;секунды&gt; - Альтернативная команда\n' +
+        '/screenshot - Скриншот с распознаванием текста\n' +
+        '/scr - Альтернативная команда\n\n' +
+        '💡 Пример: /screencast 30 - запись 30 секунд\n\n' +
         '📚 <b>Дополнительные команды:</b>\n\n' +
         '/setup - Инструкция по созданию сессии\n' +
         '/connect - Как подключить к проекту\n' +
@@ -2369,7 +2697,16 @@ async function sendArchiveInstructions(chatId) {
 }
 
 async function sendStatusMessage(chatId, isScheduled = false) {
+    let statusMessageId = null;
     try {
+        // Отправляем сообщение о начале сбора данных
+        if (!isScheduled) {
+            statusMessageId = await sendMessage(chatId,
+                '🔍 <b>Сбор статуса...</b>\n\n' +
+                '⏳ Пожалуйста, подождите, идет проверка всех подсистем'
+            );
+        }
+
         // Получаем статус бота
         const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
         const botStarted = !!telegramToken;
@@ -2383,6 +2720,11 @@ async function sendStatusMessage(chatId, isScheduled = false) {
             versionInfo = await getVersionInfo();
         } catch (error) {
             // Игнорируем ошибки при получении информации о версии
+        }
+
+        // Удаляем временное сообщение о начале сбора
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
         }
 
         // Формируем сообщение с统一的格式
@@ -2498,6 +2840,10 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         await sendMessage(chatId, report);
     } catch (error) {
         logError('Ошибка получения статуса', error);
+        // Удаляем временное сообщение при ошибке
+        if (statusMessageId) {
+            await deleteMessage(chatId, statusMessageId);
+        }
         await sendMessage(chatId, '❌ Не удалось получить статус');
     }
 }
@@ -2783,9 +3129,38 @@ async function sendMessage(chatId, text) {
         if (!response.ok) {
             const errorBody = await response.text();
             logError(`Ошибка отправки сообщения Telegram: ${errorBody}`);
+            return null;
         }
+
+        const data = await response.json();
+        return data.result?.message_id || null;
     } catch (error) {
         logError('Ошибка отправки сообщения в Telegram', error);
+        return null;
+    }
+}
+
+/**
+ * Удаляет сообщение в Telegram
+ */
+async function deleteMessage(chatId, messageId) {
+    try {
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`;
+        const response = await fetchWithProxy(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                message_id: messageId
+            })
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text();
+            logError(`Ошибка удаления сообщения Telegram: ${errorBody}`);
+        }
+    } catch (error) {
+        logError('Ошибка удаления сообщения в Telegram', error);
     }
 }
 

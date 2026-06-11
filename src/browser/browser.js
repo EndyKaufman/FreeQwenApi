@@ -20,6 +20,7 @@ let browserInstance = null;
 let browserContext = null;
 export let isAuthenticated = false;
 let dedicatedPage = null; // Для режима profile - единственная вкладка
+let lastActivePage = null; // Последняя активная вкладка (для legacy режима)
 let profileDir = null; // Путь к директории профиля
 let isTabInitialized = false; // Флаг: вкладка уже инициализирована через UI
 
@@ -327,6 +328,7 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false,
         });
 
         browserContext = page;
+        lastActivePage = page; // Инициализируем последнюю активную страницу
         logInfo('Браузер инициализирован с максимальной защитой от обнаружения');
 
         // В режиме profile инициализируем вкладку через UI
@@ -353,6 +355,11 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false,
                         const newPage = await target.page();
                         if (newPage) {
                             setupBrowserConsoleLogging(newPage);
+                            // В legacy режиме отслеживаем последнюю активную вкладку
+                            if (BROWSER_PERSISTENCE_MODE !== 'profile') {
+                                lastActivePage = newPage;
+                                logDebug('📑 Новая вкладка создана и установлена как активная');
+                            }
                         }
                     } catch (error) {
                         // Ignore errors for pages that can't be accessed
@@ -504,6 +511,7 @@ export async function shutdownBrowser() {
         browserContext = null;
         browserInstance = null;
         dedicatedPage = null;
+        lastActivePage = null;
         isTabInitialized = false;
         logInfo('Браузер закрыт');
     } catch (error) {
@@ -512,7 +520,25 @@ export async function shutdownBrowser() {
 }
 
 export function getBrowserContext() { return browserContext; }
-export function getDedicatedPage() { return dedicatedPage; }
+export function updateLastActivePage(page) {
+    // Обновляем последнюю активную страницу (для legacy режима)
+    if (BROWSER_PERSISTENCE_MODE !== 'profile' && page) {
+        lastActivePage = page;
+    }
+}
+export function getDedicatedPage() { 
+    // В режиме profile возвращаем dedicatedPage
+    if (BROWSER_PERSISTENCE_MODE === 'profile') {
+        return dedicatedPage;
+    }
+    // В legacy режиме возвращаем последнюю активную вкладку
+    // Проверяем что страница еще открыта
+    if (lastActivePage && !lastActivePage.isClosed()) {
+        return lastActivePage;
+    }
+    // Если последняя вкладка закрыта, пробуем browserContext
+    return browserContext; 
+}
 export function isProfileMode() { return BROWSER_PERSISTENCE_MODE === 'profile'; }
 export function isTabReady() { return isTabInitialized; }
 export function setAuthenticationStatus(status) { isAuthenticated = status; }

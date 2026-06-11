@@ -300,6 +300,12 @@ Archive upload is successful when:
    - Verify archive structure
    - Try smaller test archive first
 
+5. **Diagnostics:**
+   - Use `/screenshot` to see browser state
+   - Use `/screencast 30` to record browser activity
+   - Check OCR text for CAPTCHA detection
+   - See [Diagnostic Commands](./TELEGRAM_DIAGNOSTIC_COMMANDS.md) for details
+
 ## 🎉 Complete!
 
 You now have a fully functional Telegram bot for remote session management!

@@ -21,6 +21,30 @@ let ffmpegAvailable = true;
 let tesseractWorker = null;
 let tesseractInitializing = false;
 
+// Global flag to disable screencast during health checks
+let screencastDisabled = false;
+
+/**
+ * Enable or disable screencast globally
+ * @param {boolean} disabled - True to disable screencast, false to enable
+ */
+export function setScreencastDisabled(disabled) {
+    screencastDisabled = disabled;
+    if (disabled) {
+        logDebug('🎬 Screencast disabled globally');
+    } else {
+        logDebug('🎬 Screencast enabled globally');
+    }
+}
+
+/**
+ * Check if screencast is currently disabled
+ * @returns {boolean} True if screencast is disabled
+ */
+export function isScreencastDisabled() {
+    return screencastDisabled;
+}
+
 /**
  * Initialize Tesseract OCR worker at application startup
  * @returns {Promise<boolean>} True if initialized successfully
@@ -158,6 +182,11 @@ export function isVerificationText(text) {
 export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
     // If screencast timeout is 0 or not set, use regular page.evaluate()
     if (!SCREENCAST_TIMEOUT || SCREENCAST_TIMEOUT <= 0) {
+        return await page.evaluate(pageFunction, ...args);
+    }
+
+    // If screencast is disabled globally (e.g., during health checks), use regular page.evaluate()
+    if (screencastDisabled) {
         return await page.evaluate(pageFunction, ...args);
     }
 
@@ -503,7 +532,8 @@ function escapeHtml(text) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 /**
@@ -537,13 +567,15 @@ async function buildScreencastCaption(reason, elapsed, fileSizeMB, ocrText, erro
 
     // Add account info
     if (accountId) {
-        caption += `👤 Аккаунт: ${accountId}\n`;
+        const escapedAccountId = escapeHtml(accountId);
+        caption += `👤 Аккаунт: ${escapedAccountId}\n`;
     } else {
         // Try to get current account
         try {
             const tokenObj = await getAvailableToken();
             if (tokenObj?.id) {
-                caption += `👤 Аккаунт: ${tokenObj.id}\n`;
+                const escapedAccountId = escapeHtml(tokenObj.id);
+                caption += `👤 Аккаунт: ${escapedAccountId}\n`;
             }
         } catch (error) {
             logDebug('Не удалось получить информацию об аккаунте:', error);
@@ -552,7 +584,8 @@ async function buildScreencastCaption(reason, elapsed, fileSizeMB, ocrText, erro
 
     // Add page URL
     if (pageUrl) {
-        caption += `🔗 URL: ${pageUrl}\n`;
+        const escapedUrl = escapeHtml(pageUrl);
+        caption += `🔗 URL: ${escapedUrl}\n`;
     }
 
     // Add timing and file info

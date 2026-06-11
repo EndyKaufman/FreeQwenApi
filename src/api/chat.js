@@ -1418,12 +1418,13 @@ export async function sendMessage(message, model = null, chatId = null, parentId
         const elapsed = Date.now() - startTime;
         logError(`❌ [sendMessage] Исключение при отправке сообщения (после ${elapsed}ms)`, error);
 
-        // Проверяем на Puppeteer protocol timeout - нужен перезапуск браузера
-        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
-            logError('⚠️ [sendMessage] Puppeteer protocol timeout - требуется перезапуск сервиса');
+        // Проверяем на Puppeteer protocol timeout - просто логируем
+        if (error.message && (error.message.includes('Runtime.callFunctionOn timed out') || error.name === 'ProtocolError')) {
+            logError('⚠️ [sendMessage] Puppeteer protocol timeout detected');
             logError(`⚠️ [sendMessage] Таймаут произошел после ${elapsed}ms`);
-            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
-            process.exit(42);
+            logError('⚠️ [sendMessage] Браузер может быть перегружен - ошибка залогирована, сервис продолжает работу');
+            // Не перезапускаем сервис - просто возвращаем ошибку клиенту
+            // Page pool освободит страницу, и следующий запрос может использовать другую страницу
         }
 
         return { error: error.toString(), chatId };
@@ -1756,9 +1757,9 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
         logError(`❌ [createChatV2] Error stack: ${error.stack}`);
         logError(`❌ [createChatV2] Error name: ${error.name}`);
 
-        // Проверяем на Puppeteer protocol timeout - нужен перезапуск браузера
-        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
-            logError('⚠️ [createChatV2] Puppeteer protocol timeout - требуется перезапуск сервиса');
+        // Логируем Puppeteer protocol timeout для диагностики
+        if (error.message && (error.message.includes('Runtime.callFunctionOn timed out') || error.name === 'ProtocolError')) {
+            logError('⚠️ [createChatV2] Puppeteer protocol timeout detected');
             logError(`⚠️ [createChatV2] Таймаут произошел после ${elapsed}ms`);
             logError('⚠️ [createChatV2] Это обычно происходит когда:');
             logError('   1. Браузер перегружен или завис');
@@ -1766,12 +1767,12 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
             logError('   3. Сетевой запрос внутри evaluate() таймаутит');
             logError('   4. Проблемы с памятью или CPU');
 
-            // Проверяем страницу на CAPTCHA перед перезапуском
+            // Проверяем страницу на CAPTCHA
             if (page && !page.isClosed()) {
                 try {
                     const captchaCheck = await detectCaptcha(page);
                     if (captchaCheck.hasCaptcha) {
-                        logWarn(`🛡️ [createChatV2] Обнаружена CAPTCHA перед перезапуском: ${captchaCheck.reason}`);
+                        logWarn(`🛡️ [createChatV2] Обнаружена CAPTCHA: ${captchaCheck.reason}`);
                         await handleCaptchaDetected(page, captchaCheck.reason, captchaCheck.ocrText || null);
                     }
                 } catch (captchaError) {
@@ -1779,8 +1780,9 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
                 }
             }
 
-            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
-            process.exit(42);
+            logError('⚠️ [createChatV2] Ошибка залогирована, сервис продолжает работу');
+            // Не перезапускаем сервис - просто возвращаем ошибку клиенту
+            // Page pool освободит страницу, и следующий запрос может использовать другую страницу
         }
 
         return { error: error.toString() };

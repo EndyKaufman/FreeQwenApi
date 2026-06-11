@@ -938,11 +938,11 @@ router.post('/chats', async (req, res) => {
     } catch (error) {
         logError('Ошибка при создании чата', error);
 
-        // Проверяем на Puppeteer protocol timeout - нужен перезапуск сервиса
-        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
-            logError('⚠️ Puppeteer protocol timeout - требуется перезапуск сервиса');
-            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
-            process.exit(42);
+        // Логируем Puppeteer protocol timeout для диагностики
+        if (error.message && (error.message.includes('Runtime.callFunctionOn timed out') || error.name === 'ProtocolError')) {
+            logError('⚠️ Puppeteer protocol timeout detected в /chats endpoint');
+            logError('⚠️ Ошибка залогирована, сервис продолжает работу');
+            // Не перезапускаем сервис - просто возвращаем ошибку клиенту
         }
 
         res.status(500).json({ error: 'Внутренняя ошибка сервера' });

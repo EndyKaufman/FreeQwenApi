@@ -2924,12 +2924,11 @@ async function handleLLMChat(chatId, userMessage) {
     } catch (error) {
         logError('❌ LLM Chat: Ошибка', error);
 
-        // Проверяем на Puppeteer protocol timeout - нужен перезапуск сервиса
-        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
-            logError('⚠️ Puppeteer protocol timeout в Telegram боте - требуется перезапуск сервиса');
-            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
-            // Не пытаемся отправить сообщение - просто выходим
-            process.exit(42);
+        // Логируем Puppeteer protocol timeout для диагностики
+        if (error.message && (error.message.includes('Runtime.callFunctionOn timed out') || error.name === 'ProtocolError')) {
+            logError('⚠️ Puppeteer protocol timeout detected в Telegram боте');
+            logError('⚠️ Ошибка залогирована, сервис продолжает работу');
+            // Не перезапускаем сервис - просто возвращаем ошибку пользователю
         }
 
         // Формируем сообщение об ошибке с деталями

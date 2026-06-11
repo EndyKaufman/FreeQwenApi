@@ -66,11 +66,11 @@ export async function getStsToken(fileInfo) {
     } catch (error) {
         logError(`Ошибка при получении STS токена: ${error.message}`, error);
 
-        // Проверяем на Puppeteer protocol timeout - нужен перезапуск сервиса
-        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
-            logError('⚠️ Puppeteer protocol timeout - требуется перезапуск сервиса');
-            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
-            process.exit(42);
+        // Логируем Puppeteer protocol timeout для диагностики
+        if (error.message && (error.message.includes('Runtime.callFunctionOn timed out') || error.name === 'ProtocolError')) {
+            logError('⚠️ Puppeteer protocol timeout detected при получении STS токена');
+            logError('⚠️ Ошибка залогирована, сервис продолжает работу');
+            // Не перезапускаем сервис - просто пробрасываем ошибку дальше
         }
 
         throw error;
@@ -155,11 +155,11 @@ export async function uploadFile(filePath, stsData) {
     } catch (error) {
         logError(`Ошибка при загрузке файла в OSS: ${error.message}`, error);
 
-        // Проверяем на Puppeteer protocol timeout - нужен перезапуск сервиса
-        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
-            logError('⚠️ Puppeteer protocol timeout - требуется перезапуск сервиса');
-            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
-            process.exit(42);
+        // Логируем Puppeteer protocol timeout для диагностики
+        if (error.message && (error.message.includes('Runtime.callFunctionOn timed out') || error.name === 'ProtocolError')) {
+            logError('⚠️ Puppeteer protocol timeout detected при загрузке в OSS');
+            logError('⚠️ Ошибка залогирована, сервис продолжает работу');
+            // Не перезапускаем сервис - просто пробрасываем ошибку дальше
         }
 
         throw error;

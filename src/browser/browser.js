@@ -75,7 +75,9 @@ export async function initializeTabWithUI(page) {
         logInfo('🔧 Инициализация вкладки через взаимодействие с UI...');
 
         // Переходим на главную страницу
-        await page.goto(CHAT_PAGE_URL, { waitUntil: 'networkidle2', timeout: NAVIGATION_TIMEOUT });
+        logDebug('🌐 Навигация к главной странице (domcontentloaded)...');
+        await page.goto(CHAT_PAGE_URL, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT });
+        logDebug('✅ Навигация завершена, ожидание 2с...');
         await delay(2000);
 
         // Ждем появления textarea (message input)

@@ -5,7 +5,7 @@ import { loadBotSettings, saveBotSettings, loadChatModels, setChatModel, getChat
 import { fetchWithQwenProxy } from './proxy.js';
 import { generateImage } from '../api/imageGeneration.js';
 import { getVersionInfo } from './versionChecker.js';
-import { initBrowser, shutdownBrowser, getBrowserContext } from '../browser/browser.js';
+import { initBrowser, shutdownBrowser, getBrowserContext, isProfileMode } from '../browser/browser.js';
 import { extractAuthToken, sendMessage as sendQwenMessage } from '../api/chat.js';
 import { loadSession, saveSession, saveAuthToken } from '../browser/session.js';
 import { loadTokens, saveTokens } from '../api/tokenManager.js';
@@ -2596,15 +2596,18 @@ async function handleExtendSession(chatId) {
 
                 const ctx = getBrowserContext();
 
-                // Загружаем cookies с помощью loadSession
-                const cookiesLoaded = await loadSession(ctx, token.id);
+                // В режиме profile не загружаем/сохраняем cookies - они уже в профиле
+                if (!isProfileMode()) {
+                    // Загружаем cookies с помощью loadSession
+                    const cookiesLoaded = await loadSession(ctx, token.id);
 
-                if (!cookiesLoaded) {
-                    results.push(`❌ ${token.id} - нет cookies`);
-                    failCount++;
-                    logWarn(`Session extension failed for ${token.id}: cookies.json not found`);
-                    await shutdownBrowser();
-                    continue;
+                    if (!cookiesLoaded) {
+                        results.push(`❌ ${token.id} - нет cookies`);
+                        failCount++;
+                        logWarn(`Session extension failed for ${token.id}: cookies.json not found`);
+                        await shutdownBrowser();
+                        continue;
+                    }
                 }
 
                 // Переходим на Qwen для обновления сессии (3 минуты таймаут)
@@ -2641,8 +2644,11 @@ async function handleExtendSession(chatId) {
                     saveTokens(tokens);
                 }
 
-                // Сохраняем обновленные cookies и автоматически извлекаем токен
-                await saveSession(ctx, token.id);
+                // В режиме profile не сохраняем cookies - они уже в профиле
+                if (!isProfileMode()) {
+                    // Сохраняем обновленные cookies и автоматически извлекаем токен
+                    await saveSession(ctx, token.id);
+                }
 
                 // Закрываем браузер
                 await shutdownBrowser();

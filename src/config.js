@@ -79,6 +79,15 @@ export const VIEWPORT_HEIGHT = Number(process.env.VIEWPORT_HEIGHT) || 1080;
 export const USER_AGENT = process.env.USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 export const PUPPETEER_PROTOCOL_TIMEOUT = Number(process.env.PUPPETEER_PROTOCOL_TIMEOUT) || 120000; // 2 minutes (default)
 
+// ─── Режим персистентности браузера ──────────────────────────────────────────
+// BROWSER_PERSISTENCE_MODE=profile: использует userDataDir для полного сохранения состояния браузера
+//   - Сохраняет cookies, localStorage, sessionStorage, IndexedDB, cache
+//   - Старый режим с token.txt и cookies.json отключен
+//   - Все запросы идут через одну вкладку
+//   - При старте загружается самый свежий профиль
+// BROWSER_PERSISTENCE_MODE=legacy (по умолчанию): старый режим с token.txt и cookies.json
+export const BROWSER_PERSISTENCE_MODE = process.env.BROWSER_PERSISTENCE_MODE || 'legacy';
+
 // ─── Сервер ──────────────────────────────────────────────────────────────────
 export const PORT = Number(process.env.PORT) || 3264;
 export const HOST = process.env.HOST || '0.0.0.0';

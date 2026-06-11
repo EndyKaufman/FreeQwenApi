@@ -1,4 +1,4 @@
-import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus, simulateHumanMouseMovement } from '../browser/browser.js';
+import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus, simulateHumanMouseMovement, getDedicatedPage, isProfileMode, isTabReady, initializeTabWithUI } from '../browser/browser.js';
 import { checkAuthentication, checkVerification } from '../browser/auth.js';
 import { shutdownBrowser, initBrowser } from '../browser/browser.js';
 import { saveAuthToken, loadSession, saveSession } from '../browser/session.js';
@@ -80,6 +80,33 @@ export const pagePool = {
 
     async getPage(context, accountId = null) {
         logDebug('📄 [pagePool.getPage] Запрос страницы...');
+
+        // В режиме profile всегда возвращаем dedicated page
+        if (isProfileMode()) {
+            const dedicatedPage = getDedicatedPage();
+            if (!dedicatedPage) {
+                throw new Error('Dedicated page не найдена в режиме profile');
+            }
+
+            // Если вкладка еще не инициализирована через UI, делаем это сейчас
+            if (!isTabReady()) {
+                logDebug('🔧 [pagePool.getPage] Вкладка не инициализирована, инициализируем...');
+                try {
+                    const initSuccess = await initializeTabWithUI(dedicatedPage);
+                    if (initSuccess) {
+                        logDebug('✅ [pagePool.getPage] Вкладка успешно инициализирована');
+                    } else {
+                        logWarn('⚠️ [pagePool.getPage] Инициализация вкладки не удалась, но продолжаем');
+                    }
+                } catch (error) {
+                    logWarn('⚠️ [pagePool.getPage] Ошибка инициализации вкладки', error);
+                }
+            }
+
+            logDebug('🔒 [pagePool.getPage] Возвращаем dedicated page (profile mode)');
+            return dedicatedPage;
+        }
+
         const baseContext = getBrowserContext();
         while (this.pages.length > 0) {
             const page = this.pages.pop();
@@ -121,13 +148,12 @@ export const pagePool = {
         logDebug('🆕 [pagePool.getPage] Создание новой страницы...');
         const newPage = await getPage(context);
 
-        // Сохраняем маппинг страницы к аккаунту
-        if (accountId) {
+        // В режиме profile не загружаем cookies - они уже в профиле
+        if (!isProfileMode() && accountId) {
+            // Сохраняем маппинг страницы к аккаунту
             this.pageAccounts.set(newPage, accountId);
-        }
 
-        // Загружаем cookies перед навигацией если указан accountId
-        if (accountId) {
+            // Загружаем cookies перед навигацией если указан accountId
             logDebug(`🍪 [pagePool.getPage] Загрузка cookies для аккаунта ${accountId}...`);
             const cookiesLoaded = await loadSession(newPage, accountId);
             if (cookiesLoaded) {
@@ -135,6 +161,9 @@ export const pagePool = {
             } else {
                 logWarn(`⚠️ [pagePool.getPage] Cookies для ${accountId} не найдены`);
             }
+        } else if (!isProfileMode()) {
+            // Сохраняем маппинг страницы к аккаунту даже без accountId
+            this.pageAccounts.set(newPage, accountId);
         }
 
         logDebug(`🌐 [pagePool.getPage] Навигация к ${CHAT_PAGE_URL}...`);
@@ -188,6 +217,12 @@ export const pagePool = {
     },
 
     releasePage(page, forceClose = false) {
+        // В режиме profile не закрываем dedicated page и не сохраняем cookies
+        if (isProfileMode()) {
+            logDebug('🔒 [releasePage] Profile mode: пропускаем возврат страницы в пул');
+            return;
+        }
+
         try {
             if (page.isClosed()) { return; }
         } catch { return; }
@@ -237,7 +272,7 @@ export const pagePool = {
 
 // ─── Task polling ────────────────────────────────────────────────────────────
 
-export async function pollTaskStatus(taskId, page, token, maxAttempts = TASK_POLL_MAX_ATTEMPTS, interval = TASK_POLL_INTERVAL) {
+export async function pollTaskStatus(taskId, page, token, maxAttempts = TASK_POLL_MAX_ATTEMPTS, interval = TASK_POLL_INTERVAL, useCookiesAuth = false) {
     logInfo(`Начинаем опрос статуса задачи: ${taskId}`);
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -246,12 +281,16 @@ export async function pollTaskStatus(taskId, page, token, maxAttempts = TASK_POL
 
             const result = await pageEvaluateWithScreencast(page, async (data) => {
                 try {
+                    // Используем cookies для аутентификации в режиме profile
+                    const headers = {};
+                    if (!data.useCookiesAuth) {
+                        headers['Authorization'] = `Bearer ${data.token}`;
+                        headers['Accept'] = 'application/json';
+                    }
+
                     const response = await fetch(data.url, {
                         method: 'GET',
-                        headers: {
-                            'Authorization': `Bearer ${data.token}`,
-                            'Accept': 'application/json'
-                        }
+                        headers: headers
                     });
                     if (!response.ok) {
                         return { success: false, status: response.status, error: await response.text() };
@@ -260,7 +299,7 @@ export async function pollTaskStatus(taskId, page, token, maxAttempts = TASK_POL
                 } catch (e) {
                     return { success: false, error: e.toString() };
                 }
-            }, { url: statusUrl, token });
+            }, { url: statusUrl, token, useCookiesAuth });
 
             if (!result.success) {
                 logWarn(`Ошибка при проверке статуса (попытка ${attempt}/${maxAttempts}): ${result.error}`);
@@ -967,18 +1006,30 @@ async function executeApiRequest(page, apiUrl, payload, token, onChunk = null) {
     logDebug(`Используем токен: ${token ? 'Токен существует' : 'Токен отсутствует'}`);
     logDebug(`API URL: ${apiUrl}`);
 
+    // В режиме profile используем cookies для аутентификации вместо Bearer токена
+    // Это менее заметно для анти-бот систем
+    const useCookiesAuth = isProfileMode();
+
     return pageEvaluateWithScreencast(page, async (data) => {
         try {
             const t = data.token;
-            if (!t) { return { success: false, error: 'Токен авторизации не найден' }; }
+            if (!t && !data.useCookiesAuth) { return { success: false, error: 'Токен авторизации не найден' }; }
+
+            // Если используем cookies, не добавляем Authorization header
+            // Браузер автоматически отправит cookies с запросом
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+
+            // Добавляем Bearer токен только если не используем cookies mode
+            if (!data.useCookiesAuth && t) {
+                headers['Authorization'] = `Bearer ${t}`;
+                headers['Accept'] = '*/*';
+            }
 
             const response = await fetch(data.apiUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${t}`,
-                    'Accept': '*/*'
-                },
+                headers: headers,
                 body: JSON.stringify(data.payload)
             });
 
@@ -1092,7 +1143,7 @@ async function executeApiRequest(page, apiUrl, payload, token, onChunk = null) {
         } catch (error) {
             return { success: false, error: error.toString() };
         }
-    }, requestBody);
+    }, { apiUrl, payload, token, useCookiesAuth });
 }
 
 async function handleApiError(response, tokenObj, message, model, chatId, parentId, files, retryCount, chatType, size, waitForCompletion, onChunk = null) {
@@ -1313,7 +1364,7 @@ export async function sendMessage(message, model = null, chatId = null, parentId
             }
 
             logInfo('Начинаем polling для получения видео...');
-            const taskResult = await pollTaskStatus(taskId, page, authToken);
+            const taskResult = await pollTaskStatus(taskId, page, authToken, TASK_POLL_MAX_ATTEMPTS, TASK_POLL_INTERVAL, isProfileMode());
 
             pagePool.releasePage(page);
             page = null;
@@ -1642,7 +1693,8 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
         logDebug('✅ [createChatV2] Страница прошла проверку CAPTCHA');
 
         const payload = { title, models: [model], chat_mode: 'normal', chat_type: chatType, timestamp: Date.now() };
-        const requestBody = { apiUrl: CREATE_CHAT_URL, payload, token: authToken };
+        const useCookiesAuth = isProfileMode();
+        const requestBody = { apiUrl: CREATE_CHAT_URL, payload, token: authToken, useCookiesAuth };
 
         logDebug('🌐 [createChatV2] Выполнение page.evaluate для создания чата...');
         logDebug(`🌐 [createChatV2] API URL: ${CREATE_CHAT_URL}`);
@@ -1651,9 +1703,16 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
 
         const result = await pageEvaluateWithScreencast(page, async (data) => {
             try {
+                // В режиме profile используем cookies для аутентификации
+                const headers = { 'Content-Type': 'application/json' };
+                if (!data.useCookiesAuth) {
+                    // В legacy mode добавляем Authorization header
+                    headers['Authorization'] = `Bearer ${data.token}`;
+                }
+
                 const response = await fetch(data.apiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
                     body: JSON.stringify(data.payload)
                 });
                 if (response.ok) { return { success: true, data: await response.json() }; }
@@ -1745,17 +1804,25 @@ export async function testToken(token) {
         shouldClosePage = page !== browserContext;
         await page.goto(CHAT_PAGE_URL, { waitUntil: 'domcontentloaded' });
 
+        const useCookiesAuth = isProfileMode();
         const requestBody = {
             apiUrl: CHAT_API_URL,
             token,
+            useCookiesAuth,
             payload: { chat_type: 't2t', messages: [{ role: 'user', content: 'ping', chat_type: 't2t' }], model: DEFAULT_MODEL, stream: false }
         };
 
         const result = await pageEvaluateWithScreencast(page, async (data) => {
             try {
+                // В режиме profile используем cookies для аутентификации
+                const headers = { 'Content-Type': 'application/json' };
+                if (!data.useCookiesAuth) {
+                    headers['Authorization'] = `Bearer ${data.token}`;
+                }
+
                 const res = await fetch(data.apiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.token}` },
+                    headers: headers,
                     body: JSON.stringify(data.payload)
                 });
                 return { ok: res.ok, status: res.status };

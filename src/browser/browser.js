@@ -11,7 +11,7 @@ import {
     CHAT_PAGE_URL, NAVIGATION_TIMEOUT, RETRY_DELAY,
     VIEWPORT_WIDTH, VIEWPORT_HEIGHT, USER_AGENT,
     SESSION_DIR, ACCOUNTS_DIR, PUPPETEER_CONSOLE_LOGS,
-    PUPPETEER_PROTOCOL_TIMEOUT, MOUSE_MOVEMENT_DURATION
+    PUPPETEER_PROTOCOL_TIMEOUT, MOUSE_MOVEMENT_DURATION, BROWSER_PERSISTENCE_MODE
 } from '../config.js';
 
 puppeteer.use(StealthPlugin());
@@ -19,6 +19,134 @@ puppeteer.use(StealthPlugin());
 let browserInstance = null;
 let browserContext = null;
 export let isAuthenticated = false;
+let dedicatedPage = null; // Для режима profile - единственная вкладка
+let profileDir = null; // Путь к директории профиля
+let isTabInitialized = false; // Флаг: вкладка уже инициализирована через UI
+
+/**
+ * Получить путь к директории профиля браузера
+ * @returns {string} Путь к директории профиля
+ */
+function getProfileDir() {
+    const profilesDir = path.join(process.cwd(), SESSION_DIR, 'browser-profiles');
+    if (!fs.existsSync(profilesDir)) {
+        fs.mkdirSync(profilesDir, { recursive: true });
+    }
+    return path.join(profilesDir, 'default');
+}
+
+/**
+ * Найти самый свежий профиль браузера
+ * @returns {string|null} Путь к самому свежему профилю или null
+ */
+function getLatestProfile() {
+    const profilesDir = path.join(process.cwd(), SESSION_DIR, 'browser-profiles');
+    if (!fs.existsSync(profilesDir)) {
+        return null;
+    }
+
+    const profiles = fs.readdirSync(profilesDir).filter((name) => {
+        const fullPath = path.join(profilesDir, name);
+        return fs.statSync(fullPath).isDirectory();
+    });
+
+    if (profiles.length === 0) {
+        return null;
+    }
+
+    // Сортируем по времени модификации (самый свежий первый)
+    const profilesWithTime = profiles.map((name) => {
+        const fullPath = path.join(profilesDir, name);
+        const stat = fs.statSync(fullPath);
+        return { name, fullPath, mtime: stat.mtimeMs };
+    });
+
+    profilesWithTime.sort((a, b) => b.mtime - a.mtime);
+    return profilesWithTime[0].fullPath;
+}
+
+/**
+ * Initialize browser tab by interacting with UI
+ * This makes the tab look like a real user session
+ * @param {import('puppeteer').Page} page - Puppeteer page instance
+ */
+export async function initializeTabWithUI(page) {
+    try {
+        logInfo('🔧 Инициализация вкладки через взаимодействие с UI...');
+
+        // Переходим на главную страницу
+        await page.goto(CHAT_PAGE_URL, { waitUntil: 'networkidle2', timeout: NAVIGATION_TIMEOUT });
+        await delay(2000);
+
+        // Ждем появления textarea (message input)
+        logDebug('⏳ Ожидание появления поля ввода...');
+
+        // Пробуем найти по XPath
+        let textarea = null;
+        try {
+            const xpathResult = await page.$x('//*[@id="dropzone-container"]/div[2]/div/div[2]/div/div/textarea');
+            if (xpathResult && xpathResult.length > 0) {
+                textarea = xpathResult[0];
+                logDebug('✅ Textarea найден по XPath');
+            }
+        } catch (e) {
+            logDebug('XPath не сработал, пробуем по классу');
+        }
+
+        // Если не нашли по XPath, ищем по классу
+        if (!textarea) {
+            textarea = await page.$('.message-input-textarea');
+            if (textarea) {
+                logDebug('✅ Textarea найден по классу .message-input-textarea');
+            }
+        }
+
+        if (!textarea) {
+            logWarn('⚠️ Textarea не найден, пропускаем инициализацию');
+            return false;
+        }
+
+        // Кликаем на textarea
+        logDebug('🖱️ Клик на поле ввода...');
+        await textarea.click();
+        await delay(500);
+
+        // Вводим "ping"
+        logDebug('⌨️ Ввод "ping"...');
+        await textarea.type('ping', { delay: 50 });
+        await delay(500);
+
+        // Нажимаем Enter
+        logDebug('⌨️ Нажатие Enter...');
+        await page.keyboard.press('Enter');
+
+        // Ждем пока запрос обработается
+        logDebug('⏳ Ожидание ответа от сервера...');
+        await delay(3000);
+
+        // Проверяем что появился ответ
+        const hasResponse = await page.evaluate(() => {
+            // Ищем элементы с ответом ассистента (более специфичные селекторы Qwen)
+            const responseElements = document.querySelectorAll(
+                '[class*="message-content"][class*="phase-answer"], ' +
+                '[class*="response"], ' +
+                '[class*="assistant-message"]'
+            );
+            return responseElements.length > 0;
+        });
+
+        if (hasResponse) {
+            logInfo('✅ Вкладка успешно инициализирована через UI');
+            return true;
+        } else {
+            logWarn('⚠️ Ответ не обнаружен, но вкладка считается готовой');
+            return true;
+        }
+    } catch (error) {
+        logError('❌ Ошибка при инициализации вкладки через UI', error);
+        return false;
+    }
+}
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -83,9 +211,23 @@ function setupBrowserConsoleLogging(page) {
 export async function initBrowser(visibleMode = true, skipManualRestart = false, skipManualAuth = false) {
     if (browserInstance) { return true; }
 
-    logInfo('Инициализация браузера с Puppeteer Stealth...');
+    logInfo(`Инициализация браузера с Puppeteer Stealth... (режим: ${BROWSER_PERSISTENCE_MODE})`);
     try {
-        browserInstance = await puppeteer.launch({
+        const isProfileMode = BROWSER_PERSISTENCE_MODE === 'profile';
+
+        // В режиме profile используем userDataDir
+        if (isProfileMode) {
+            // При авторизации создаем новый профиль, иначе загружаем самый свежий
+            if (visibleMode && !skipManualAuth) {
+                profileDir = getProfileDir();
+                logInfo(`📁 Создание нового профиля: ${profileDir}`);
+            } else {
+                profileDir = getLatestProfile() || getProfileDir();
+                logInfo(`📁 Загрузка профиля: ${profileDir}`);
+            }
+        }
+
+        const launchOptions = {
             headless: !visibleMode,
             slowMo: visibleMode ? 30 : 0,
             executablePath: process.env.CHROME_PATH || undefined,
@@ -94,13 +236,13 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false,
                 '--disable-setuid-sandbox',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process',
+                //'--disable-web-security',
+                //'--disable-features=IsolateOrigins,site-per-process',
                 `--window-size=${VIEWPORT_WIDTH},${VIEWPORT_HEIGHT}`,
                 '--start-maximized',
                 '--disable-infobars',
                 '--disable-extensions',
-                '--disable-gpu',
+                //'--disable-gpu',
                 '--no-first-run',
                 '--no-default-browser-check',
                 '--ignore-certificate-errors',
@@ -109,10 +251,24 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false,
             defaultViewport: { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT },
             ignoreHTTPSErrors: true,
             protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT
-        });
+        };
+
+        // Добавляем userDataDir только в режиме profile
+        if (isProfileMode && profileDir) {
+            launchOptions.userDataDir = profileDir;
+            logDebug(`🔧 userDataDir: ${profileDir}`);
+        }
+
+        browserInstance = await puppeteer.launch(launchOptions);
 
         const pages = await browserInstance.pages();
         const page = pages.length > 0 ? pages[0] : await browserInstance.newPage();
+
+        // В режиме profile сохраняем единственную вкладку
+        if (isProfileMode) {
+            dedicatedPage = page;
+            logInfo('🔒 Режим profile: все запросы будут идти через одну вкладку');
+        }
 
         // Simulate human-like mouse movement after tab creation
         await simulateHumanMouseMovement(page);
@@ -170,6 +326,19 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false,
 
         browserContext = page;
         logInfo('Браузер инициализирован с максимальной защитой от обнаружения');
+
+        // В режиме profile инициализируем вкладку через UI
+        if (isProfileMode && !visibleMode) {
+            // В headless режиме всегда инициализируем вкладку
+            const initSuccess = await initializeTabWithUI(page);
+            if (initSuccess) {
+                isTabInitialized = true;
+                logInfo('✅ Вкладка готова к работе (инициализирована через UI)');
+            } else {
+                logWarn('⚠️ Инициализация вкладки через UI не удалась, но продолжаем работу');
+                isTabInitialized = true; // Считаем готовой даже если что-то пошло не так
+            }
+        }
 
         // Setup console logging for browser tabs if enabled
         if (PUPPETEER_CONSOLE_LOGS) {
@@ -310,6 +479,18 @@ export async function restartBrowserInHeadlessMode() {
 
 export async function shutdownBrowser() {
     try {
+        // В режиме profile сохраняем состояние перед закрытием
+        if (BROWSER_PERSISTENCE_MODE === 'profile' && dedicatedPage) {
+            try {
+                logInfo('💾 Сохранение состояния браузера перед закрытием...');
+                // Просто ждем немного чтобы браузер успел сохранить данные на диск
+                await delay(1000);
+                logInfo('✅ Состояние браузера сохранено');
+            } catch (e) {
+                logWarn('⚠️ Не удалось сохранить состояние браузера', e);
+            }
+        }
+
         try { await clearPagePool(); } catch (e) { logError('Ошибка при очистке пула страниц', e); }
         if (browserInstance) {
             try {
@@ -320,6 +501,8 @@ export async function shutdownBrowser() {
         }
         browserContext = null;
         browserInstance = null;
+        dedicatedPage = null;
+        isTabInitialized = false;
         logInfo('Браузер закрыт');
     } catch (error) {
         logError('Ошибка при завершении работы браузера', error);
@@ -327,5 +510,8 @@ export async function shutdownBrowser() {
 }
 
 export function getBrowserContext() { return browserContext; }
+export function getDedicatedPage() { return dedicatedPage; }
+export function isProfileMode() { return BROWSER_PERSISTENCE_MODE === 'profile'; }
+export function isTabReady() { return isTabInitialized; }
 export function setAuthenticationStatus(status) { isAuthenticated = status; }
 export function getAuthenticationStatus() { return isAuthenticated; }

@@ -1,5 +1,5 @@
 import { saveSession } from './session.js';
-import { setAuthenticationStatus, getAuthenticationStatus, restartBrowserInHeadlessMode, simulateHumanMouseMovement } from './browser.js';
+import { setAuthenticationStatus, getAuthenticationStatus, restartBrowserInHeadlessMode, simulateHumanMouseMovement, isProfileMode } from './browser.js';
 import { extractAuthToken } from '../api/chat.js';
 import { logInfo, logError, logWarn } from '../logger/index.js';
 import { CHAT_PAGE_URL, AUTH_SIGNIN_URL, PAGE_TIMEOUT, RETRY_DELAY } from '../config.js';
@@ -67,8 +67,13 @@ export async function checkAuthentication(context) {
                 setAuthenticationStatus(true);
                 try {
                     await extractAuthToken(context, true);
-                    await saveSession(context);
-                    logInfo('Сессия обновлена');
+                    // В режиме profile не сохраняем cookies - они уже в профиле
+                    if (!isProfileMode()) {
+                        await saveSession(context);
+                        logInfo('Сессия обновлена');
+                    } else {
+                        logInfo('Сессия обновлена (profile mode)');
+                    }
                 } catch (e) { logError('Не удалось обновить сессию', e); }
                 if (isPW) {await page.close();}
                 return true;
@@ -93,7 +98,10 @@ export async function checkAuthentication(context) {
             if (loginCountAfter === 0) {
                 logInfo('Авторизация подтверждена.');
                 setAuthenticationStatus(true);
-                await saveSession(context);
+                // В режиме profile не сохраняем cookies - они уже в профиле
+                if (!isProfileMode()) {
+                    await saveSession(context);
+                }
                 await extractAuthToken(context, true);
                 if (isPW) {await page.close();}
                 return true;
@@ -141,7 +149,10 @@ export async function startManualAuthentication(context, skipRestart = false) {
             if (loginCount === 0) {
                 logInfo('Авторизация подтверждена.');
                 setAuthenticationStatus(true);
-                await saveSession(context);
+                // В режиме profile не сохраняем cookies - они уже в профиле
+                if (!isProfileMode()) {
+                    await saveSession(context);
+                }
                 await extractAuthToken(context, true);
                 logInfo('Сессия сохранена успешно!');
                 if (isPW) {await page.close();}

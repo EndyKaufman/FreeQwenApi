@@ -192,7 +192,7 @@ qwen-api-proxy --setup
 
 **Error**: `ERR_UNSUPPORTED_ESM_URL_SCHEME`
 
-**Solution**: Already fixed in v1.0.20. Update to latest version:
+**Solution**: Already fixed in v1.0.21. Update to latest version:
 ```powershell
 npm update -g qwen-api-proxy
 ```
@@ -319,7 +319,7 @@ If you encounter platform-specific issues:
 
 ## Version History
 
-### v1.0.20 (Current)
+### v1.0.21 (Current)
 - ✅ Full Windows support
 - ✅ Cross-platform archive command
 - ✅ Cross-platform health checks

@@ -19,7 +19,7 @@
 # 1. Build with metadata
 docker buildx build --platform linux/amd64,linux/arm64 \
     --tag endykaufman/qwen-api-proxy:latest \
-    --tag endykaufman/qwen-api-proxy:1.0.20 \
+    --tag endykaufman/qwen-api-proxy:1.0.21 \
     --label "org.opencontainers.image.title=FreeQwenApi" \
     --label "org.opencontainers.image.description=Free Qwen AI API Proxy" \
     --push \

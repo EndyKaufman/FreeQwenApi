@@ -144,3 +144,8 @@ export const PAGE_EVALUATE_SCREENCAST_TIMEOUT = Number(process.env.PAGE_EVALUATE
 // PAGE_EVALUATE_SCREENCAST_MAX_DURATION=60000: максимальная длительность записи в мс (60 секунд)
 // PAGE_EVALUATE_SCREENCAST_MAX_DURATION=0 (по умолчанию): без ограничений (запись остановится когда завершится page.evaluate())
 export const PAGE_EVALUATE_SCREENCAST_MAX_DURATION = Number(process.env.PAGE_EVALUATE_SCREENCAST_MAX_DURATION) || 0;
+
+// ─── Anti-CAPTCHA ───────────────────────────────────────────────────────────
+// ENABLE_ANTICAPTCHA=true: включить автоматическое обнаружение и обработку CAPTCHA
+// ENABLE_ANTICAPTCHA=false (по умолчанию): обнаружение CAPTCHA отключено
+export const ENABLE_ANTICAPTCHA = toBoolean(process.env.ENABLE_ANTICAPTCHA);

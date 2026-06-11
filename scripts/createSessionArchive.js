@@ -165,10 +165,10 @@ async function main() {
             try {
                 const cookies = await ctx.cookies();
                 logInfo(`📝 ${accountId}: Получено ${cookies.length} cookies`);
-                
+
                 fs.writeFileSync(path.join(accountDir, 'cookies.json'), JSON.stringify(cookies, null, 2));
                 logInfo(`✅ ${accountId}: Cookies.json сохранён (${cookies.length} cookies)`);
-                
+
                 // Извлекаем токен из cookies
                 const tokenCookie = cookies.find((cookie) => cookie.name === 'token');
                 if (tokenCookie && tokenCookie.value) {

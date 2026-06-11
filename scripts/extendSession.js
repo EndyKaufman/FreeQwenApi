@@ -83,42 +83,12 @@ Examples:
 }
 
 /**
- * Load cookies for a specific account
- */
-function loadAccountCookies(accountId) {
-    const cookiesPath = path.join(SESSION_PATH, 'accounts', accountId, 'cookies.json');
-
-    if (!fs.existsSync(cookiesPath)) {
-        logWarn(`Cookies not found for account ${accountId}`);
-        return null;
-    }
-
-    try {
-        const cookiesData = fs.readFileSync(cookiesPath, 'utf8');
-        const cookies = JSON.parse(cookiesData);
-        logInfo(`Loaded ${cookies.length} cookies for account ${accountId}`);
-        return cookies;
-    } catch (error) {
-        logError(`Failed to load cookies for ${accountId}`, error);
-        return null;
-    }
-}
-
-/**
  * Extend session for a single account
  */
 async function extendAccountSession(accountId) {
     console.log(`\n🔄 Extending session for account: ${accountId}`);
 
     try {
-        // Load existing cookies
-        const cookies = loadAccountCookies(accountId);
-
-        if (!cookies || cookies.length === 0) {
-            logWarn(`⚠️ No cookies found for ${accountId}, skipping`);
-            return { success: false, reason: 'no_cookies' };
-        }
-
         // Initialize browser in headless mode (silent)
         logInfo('🌐 Opening browser in headless mode...');
         const browserOk = await initBrowser(false, true); // false = headless
@@ -129,10 +99,14 @@ async function extendAccountSession(accountId) {
 
         const ctx = getBrowserContext();
 
-        // Load existing cookies into browser
+        // Load saved cookies using loadSession function
         logInfo('🍪 Loading saved cookies...');
-        if (ctx && typeof ctx.setCookie === 'function') {
-            await ctx.setCookie(...cookies);
+        const cookiesLoaded = await loadSession(ctx, accountId);
+
+        if (!cookiesLoaded) {
+            logWarn(`⚠️ No cookies found for ${accountId}, skipping`);
+            await shutdownBrowser();
+            return { success: false, reason: 'no_cookies' };
         }
 
         // Navigate to Qwen chat to refresh session (3 minutes timeout)
@@ -175,7 +149,7 @@ async function extendAccountSession(accountId) {
         // Save updated cookies и автоматически извлекаем токен
         const newCookies = await ctx.cookies();
         logInfo(`📝 ${accountId}: Получено ${newCookies.length} cookies`);
-        
+
         const cookiesPath = path.join(SESSION_PATH, 'accounts', accountId, 'cookies.json');
         try {
             fs.writeFileSync(cookiesPath, JSON.stringify(newCookies, null, 2));
@@ -183,7 +157,7 @@ async function extendAccountSession(accountId) {
         } catch (error) {
             logError(`❌ ${accountId}: Ошибка сохранения cookies.json: ${error.message}`);
         }
-        
+
         // Извлекаем токен из cookies
         const tokenCookie = newCookies.find((cookie) => cookie.name === 'token');
         if (tokenCookie && tokenCookie.value) {

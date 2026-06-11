@@ -214,7 +214,7 @@ async function saveSessionPuppeteer(page) {
 
         fs.writeFileSync(path.join(accountDir, 'cookies.json'), JSON.stringify(cookies, null, 2));
         logInfo(`📝 ${accountId}: Получено ${cookies.length} cookies`);
-        
+
         // Автоматически извлекаем и сохраняем токен из cookies
         const tokenCookie = cookies.find((cookie) => cookie.name === 'token');
         if (tokenCookie && tokenCookie.value) {

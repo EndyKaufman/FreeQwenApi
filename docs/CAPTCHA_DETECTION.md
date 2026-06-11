@@ -120,11 +120,14 @@ This helps clear session-based CAPTCHA challenges.
 
 ## Configuration
 
-CAPTCHA detection is **enabled by default** and requires no additional configuration.
+CAPTCHA detection is **disabled by default**. To enable it, set the `ENABLE_ANTICAPTCHA` environment variable to `true`.
 
-### Related Environment Variables
+### Environment Variables
 
 ```bash
+# Enable/disable CAPTCHA detection (default: false)
+ENABLE_ANTICAPTCHA=true
+
 # Maximum retry attempts for API calls
 MAX_RETRY_COUNT=3
 

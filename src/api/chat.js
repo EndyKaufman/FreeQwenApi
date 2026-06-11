@@ -1,7 +1,7 @@
 import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus, simulateHumanMouseMovement } from '../browser/browser.js';
 import { checkAuthentication, checkVerification } from '../browser/auth.js';
 import { shutdownBrowser, initBrowser } from '../browser/browser.js';
-import { saveAuthToken } from '../browser/session.js';
+import { saveAuthToken, loadSession, saveSession } from '../browser/session.js';
 import { getAvailableToken, markRateLimited, removeInvalidToken, checkTokenExpiry, checkAllTokensExpiry, getSafeToken, markInvalid, hasValidTokens } from './tokenManager.js';
 import { sendTelegramNotification, formatTokenExpiryMessage, sendTelegramPhoto } from '../utils/telegramNotifier.js';
 import { getActiveModel } from '../utils/botSettings.js';
@@ -17,7 +17,7 @@ import {
     PAGE_TIMEOUT, RETRY_DELAY, PAGE_POOL_SIZE,
     DEFAULT_MODEL, MAX_RETRY_COUNT,
     TASK_POLL_MAX_ATTEMPTS, TASK_POLL_INTERVAL, TOKEN_EXPIRY_WARNING_MS,
-    MODELS_API_URL
+    MODELS_API_URL, ENABLE_ANTICAPTCHA
 } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -75,9 +75,10 @@ async function getPage(context) {
 
 export const pagePool = {
     pages: [],
+    pageAccounts: new Map(), // Map<page, accountId>
     maxSize: PAGE_POOL_SIZE,
 
-    async getPage(context) {
+    async getPage(context, accountId = null) {
         logDebug('📄 [pagePool.getPage] Запрос страницы...');
         const baseContext = getBrowserContext();
         while (this.pages.length > 0) {
@@ -101,6 +102,7 @@ export const pagePool = {
                     logWarn('⚠️ [pagePool.getPage] Страница содержит CAPTCHA, закрываем');
                     if (page !== baseContext) {
                         try { await page.close(); } catch { /* already dead */ }
+                        this.pageAccounts.delete(page);
                     }
                     continue;
                 }
@@ -111,15 +113,44 @@ export const pagePool = {
                 logWarn(`Страница из пула протухла (${e.message?.substring(0, 60)}), создаём новую`);
                 if (page !== baseContext) {
                     try { await page.close(); } catch { /* already dead */ }
+                    this.pageAccounts.delete(page);
                 }
             }
         }
 
         logDebug('🆕 [pagePool.getPage] Создание новой страницы...');
         const newPage = await getPage(context);
+
+        // Сохраняем маппинг страницы к аккаунту
+        if (accountId) {
+            this.pageAccounts.set(newPage, accountId);
+        }
+
+        // Загружаем cookies перед навигацией если указан accountId
+        if (accountId) {
+            logDebug(`🍪 [pagePool.getPage] Загрузка cookies для аккаунта ${accountId}...`);
+            const cookiesLoaded = await loadSession(newPage, accountId);
+            if (cookiesLoaded) {
+                logDebug('✅ [pagePool.getPage] Cookies загружены');
+            } else {
+                logWarn(`⚠️ [pagePool.getPage] Cookies для ${accountId} не найдены`);
+            }
+        }
+
         logDebug(`🌐 [pagePool.getPage] Навигация к ${CHAT_PAGE_URL}...`);
         await newPage.goto(CHAT_PAGE_URL, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
         logDebug('✅ [pagePool.getPage] Навигация завершена');
+
+        // Ждем 5 секунд чтобы JavaScript сгенерировал security cookies (bx-ua, bx-umidtoken)
+        // Эти cookies не сохраняются в cookies.json, они генерируются каждый раз заново
+        logDebug('⏳ [pagePool.getPage] Ожидание генерации security cookies (5с)...');
+        await delay(5000);
+
+        // Проверяем что security cookies сгенерировались
+        const currentCookies = await newPage.cookies();
+        const hasBxUa = currentCookies.some((c) => c.name === 'ssxmod_itna');
+        logDebug(`🔍 [pagePool.getPage] Security cookies: ${hasBxUa ? '✅ ssxmod_itna найден' : '⚠️ ssxmod_itna отсутствует'}`);
+        logDebug(`📊 [pagePool.getPage] Всего cookies: ${currentCookies.length}`);
 
         // Проверяем новую страницу на CAPTCHA
         logDebug('🔍 [pagePool.getPage] Проверка новой страницы на CAPTCHA...');
@@ -127,6 +158,7 @@ export const pagePool = {
         if (!newPageValid) {
             logWarn('⚠️ [pagePool.getPage] Новая страница содержит CAPTCHA, закрываем и пробуем перезапуск браузера');
             try { await newPage.close(); } catch { /* ignore */ }
+            this.pageAccounts.delete(newPage);
 
             // Перезапускаем браузер для сброса CAPTCHA
             logInfo('🔄 [pagePool.getPage] Перезапуск браузера для сброса CAPTCHA...');
@@ -170,13 +202,23 @@ export const pagePool = {
         if (forceClose) {
             logDebug('🗑️ [releasePage] Принудительное закрытие страницы (forceClose=true)');
             page.close().catch((e) => logError('Ошибка при принудительном закрытии страницы', e));
+            this.pageAccounts.delete(page);
             return;
+        }
+
+        // Сохраняем обновленные security cookies перед возвратом в пул
+        const accountId = this.pageAccounts.get(page);
+        if (accountId) {
+            saveSession(page, accountId).catch((e) => {
+                logWarn(`⚠️ [releasePage] Не удалось сохранить cookies для ${accountId}`, e);
+            });
         }
 
         if (this.pages.length < this.maxSize) {
             this.pages.push(page);
         } else {
             page.close().catch((e) => logError('Ошибка при закрытии страницы', e));
+            this.pageAccounts.delete(page);
         }
     },
 
@@ -189,6 +231,7 @@ export const pagePool = {
             }
         }
         this.pages = [];
+        this.pageAccounts.clear();
     }
 };
 
@@ -1190,7 +1233,7 @@ export async function sendMessage(message, model = null, chatId = null, parentId
     let page = null;
     try {
         logDebug('📄 [sendMessage] Запрос страницы из пула...');
-        page = await pagePool.getPage(browserContext);
+        page = await pagePool.getPage(browserContext, tokenObj?.id);
         logDebug('✅ [sendMessage] Страница получена');
 
         // Проверяем страницу на CAPTCHA
@@ -1372,6 +1415,12 @@ export function getAuthToken() {
  * @returns {Promise<{hasCaptcha: boolean, reason: string|null, screenshot: string|null}>}
  */
 async function detectCaptcha(page) {
+    // Проверяем, включена ли антикапча
+    if (!ENABLE_ANTICAPTCHA) {
+        logDebug('🔍 [detectCaptcha] Антикапча отключена (ENABLE_ANTICAPTCHA=false), пропускаю проверку');
+        return { hasCaptcha: false, reason: null, screenshot: null };
+    }
+
     try {
         const url = page.url();
         logDebug(`🔍 [detectCaptcha] Проверка URL: ${url}`);
@@ -1570,7 +1619,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
     let page = null;
     try {
         logDebug('📄 [createChatV2] Запрос страницы из пула...');
-        page = await pagePool.getPage(browserContext);
+        page = await pagePool.getPage(browserContext, tokenObj?.id);
         logDebug('✅ [createChatV2] Страница получена');
 
         // Проверяем страницу на CAPTCHA перед использованием
@@ -1604,7 +1653,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
             try {
                 const response = await fetch(data.apiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.token}` },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data.payload)
                 });
                 if (response.ok) { return { success: true, data: await response.json() }; }

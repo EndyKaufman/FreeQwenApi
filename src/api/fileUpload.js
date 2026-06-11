@@ -3,6 +3,7 @@ import { logInfo, logError } from '../logger/index.js';
 import { getAuthToken, extractAuthToken, pagePool } from './chat.js';
 import { getAvailableToken } from './tokenManager.js';
 import { pageEvaluateWithScreencast } from '../utils/pageEvaluateWrapper.js';
+import { loadSession } from '../browser/session.js';
 import fs from 'fs';
 import path from 'path';
 import { STS_TOKEN_API_URL, OSS_SDK_URL, UPLOADS_DIR } from '../config.js';
@@ -23,7 +24,7 @@ async function validateAuthToken(browserContext) {
     const tokenObj = await getAvailableToken();
     if (tokenObj?.token) {
         logInfo(`Используется токен из tokenManager: ${tokenObj.id}`);
-        return tokenObj.token;
+        return tokenObj;
     }
 
     let token = getAuthToken();
@@ -32,17 +33,17 @@ async function validateAuthToken(browserContext) {
         token = await extractAuthToken(browserContext);
         if (!token) {throw new Error('Не удалось получить токен авторизации');}
     }
-    return token;
+    return { token, id: null };
 }
 
 export async function getStsToken(fileInfo) {
     const browserContext = validateBrowserContext();
-    const token = await validateAuthToken(browserContext);
+    const tokenObj = await validateAuthToken(browserContext);
     logInfo(`Запрос STS токена для файла: ${fileInfo.filename}`);
 
     let page = null;
     try {
-        page = await pagePool.getPage(browserContext);
+        page = await pagePool.getPage(browserContext, tokenObj.id);
         const result = await pageEvaluateWithScreencast(page, async (data) => {
             try {
                 const response = await fetch(data.apiUrl, {
@@ -53,7 +54,7 @@ export async function getStsToken(fileInfo) {
                 if (response.ok) {return { success: true, data: await response.json() };}
                 return { success: false, status: response.status, statusText: response.statusText, errorBody: await response.text() };
             } catch (error) { return { success: false, error: error.toString() }; }
-        }, { apiUrl: STS_TOKEN_API_URL, token, fileInfo });
+        }, { apiUrl: STS_TOKEN_API_URL, token: tokenObj.token, fileInfo });
 
         if (result.success) {
             logInfo(`STS токен успешно получен для файла: ${fileInfo.filename}`);
@@ -80,6 +81,7 @@ export async function getStsToken(fileInfo) {
 
 export async function uploadFile(filePath, stsData) {
     const browserContext = validateBrowserContext();
+    const tokenObj = await validateAuthToken(browserContext);
     logInfo(`Начало загрузки файла: ${filePath}`);
 
     if (!stsData?.file_path || !stsData?.access_key_id || !stsData?.access_key_secret ||
@@ -99,7 +101,7 @@ export async function uploadFile(filePath, stsData) {
 
     let page = null;
     try {
-        page = await pagePool.getPage(browserContext);
+        page = await pagePool.getPage(browserContext, tokenObj.id);
         const result = await pageEvaluateWithScreencast(page, async (data) => {
             try {
                 if (typeof window.OSS === 'undefined') {

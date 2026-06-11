@@ -7,7 +7,7 @@ import { generateImage } from '../api/imageGeneration.js';
 import { getVersionInfo } from './versionChecker.js';
 import { initBrowser, shutdownBrowser, getBrowserContext } from '../browser/browser.js';
 import { extractAuthToken, sendMessage as sendQwenMessage } from '../api/chat.js';
-import { loadSession, saveAuthToken } from '../browser/session.js';
+import { loadSession, saveSession, saveAuthToken } from '../browser/session.js';
 import { loadTokens, saveTokens } from '../api/tokenManager.js';
 import { CHAT_PAGE_URL } from '../config.js';
 import { getAvailableModelsFromFile } from '../api/chat.js';
@@ -2587,19 +2587,6 @@ async function handleExtendSession(chatId) {
                     continue;
                 }
 
-                // Загружаем cookies для аккаунта
-                const cookiesPath = path.join(process.cwd(), SESSION_DIR, 'accounts', token.id, 'cookies.json');
-
-                if (!fs.existsSync(cookiesPath)) {
-                    results.push(`❌ ${token.id} - нет cookies`);
-                    failCount++;
-                    logWarn(`Session extension failed for ${token.id}: cookies.json not found`);
-                    continue;
-                }
-
-                const cookiesData = fs.readFileSync(cookiesPath, 'utf8');
-                const cookies = JSON.parse(cookiesData);
-
                 // Открываем браузер в headless режиме
                 const browserOk = await initBrowser(false, true);
 
@@ -2609,9 +2596,15 @@ async function handleExtendSession(chatId) {
 
                 const ctx = getBrowserContext();
 
-                // Загружаем cookies
-                if (ctx && typeof ctx.setCookie === 'function') {
-                    await ctx.setCookie(...cookies);
+                // Загружаем cookies с помощью loadSession
+                const cookiesLoaded = await loadSession(ctx, token.id);
+
+                if (!cookiesLoaded) {
+                    results.push(`❌ ${token.id} - нет cookies`);
+                    failCount++;
+                    logWarn(`Session extension failed for ${token.id}: cookies.json not found`);
+                    await shutdownBrowser();
+                    continue;
                 }
 
                 // Переходим на Qwen для обновления сессии (3 минуты таймаут)
@@ -2649,25 +2642,7 @@ async function handleExtendSession(chatId) {
                 }
 
                 // Сохраняем обновленные cookies и автоматически извлекаем токен
-                const newCookies = await ctx.cookies();
-                logInfo(`📝 ${token.id}: Получено ${newCookies.length} cookies`);
-                
-                try {
-                    fs.writeFileSync(cookiesPath, JSON.stringify(newCookies, null, 2));
-                    logInfo(`✅ ${token.id}: Cookies.json сохранён (${newCookies.length} cookies)`);
-                } catch (error) {
-                    logError(`❌ ${token.id}: Ошибка сохранения cookies.json: ${error.message}`);
-                }
-                
-                // Извлекаем токен из cookies
-                const tokenCookie = newCookies.find((cookie) => cookie.name === 'token');
-                if (tokenCookie && tokenCookie.value) {
-                    const tokenFile = path.join(process.cwd(), SESSION_DIR, 'accounts', token.id, 'token.txt');
-                    fs.writeFileSync(tokenFile, tokenCookie.value, 'utf8');
-                    logInfo(`✅ ${token.id}: Токен автоматически извлечён из cookies`);
-                } else {
-                    logWarn(`⚠️ ${token.id}: Токен не найден в cookies (${newCookies.length} cookies получено)`);
-                }
+                await saveSession(ctx, token.id);
 
                 // Закрываем браузер
                 await shutdownBrowser();

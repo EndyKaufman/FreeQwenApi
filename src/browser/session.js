@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { logInfo, logError, logWarn } from '../logger/index.js';
+import { logInfo, logError, logWarn, logDebug } from '../logger/index.js';
 import { SESSION_DIR } from '../config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,12 +47,26 @@ export async function saveSession(context, accountId = null) {
         const isPlaywright = context && typeof context.storageState === 'function';
 
         if (isPuppeteer) {
+            // Ждем 3 секунды чтобы JavaScript сгенерировал security cookies (ssxmod_itna, bx-ua и т.д.)
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+
             const cookies = await context.cookies();
             const sessionPath = getSessionFilePath(accountId, 'cookies.json');
             ensureDir(path.dirname(sessionPath));
             fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
             logInfo(`📝 Получено ${cookies.length} cookies`);
-            
+
+            // Логируем важные cookies для отладки
+            const importantCookies = ['token', 'ssxmod_itna', 'ssxmod_itna2', 'bx-ua', 'bx-umidtoken', 'cna', 'aui'];
+            importantCookies.forEach((name) => {
+                const cookie = cookies.find((c) => c.name === name);
+                if (cookie) {
+                    logDebug(`  🍪 ${name}: ${cookie.value.substring(0, 50)}...`);
+                } else {
+                    logDebug(`  ⚠️ ${name}: отсутствует`);
+                }
+            });
+
             // Автоматически извлекаем и сохраняем токен из cookies
             const token = extractTokenFromCookiesData(cookies);
             if (token) {
@@ -90,8 +104,24 @@ export async function loadSession(context, accountId = null) {
             const sessionPath = getSessionFilePath(accountId, 'cookies.json');
             if (fs.existsSync(sessionPath)) {
                 const cookies = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+
+                // Логируем важные cookies перед загрузкой
+                const importantCookies = ['token', 'ssxmod_itna', 'ssxmod_itna2', 'bx-ua', 'bx-umidtoken', 'cna', 'aui'];
+                importantCookies.forEach((name) => {
+                    const cookie = cookies.find((c) => c.name === name);
+                    if (cookie) {
+                        logDebug(`  🍪 Загружаем ${name}: ${cookie.value.substring(0, 50)}...`);
+                    } else {
+                        logDebug(`  ⚠️ ${name}: отсутствует в cookies.json`);
+                    }
+                });
+
                 await context.setCookie(...cookies);
-                logInfo('Сессия Puppeteer загружена');
+
+                // Ждем чтобы cookies применились
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+
+                logInfo(`Сессия Puppeteer загружена (${cookies.length} cookies)`);
                 return true;
             }
         } else if (isPlaywright) {

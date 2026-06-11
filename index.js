@@ -1,5 +1,6 @@
 import express from 'express';
 import bodyParser from 'body-parser';
+import os from 'os';
 
 import { initBrowser, shutdownBrowser } from './src/browser/browser.js';
 import apiRoutes from './src/api/routes.js';
@@ -34,6 +35,50 @@ function toBoolean(value) {
 }
 
 const skipAccountMenu = toBoolean(process.env.SKIP_ACCOUNT_MENU) || toBoolean(process.env.NON_INTERACTIVE);
+
+// Check system memory requirements for Puppeteer/Chrome
+function checkMemoryRequirements() {
+    const totalMemMB = Math.round(os.totalmem() / (1024 * 1024));
+    const freeMemMB = Math.round(os.freemem() / (1024 * 1024));
+
+    // Chrome/Puppeteer minimum requirements
+    const MINIMUM_RAM_MB = 512; // Absolute minimum for Chrome headless
+    const RECOMMENDED_RAM_MB = 1024; // Recommended for stable operation
+    const MINIMUM_FREE_MB = 256; // Minimum free RAM needed
+    const RECOMMENDED_FREE_MB = 512; // Recommended free RAM
+
+    logInfo(`📊 Системная память: ${totalMemMB}MB всего, ${freeMemMB}MB свободно`);
+
+    if (totalMemMB < MINIMUM_RAM_MB) {
+        logError('⛔ КРИТИЧЕСКИ МАЛО ПАМЯТИ!');
+        logError(`   Всего RAM: ${totalMemMB}MB (минимум: ${MINIMUM_RAM_MB}MB)`);
+        logError('   Puppeteer/Chrome не сможет стабильно работать');
+        logError(`   Рекомендуется увеличить RAM до ${RECOMMENDED_RAM_MB}MB+`);
+        return false;
+    }
+
+    if (totalMemMB < RECOMMENDED_RAM_MB) {
+        logWarn('⚠️ МАЛО ПАМЯТИ');
+        logWarn(`   Всего RAM: ${totalMemMB}MB (рекомендуется: ${RECOMMENDED_RAM_MB}MB+)`);
+        logWarn('   Chrome может работать нестабильно');
+    }
+
+    if (freeMemMB < MINIMUM_FREE_MB) {
+        logError('⛔ КРИТИЧЕСКИ МАЛО СВОБОДНОЙ ПАМЯТИ!');
+        logError(`   Свободно RAM: ${freeMemMB}MB (минимум: ${MINIMUM_FREE_MB}MB)`);
+        logError('   Недостаточно памяти для запуска Chrome');
+        logError('   Закройте другие приложения или добавьте RAM');
+        return false;
+    }
+
+    if (freeMemMB < RECOMMENDED_FREE_MB) {
+        logWarn('⚠️ МАЛО СВОБОДНОЙ ПАМЯТИ');
+        logWarn(`   Свободно RAM: ${freeMemMB}MB (рекомендуется: ${RECOMMENDED_FREE_MB}MB+)`);
+        logWarn('   Возможны проблемы со стабильностью');
+    }
+
+    return true;
+}
 
 function ensureNonInteractiveTokens() {
     const tokens = loadTokens();
@@ -351,6 +396,13 @@ async function startServer() {
 `);
 
     logInfo('Запуск сервера...');
+
+    // Проверяем системную память для Puppeteer/Chrome
+    const memoryOk = checkMemoryRequirements();
+    if (!memoryOk) {
+        logError('⛔ НЕВОЗМОЖНО ЗАПУСТИТЬСЯ: Недостаточно оперативной памяти для Chrome');
+        process.exit(1);
+    }
 
     // ПЕРВЫМ ДЕЛОМ: Проверяем права доступа ко всем директориям и файлам
     const permissionsOk = await checkPermissions();

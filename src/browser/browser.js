@@ -3,13 +3,14 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { saveSession, saveAuthToken } from './session.js';
 import { startManualAuthentication } from './auth.js';
 import { clearPagePool, getAuthToken } from '../api/chat.js';
+import { pageEvaluateWithScreencast } from '../utils/pageEvaluateWrapper.js';
 import fs from 'fs';
 import path from 'path';
 import { logInfo, logError, logWarn, logDebug } from '../logger/index.js';
 import {
     CHAT_PAGE_URL, NAVIGATION_TIMEOUT, RETRY_DELAY,
     VIEWPORT_WIDTH, VIEWPORT_HEIGHT, USER_AGENT,
-    SESSION_DIR, ACCOUNTS_DIR
+    SESSION_DIR, ACCOUNTS_DIR, PUPPETEER_CONSOLE_LOGS
 } from '../config.js';
 
 puppeteer.use(StealthPlugin());
@@ -19,6 +20,31 @@ let browserContext = null;
 export let isAuthenticated = false;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Setup console event listeners to capture errors and warnings from browser tabs
+ * @param {import('puppeteer').Page} page - Puppeteer page instance
+ */
+function setupBrowserConsoleLogging(page) {
+    page.on('console', (msg) => {
+        const type = msg.type();
+        const text = msg.text();
+
+        // Only log errors and warnings to avoid noise
+        if (type === 'error') {
+            console.error(`🌐 [BROWSER ERROR] ${text}`);
+        } else if (type === 'warning') {
+            console.warn(`🌐 [BROWSER WARNING] ${text}`);
+        }
+    });
+
+    page.on('pageerror', (error) => {
+        console.error(`🌐 [BROWSER PAGE ERROR] ${error.message}`);
+        if (error.stack) {
+            console.error(`📍 Stack: ${error.stack.split('\n').slice(0, 3).join('\n')}`);
+        }
+    });
+}
 
 export async function initBrowser(visibleMode = true, skipManualRestart = false) {
     if (browserInstance) {return true;}
@@ -41,7 +67,8 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false)
                 '--ignore-certificate-errors', '--ignore-certificate-errors-spki-list'
             ],
             defaultViewport: { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT },
-            ignoreHTTPSErrors: true
+            ignoreHTTPSErrors: true,
+            protocolTimeout: 120000 // 2 minutes (default is 30s)
         });
 
         const pages = await browserInstance.pages();
@@ -100,6 +127,25 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false)
 
         browserContext = page;
         logInfo('Браузер инициализирован с максимальной защитой от обнаружения');
+
+        // Setup console logging for browser tabs if enabled
+        if (PUPPETEER_CONSOLE_LOGS) {
+            setupBrowserConsoleLogging(page);
+
+            // Also listen for new pages/tabs
+            browserInstance.on('targetcreated', async (target) => {
+                if (target.type() === 'page') {
+                    try {
+                        const newPage = await target.page();
+                        if (newPage) {
+                            setupBrowserConsoleLogging(newPage);
+                        }
+                    } catch (error) {
+                        // Ignore errors for pages that can't be accessed
+                    }
+                }
+            });
+        }
 
         if (visibleMode) {
             await startManualAuthenticationPuppeteer(page, skipManualRestart);
@@ -168,7 +214,7 @@ async function startManualAuthenticationPuppeteer(page, skipManualRestart) {
         const cookies = await page.cookies();
         logInfo(`Сохранено ${cookies.length} cookies`);
 
-        const token = await page.evaluate(() =>
+        const token = await pageEvaluateWithScreencast(page, () =>
             localStorage.getItem('token') || localStorage.getItem('auth_token') ||
             localStorage.getItem('access_token') || sessionStorage.getItem('token') ||
             sessionStorage.getItem('auth_token') || null

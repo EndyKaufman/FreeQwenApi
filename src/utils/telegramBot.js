@@ -154,7 +154,9 @@ async function checkAIHealth(tokens) {
 
         // Делаем запрос напрямую к Qwen API через наш модуль
         const startTime = Date.now();
-        const result = await sendQwenMessage('ping', testModel, null, null, null, null, null, null, 't2t', null, true, 0);
+        const result = await sendQwenMessage(`Output must be exactly:
+
+pong`, testModel, null, null, null, null, null, null, 't2t', null, true, 0);
         const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
         if (result && !result.error) {
@@ -2923,6 +2925,14 @@ async function handleLLMChat(chatId, userMessage) {
 
     } catch (error) {
         logError('❌ LLM Chat: Ошибка', error);
+
+        // Проверяем на Puppeteer protocol timeout - нужен перезапуск сервиса
+        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
+            logError('⚠️ Puppeteer protocol timeout в Telegram боте - требуется перезапуск сервиса');
+            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
+            // Не пытаемся отправить сообщение - просто выходим
+            process.exit(42);
+        }
 
         // Формируем сообщение об ошибке с деталями
         const escapedStack = escapeHtmlForCode(error.stack || 'Stack trace unavailable');

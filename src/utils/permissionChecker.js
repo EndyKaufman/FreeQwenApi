@@ -33,7 +33,13 @@ const PATHS_TO_CHECK = [
     { path: path.join(SESSION_DIR, 'tokens.json'), type: 'file', optional: true },
     { path: path.join(SESSION_DIR, 'auth_token.txt'), type: 'file', optional: true },
     { path: path.join(SESSION_DIR, 'bot_settings.json'), type: 'file', optional: true },
-    { path: '.env', type: 'file', optional: true }
+    { path: '.env', type: 'file', optional: true },
+
+    // Log files (created by winston)
+    { path: path.join(LOGS_DIR, 'combined.log'), type: 'file', optional: true },
+    { path: path.join(LOGS_DIR, 'http.log'), type: 'file', optional: true },
+    { path: path.join(LOGS_DIR, 'error.log'), type: 'file', optional: true },
+    { path: path.join(LOGS_DIR, 'raw-responses.log'), type: 'file', optional: true }
 ];
 
 /**

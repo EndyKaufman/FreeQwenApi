@@ -64,7 +64,8 @@
         "auth": "node scripts/auth.js",
         "create-session-archive": "node scripts/createSessionArchive.js",
         "extend-session": "node scripts/extendSession.js",
-        "check-sessions": "node scripts/checkSessions.js"
+        "check-sessions": "node scripts/checkSessions.js",
+        "sync-models": "node scripts/syncModels.js"
     },
     "dependencies": {
         "adm-zip": "^0.5.10",

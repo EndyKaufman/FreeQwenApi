@@ -22,7 +22,8 @@ RUN apk add --no-cache \
     dumb-init \
     p7zip \
     dos2unix \
-    su-exec
+    su-exec \
+    ffmpeg
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     CHROME_PATH=/usr/bin/chromium \

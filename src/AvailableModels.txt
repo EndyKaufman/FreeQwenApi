@@ -1,9 +1,9 @@
-# Qwen Models - Updated from API
-# Last updated: 2026-05-31
-# Total: 22 models from Qwen API v2
-
-qwen3.6-plus
+# Qwen Models - Updated from Qwen Chat
+# Last updated: 2026-06-11
+# Total: 23 models from Qwen Chat prerendered data
+qwen3.7-plus
 qwen3.7-max
+qwen3.6-plus
 qwen3.6-max-preview
 qwen3.6-27b
 qwen-latest-series-invite-beta-v24

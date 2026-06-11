@@ -2,6 +2,7 @@ import { getBrowserContext } from '../browser/browser.js';
 import { logInfo, logError } from '../logger/index.js';
 import { getAuthToken, extractAuthToken, pagePool } from './chat.js';
 import { getAvailableToken } from './tokenManager.js';
+import { pageEvaluateWithScreencast } from '../utils/pageEvaluateWrapper.js';
 import fs from 'fs';
 import path from 'path';
 import { STS_TOKEN_API_URL, OSS_SDK_URL, UPLOADS_DIR } from '../config.js';
@@ -42,7 +43,7 @@ export async function getStsToken(fileInfo) {
     let page = null;
     try {
         page = await pagePool.getPage(browserContext);
-        const result = await page.evaluate(async (data) => {
+        const result = await pageEvaluateWithScreencast(page, async (data) => {
             try {
                 const response = await fetch(data.apiUrl, {
                     method: 'POST',
@@ -63,6 +64,14 @@ export async function getStsToken(fileInfo) {
         throw new Error(`Ошибка получения STS токена: ${result.statusText || ''} ${errorMsg}`);
     } catch (error) {
         logError(`Ошибка при получении STS токена: ${error.message}`, error);
+
+        // Проверяем на Puppeteer protocol timeout - нужен перезапуск сервиса
+        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
+            logError('⚠️ Puppeteer protocol timeout - требуется перезапуск сервиса');
+            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
+            process.exit(42);
+        }
+
         throw error;
     } finally {
         if (page) { try { pagePool.releasePage(page); } catch (e) { logError('Ошибка при возврате страницы в пул', e); } }
@@ -91,7 +100,7 @@ export async function uploadFile(filePath, stsData) {
     let page = null;
     try {
         page = await pagePool.getPage(browserContext);
-        const result = await page.evaluate(async (data) => {
+        const result = await pageEvaluateWithScreencast(page, async (data) => {
             try {
                 if (typeof window.OSS === 'undefined') {
                     console.log('[OSS] Загрузка OSS SDK...');
@@ -143,6 +152,14 @@ export async function uploadFile(filePath, stsData) {
         throw new Error(`Ошибка загрузки в OSS: ${result.error}`);
     } catch (error) {
         logError(`Ошибка при загрузке файла в OSS: ${error.message}`, error);
+
+        // Проверяем на Puppeteer protocol timeout - нужен перезапуск сервиса
+        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
+            logError('⚠️ Puppeteer protocol timeout - требуется перезапуск сервиса');
+            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
+            process.exit(42);
+        }
+
         throw error;
     } finally {
         if (page) { try { pagePool.releasePage(page); } catch (e) { logError('Ошибка при возврате страницы в пул', e); } }

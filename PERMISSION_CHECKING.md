@@ -35,6 +35,12 @@ The system checks the following paths:
 - `session/bot_settings.json` - Telegram bot settings
 - `.env` - Environment configuration
 
+#### Log Files (if they exist)
+- `logs/combined.log` - Combined application logs
+- `logs/http.log` - HTTP request logs
+- `logs/error.log` - Error logs
+- `logs/raw-responses.log` - Raw API response logs
+
 ## Example Output
 
 ### When Permissions Are Correct

@@ -86,7 +86,7 @@ export const ALLOW_UNSCOPED_SESSION_CHAT_RESTORE = toBoolean(process.env.ALLOW_U
 export const FORCE_NEW_CHAT_PER_REQUEST = toBoolean(process.env.FORCE_NEW_CHAT_PER_REQUEST);
 
 // ─── Логирование ─────────────────────────────────────────────────────────────
-export const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+export const LOG_LEVEL = process.env.LOG_LEVEL || 'info'; // Default log level is info
 export const LOG_MAX_SIZE = Number(process.env.LOG_MAX_SIZE) || 5_242_880; // 5 MB
 export const LOG_MAX_FILES = Number(process.env.LOG_MAX_FILES) || 5;
 
@@ -123,3 +123,18 @@ export const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY || null;
 // ENABLE_VERSION_CHECK=true (по умолчанию): автоматически проверять обновления (Docker Hub, npm, GitHub)
 // ENABLE_VERSION_CHECK=false: проверка отключена
 export const ENABLE_VERSION_CHECK = toBoolean(process.env.ENABLE_VERSION_CHECK) !== false;
+
+// ─── Puppeteer консоль ──────────────────────────────────────────────────────
+// PUPPETEER_CONSOLE_LOGS=true (по умолчанию): показывать ошибки и варнинги из вкладок браузера в консоли
+// PUPPETEER_CONSOLE_LOGS=false: отключить вывод консоли браузера
+export const PUPPETEER_CONSOLE_LOGS = toBoolean(process.env.PUPPETEER_CONSOLE_LOGS) !== false;
+
+// ─── Puppeteer Screencast ───────────────────────────────────────────────────
+// PAGE_EVALUATE_SCREENCAST_TIMEOUT=40000: начать запись экрана через 40 секунд если page.evaluate() не завершился
+// PAGE_EVALUATE_SCREENCAST_TIMEOUT=0 (по умолчанию): запись экрана отключена
+// Записи сохраняются в logs/screencasts/
+export const PAGE_EVALUATE_SCREENCAST_TIMEOUT = Number(process.env.PAGE_EVALUATE_SCREENCAST_TIMEOUT) || 0;
+
+// PAGE_EVALUATE_SCREENCAST_MAX_DURATION=60000: максимальная длительность записи в мс (60 секунд)
+// PAGE_EVALUATE_SCREENCAST_MAX_DURATION=0 (по умолчанию): без ограничений (запись остановится когда завершится page.evaluate())
+export const PAGE_EVALUATE_SCREENCAST_MAX_DURATION = Number(process.env.PAGE_EVALUATE_SCREENCAST_MAX_DURATION) || 0;

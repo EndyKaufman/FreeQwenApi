@@ -55,7 +55,7 @@ for dir in "${DIRS[@]}"; do
 done
 
 # Fix specific files if they exist
-FILES=("session/tokens.json" "session/auth_token.txt" "session/bot_settings.json")
+FILES=("session/tokens.json" "session/auth_token.txt" "session/bot_settings.json" "logs/combined.log" "logs/http.log" "logs/error.log" "logs/raw-responses.log")
 
 echo "📄 Fixing file permissions..."
 echo ""

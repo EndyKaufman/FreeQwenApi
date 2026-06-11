@@ -72,6 +72,56 @@ async function safeFetch(url, options = {}) {
 }
 
 /**
+ * Парсит семантическую версию в массив чисел [major, minor, patch]
+ * Поддерживает форматы x.y и x.y.z (patch по умолчанию = 0)
+ */
+function parseSemver(versionString) {
+    // Сначала пробуем формат x.y.z
+    let match = versionString.match(/^(\d+)\.(\d+)\.(\d+)$/);
+    if (match) {
+        return {
+            major: parseInt(match[1], 10),
+            minor: parseInt(match[2], 10),
+            patch: parseInt(match[3], 10)
+        };
+    }
+    // Затем пробуем формат x.y
+    match = versionString.match(/^(\d+)\.(\d+)$/);
+    if (match) {
+        return {
+            major: parseInt(match[1], 10),
+            minor: parseInt(match[2], 10),
+            patch: 0
+        };
+    }
+    return null;
+}
+
+/**
+ * Сравнивает две семантические версии
+ * Возвращает: -1 если a < b, 0 если a === b, 1 если a > b
+ */
+function compareSemver(a, b) {
+    const verA = parseSemver(a);
+    const verB = parseSemver(b);
+
+    if (!verA || !verB) {
+        return 0; // Не можем сравнить, считаем равными
+    }
+
+    if (verA.major !== verB.major) {
+        return verA.major > verB.major ? 1 : -1;
+    }
+    if (verA.minor !== verB.minor) {
+        return verA.minor > verB.minor ? 1 : -1;
+    }
+    if (verA.patch !== verB.patch) {
+        return verA.patch > verB.patch ? 1 : -1;
+    }
+    return 0;
+}
+
+/**
  * Проверяет последнюю версию Docker Hub
  */
 export async function checkDockerVersion() {
@@ -80,7 +130,7 @@ export async function checkDockerVersion() {
 
         // Получаем теги с Docker Hub
         const response = await safeFetch(
-            'https://hub.docker.com/v2/repositories/endykaufman/qwen-api-proxy/tags/?page_size=10&ordering=last_updated'
+            'https://hub.docker.com/v2/repositories/endykaufman/qwen-api-proxy/tags/?page_size=20&ordering=last_updated'
         );
 
         const data = await response.json();
@@ -109,6 +159,10 @@ export async function checkDockerVersion() {
             return null;
         }
 
+        // Сортируем теги по семантической версии (по убыванию)
+        stableTags.sort((a, b) => compareSemver(b.name, a.name));
+
+        // Берём первый тег после сортировки (наивысшая версия)
         const latestTag = stableTags[0];
 
         return {

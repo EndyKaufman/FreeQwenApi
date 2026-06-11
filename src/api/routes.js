@@ -937,6 +937,14 @@ router.post('/chats', async (req, res) => {
         res.json({ chatId: result.chatId, success: true });
     } catch (error) {
         logError('Ошибка при создании чата', error);
+
+        // Проверяем на Puppeteer protocol timeout - нужен перезапуск сервиса
+        if (error.message && error.message.includes('Runtime.callFunctionOn timed out')) {
+            logError('⚠️ Puppeteer protocol timeout - требуется перезапуск сервиса');
+            logError('Завершение работы с кодом 42 для автоматического перезапуска...');
+            process.exit(42);
+        }
+
         res.status(500).json({ error: 'Внутренняя ошибка сервера' });
     }
 });

@@ -435,6 +435,7 @@ async function startServer() {
         }
     }
 
+    let skipManualAuth = false;
     if (!skipAccountMenu) {
         while (true) {
             const tokens = loadTokens();
@@ -456,6 +457,7 @@ async function startServer() {
             console.log('2 - Перелогинить аккаунт с истекшим токеном');
             console.log('3 - Запустить прокси (по умолчанию)');
             console.log('4 - Удалить аккаунт');
+            console.log('5 - Запустить прокси с видимым браузером');
 
             let choice = await prompt('Ваш выбор (Enter = 3): ');
             if (!choice) {choice = '3';}
@@ -464,7 +466,8 @@ async function startServer() {
                 await addAccountInteractive();
             } else if (choice === '2') {
                 await reloginAccountInteractive();
-            } else if (choice === '3') {
+            } else if (choice === '3' || choice === '5') {
+                skipManualAuth = choice === '5';
                 const hasValidToken = tokens.some((t) => {
                     if (t.invalid) {return false;}
                     if (!t.resetAt) {return true;}
@@ -487,7 +490,7 @@ async function startServer() {
         }
     }
 
-    const browserInitialized = await initBrowser(false);
+    const browserInitialized = await initBrowser(skipManualAuth, false, skipManualAuth);
     if (!browserInitialized) {
         const tokens = loadTokens();
         if (tokens.length > 0) {

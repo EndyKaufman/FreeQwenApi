@@ -1,4 +1,4 @@
-import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus } from '../browser/browser.js';
+import { getBrowserContext, getAuthenticationStatus, setAuthenticationStatus, simulateHumanMouseMovement } from '../browser/browser.js';
 import { checkAuthentication, checkVerification } from '../browser/auth.js';
 import { shutdownBrowser, initBrowser } from '../browser/browser.js';
 import { saveAuthToken } from '../browser/session.js';
@@ -39,7 +39,10 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function getPage(context) {
     if (context && typeof context.newPage === 'function') {
-        return await context.newPage();
+        const page = await context.newPage();
+        // Simulate human-like mouse movement after tab creation
+        await simulateHumanMouseMovement(page);
+        return page;
     }
 
     if (context && typeof context.goto === 'function') {
@@ -50,7 +53,10 @@ async function getPage(context) {
             try {
                 const browser = context.browser();
                 if (browser && typeof browser.newPage === 'function') {
-                    return await browser.newPage();
+                    const page = await browser.newPage();
+                    // Simulate human-like mouse movement after tab creation
+                    await simulateHumanMouseMovement(page);
+                    return page;
                 }
             } catch (error) {
                 logWarn(`Не удалось создать новую страницу из текущего контекста: ${error.message}`);

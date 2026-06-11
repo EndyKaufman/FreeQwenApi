@@ -1,5 +1,5 @@
 import { saveSession } from './session.js';
-import { setAuthenticationStatus, getAuthenticationStatus, restartBrowserInHeadlessMode } from './browser.js';
+import { setAuthenticationStatus, getAuthenticationStatus, restartBrowserInHeadlessMode, simulateHumanMouseMovement } from './browser.js';
 import { extractAuthToken } from '../api/chat.js';
 import { logInfo, logError, logWarn } from '../logger/index.js';
 import { CHAT_PAGE_URL, AUTH_SIGNIN_URL, PAGE_TIMEOUT, RETRY_DELAY } from '../config.js';
@@ -12,7 +12,12 @@ function isPlaywright(context) {
 
 async function getPage(context) {
     if (context && typeof context.goto === 'function') {return context;}
-    if (context && typeof context.newPage === 'function') {return await context.newPage();}
+    if (context && typeof context.newPage === 'function') {
+        const page = await context.newPage();
+        // Simulate human-like mouse movement after tab creation
+        await simulateHumanMouseMovement(page);
+        return page;
+    }
     throw new Error('Неверный контекст: не страница Puppeteer, не контекст Playwright');
 }
 

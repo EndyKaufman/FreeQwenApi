@@ -23,6 +23,33 @@ export let isAuthenticated = false;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Simulate random mouse movement for 2 seconds to make the tab appear more human-like
+ * @param {import('puppeteer').Page} page - Puppeteer page instance
+ */
+export async function simulateHumanMouseMovement(page) {
+    logDebug('Симуляция движений мыши для естественного поведения...');
+
+    const viewport = { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT };
+    const duration = 3000; // 2 seconds
+    const interval = 50; // Move every 50ms
+    const steps = duration / interval;
+
+    for (let i = 0; i < steps; i++) {
+        // Generate random coordinates within the viewport
+        const x = Math.floor(Math.random() * viewport.width);
+        const y = Math.floor(Math.random() * viewport.height);
+
+        // Move mouse to random position
+        await page.mouse.move(x, y);
+
+        // Wait before next movement
+        await delay(interval);
+    }
+
+    logDebug('Симуляция движений мыши завершена');
+}
+
+/**
  * Setup console event listeners to capture errors and warnings from browser tabs
  * @param {import('puppeteer').Page} page - Puppeteer page instance
  */
@@ -47,7 +74,7 @@ function setupBrowserConsoleLogging(page) {
     });
 }
 
-export async function initBrowser(visibleMode = true, skipManualRestart = false) {
+export async function initBrowser(visibleMode = true, skipManualRestart = false, skipManualAuth = false) {
     if (browserInstance) {return true;}
 
     logInfo('Инициализация браузера с Puppeteer Stealth...');
@@ -74,6 +101,9 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false)
 
         const pages = await browserInstance.pages();
         const page = pages.length > 0 ? pages[0] : await browserInstance.newPage();
+
+        // Simulate human-like mouse movement after tab creation
+        await simulateHumanMouseMovement(page);
 
         await page.setUserAgent(USER_AGENT);
         await page.setViewport({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT, deviceScaleFactor: 1 });
@@ -148,7 +178,7 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false)
             });
         }
 
-        if (visibleMode) {
+        if (visibleMode && !skipManualAuth) {
             await startManualAuthenticationPuppeteer(page, skipManualRestart);
         }
         // loadSessionPuppeteer removed — was dead code (always returned false)

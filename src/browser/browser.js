@@ -11,7 +11,7 @@ import {
     CHAT_PAGE_URL, NAVIGATION_TIMEOUT, RETRY_DELAY,
     VIEWPORT_WIDTH, VIEWPORT_HEIGHT, USER_AGENT,
     SESSION_DIR, ACCOUNTS_DIR, PUPPETEER_CONSOLE_LOGS,
-    PUPPETEER_PROTOCOL_TIMEOUT
+    PUPPETEER_PROTOCOL_TIMEOUT, MOUSE_MOVEMENT_DURATION
 } from '../config.js';
 
 puppeteer.use(StealthPlugin());
@@ -23,14 +23,20 @@ export let isAuthenticated = false;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Simulate random mouse movement for 2 seconds to make the tab appear more human-like
+ * Simulate random mouse movement to make the tab appear more human-like
  * @param {import('puppeteer').Page} page - Puppeteer page instance
  */
 export async function simulateHumanMouseMovement(page) {
-    logDebug('Симуляция движений мыши для естественного поведения...');
-
+    // Skip if duration is 0 or not set
+    if (!MOUSE_MOVEMENT_DURATION || MOUSE_MOVEMENT_DURATION <= 0) {
+        logDebug('Симуляция движений мыши отключена (MOUSE_MOVEMENT_DURATION=0)');
+        return;
+    }
+    
+    logDebug(`Симуляция движений мыши в течение ${MOUSE_MOVEMENT_DURATION}мс...`);
+    
     const viewport = { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT };
-    const duration = 3000; // 2 seconds
+    const duration = MOUSE_MOVEMENT_DURATION;
     const interval = 50; // Move every 50ms
     const steps = duration / interval;
 

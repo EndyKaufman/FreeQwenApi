@@ -48,6 +48,11 @@ export const AUTH_TIMEOUT = Number(process.env.AUTH_TIMEOUT) || 120_000;
 export const NAVIGATION_TIMEOUT = Number(process.env.NAVIGATION_TIMEOUT) || 60_000;
 export const RETRY_DELAY = Number(process.env.RETRY_DELAY) || 2_000;
 export const STREAMING_CHUNK_DELAY = Number(process.env.STREAMING_CHUNK_DELAY) || 20;
+
+// ─── Mouse Movement Simulation ──────────────────────────────────────────────
+// MOUSE_MOVEMENT_DURATION=2000: simulate mouse movement for 2 seconds after tab creation
+// MOUSE_MOVEMENT_DURATION=0 (по умолчанию): simulation disabled
+export const MOUSE_MOVEMENT_DURATION = Number(process.env.MOUSE_MOVEMENT_DURATION) || 0;
 export const TELEGRAM_TIMEOUT = Number(process.env.TELEGRAM_TIMEOUT) || 300_000; // 5 minutes
 
 // ─── Лимиты ─────────────────────────────────────────────────────────────────

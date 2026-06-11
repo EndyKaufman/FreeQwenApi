@@ -135,7 +135,8 @@ export async function sendTelegramFile(caption, filePathOrUrl, options = {}) {
                 logDebug(`📤 Отправка файла по URL пользователю ${userId}: ${filePathOrUrl}`);
 
                 const sendOptions = {
-                    caption: caption
+                    caption: caption,
+                    parse_mode: 'HTML'
                 };
 
                 if (options.filename) {
@@ -154,7 +155,8 @@ export async function sendTelegramFile(caption, filePathOrUrl, options = {}) {
                 logDebug(`📤 Отправка локального файла пользователю ${userId}: ${filePathOrUrl}`);
 
                 await bot.sendDocument(userId, filePathOrUrl, {
-                    caption: caption
+                    caption: caption,
+                    parse_mode: 'HTML'
                 });
                 logInfo(`Telegram файл (локальный) отправлен пользователю ${userId}`);
             }

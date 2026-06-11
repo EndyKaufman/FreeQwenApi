@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { logInfo, logWarn, logError, logDebug } from '../logger/index.js';
-import { LOGS_DIR, PAGE_EVALUATE_SCREENCAST_TIMEOUT, PAGE_EVALUATE_SCREENCAST_MAX_DURATION, PUPPETEER_PROTOCOL_TIMEOUT } from '../config.js';
+import { createWorker } from 'tesseract.js';
+import { LOGS_DIR, PAGE_EVALUATE_SCREENCAST_MAX_DURATION, PAGE_EVALUATE_SCREENCAST_TIMEOUT, PUPPETEER_PROTOCOL_TIMEOUT } from '../config.js';
+import { logDebug, logError, logInfo, logWarn } from '../logger/index.js';
 import { sendTelegramVideo } from '../utils/telegramNotifier.js';
+import { getAvailableToken } from '../api/tokenManager.js';
 
 // Get screencast timeout from config (in milliseconds)
 // Default: 0 (disabled)
@@ -14,6 +16,94 @@ const SCREENCAST_MAX_DURATION = PAGE_EVALUATE_SCREENCAST_MAX_DURATION;
 
 // Track if ffmpeg is available
 let ffmpegAvailable = true;
+
+// Track if Tesseract worker is initialized
+let tesseractWorker = null;
+let tesseractInitializing = false;
+
+/**
+ * Initialize Tesseract OCR worker (singleton)
+ * @returns {Promise<Object>} Tesseract worker instance
+ */
+async function getTesseractWorker() {
+    if (tesseractWorker) {
+        return tesseractWorker;
+    }
+
+    if (tesseractInitializing) {
+        // Wait for initialization to complete
+        while (tesseractInitializing) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return tesseractWorker;
+    }
+
+    tesseractInitializing = true;
+
+    try {
+        logInfo('🔤 Initializing Tesseract OCR worker...');
+        tesseractWorker = await createWorker('eng', 1, {
+            logger: (m) => logDebug(`Tesseract: ${m.status} (${(m.progress * 100).toFixed(0)}%)`)
+        });
+        logInfo('✅ Tesseract OCR worker initialized');
+        return tesseractWorker;
+    } catch (error) {
+        logError('❌ Failed to initialize Tesseract worker:', error);
+        tesseractWorker = null;
+        return null;
+    } finally {
+        tesseractInitializing = false;
+    }
+}
+
+/**
+ * Take screenshot and perform OCR on it
+ * @param {import('puppeteer').Page} page - Puppeteer page instance
+ * @param {string} screenshotPath - Path to save screenshot
+ * @returns {Promise<string|null>} Recognized text or null
+ */
+async function takeScreenshotAndOCR(page, screenshotPath) {
+    try {
+        // Take screenshot using Puppeteer
+        await page.screenshot({ path: screenshotPath, type: 'png' });
+        logDebug(`📸 Screenshot saved: ${screenshotPath}`);
+
+        // Get Tesseract worker
+        const worker = await getTesseractWorker();
+        if (!worker) {
+            logWarn('⚠️ Tesseract worker not available, skipping OCR');
+            return null;
+        }
+
+        // Perform OCR
+        logDebug('🔤 Performing OCR on screenshot...');
+        const { data: { text } } = await worker.recognize(screenshotPath);
+        const cleanedText = text.trim();
+
+        if (cleanedText) {
+            logDebug(`🔤 OCR recognized text (${cleanedText.length} chars): ${cleanedText.substring(0, 100)}...`);
+        } else {
+            logDebug('🔤 OCR returned empty text');
+        }
+
+        return cleanedText;
+    } catch (error) {
+        logError('❌ Error during screenshot/OCR:', error);
+        return null;
+    }
+}
+
+/**
+ * Check if text contains verification-related keywords
+ * @param {string} text - Text to check
+ * @returns {boolean} True if verification keywords found
+ */
+function isVerificationText(text) {
+    if (!text) { return false; }
+
+    const lowerText = text.toLowerCase();
+    return lowerText.includes('verification') || lowerText.includes('real person');
+}
 
 /**
  * Wrapper over page.evaluate() that starts screen recording after timeout
@@ -35,6 +125,8 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
     let maxDurationTimer = null;
     let screencastFilepath = null;
     let screencastSent = false; // Track if video was already sent to Telegram
+    let screenshotPath = null;
+    let ocrText = null;
 
     try {
         // Create screencasts directory in logs folder
@@ -91,6 +183,13 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
                                         // Wait a bit for the file to be fully written to disk
                                         await new Promise((resolve) => setTimeout(resolve, 1000));
 
+                                        // Take screenshot and perform OCR before sending to Telegram
+                                        if (page && !page.isClosed()) {
+                                            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                                            screenshotPath = path.join(screencastDir, `screenshot-${timestamp}.png`);
+                                            ocrText = await takeScreenshotAndOCR(page, screenshotPath);
+                                        }
+
                                         const elapsed = Date.now() - startTime;
                                         try {
                                             const fileSize = fs.statSync(screencastFilepath).size;
@@ -102,11 +201,24 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
                                             } else {
                                                 logInfo(`📤 Отправка записи в Telegram (макс. длительность): ${screencastFilepath} (${fileSizeMB} MB)`);
 
-                                                const caption = `⏱️ page.evaluate() превышает ${SCREENCAST_MAX_DURATION}ms\n` +
-                                                    `⏰ Текущее время: ${elapsed}ms (все еще выполняется)\n` +
-                                                    `📁 Размер файла: ${fileSizeMB} MB\n` +
-                                                    `🔍 Запись началась после: ${SCREENCAST_TIMEOUT}ms\n` +
-                                                    '⚠️ Достигнут лимит maxDuration';
+                                                // Get page URL
+                                                let pageUrl = null;
+                                                try {
+                                                    pageUrl = page.url();
+                                                } catch (error) {
+                                                    logDebug('Не удалось получить URL страницы:', error);
+                                                }
+
+                                                // Build caption with OCR text
+                                                const caption = await buildScreencastCaption(
+                                                    'maxDuration',
+                                                    elapsed,
+                                                    fileSizeMB,
+                                                    ocrText,
+                                                    null,
+                                                    null,
+                                                    pageUrl
+                                                );
 
                                                 logDebug('📡 Вызов sendTelegramVideo...');
                                                 logDebug(`   Caption длина: ${caption.length} символов`);
@@ -184,6 +296,13 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
             // Wait a bit for the file to be fully written
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
+            // Take screenshot and perform OCR before sending to Telegram
+            if (!ocrText && page && !page.isClosed()) {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                screenshotPath = path.join(screencastDir, `screenshot-${timestamp}.png`);
+                ocrText = await takeScreenshotAndOCR(page, screenshotPath);
+            }
+
             const elapsed = Date.now() - startTime;
             const shouldDelete = elapsed < PUPPETEER_PROTOCOL_TIMEOUT &&
                 (!SCREENCAST_MAX_DURATION || elapsed < SCREENCAST_MAX_DURATION);
@@ -191,6 +310,10 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
             if (shouldDelete) {
                 try {
                     fs.unlinkSync(screencastFilepath);
+                    // Also delete screenshot if it exists
+                    if (screenshotPath && fs.existsSync(screenshotPath)) {
+                        fs.unlinkSync(screenshotPath);
+                    }
                     logDebug(`🗑️ Запись удалена: завершено за ${elapsed}ms (в пределах лимита)`);
                     screencastFilepath = null;
                 } catch (error) {
@@ -207,11 +330,24 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
                     } else {
                         logInfo(`📤 Отправка записи в Telegram: ${screencastFilepath} (${fileSizeMB} MB)`);
 
-                        const caption = '⏱️ Долгая операция page.evaluate()\n' +
-                            `⏰ Время выполнения: ${elapsed}ms\n` +
-                            `📁 Размер файла: ${fileSizeMB} MB\n` +
-                            `🔍 Запись началась после: ${SCREENCAST_TIMEOUT}ms\n` +
-                            `⚠️ Превышен лимит: ${elapsed >= PUPPETEER_PROTOCOL_TIMEOUT ? 'protocolTimeout' : 'maxDuration'}`;
+                        // Get page URL
+                        let pageUrl = null;
+                        try {
+                            pageUrl = page.url();
+                        } catch (error) {
+                            logDebug('Не удалось получить URL страницы:', error);
+                        }
+
+                        // Build caption with OCR text
+                        const caption = await buildScreencastCaption(
+                            elapsed >= PUPPETEER_PROTOCOL_TIMEOUT ? 'protocolTimeout' : 'maxDuration',
+                            elapsed,
+                            fileSizeMB,
+                            ocrText,
+                            null,
+                            null,
+                            pageUrl
+                        );
 
                         await sendTelegramVideo(caption, screencastFilepath);
                         logInfo('✅ Запись успешно отправлена в Telegram');
@@ -251,6 +387,13 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
             // Wait a bit for the file to be fully written
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
+            // Take screenshot and perform OCR before sending to Telegram
+            if (!ocrText && page && !page.isClosed()) {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                screenshotPath = path.join(screencastDir, `screenshot-${timestamp}.png`);
+                ocrText = await takeScreenshotAndOCR(page, screenshotPath);
+            }
+
             const elapsed = Date.now() - startTime;
 
             try {
@@ -262,11 +405,24 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
                 } else {
                     logInfo(`📤 Отправка записи в Telegram (ошибка): ${screencastFilepath} (${fileSizeMB} MB)`);
 
-                    const caption = '❌ Ошибка page.evaluate()\n' +
-                        `⏰ Время до ошибки: ${elapsed}ms\n` +
-                        `📁 Размер файла: ${fileSizeMB} MB\n` +
-                        `🔍 Запись началась после: ${SCREENCAST_TIMEOUT}ms\n` +
-                        `💥 Ошибка: ${error.message ? error.message.substring(0, 100) : error.toString()}`;
+                    // Get page URL
+                    let pageUrl = null;
+                    try {
+                        pageUrl = page.url();
+                    } catch (error) {
+                        logDebug('Не удалось получить URL страницы:', error);
+                    }
+
+                    // Build caption with OCR text and error info
+                    const caption = await buildScreencastCaption(
+                        'error',
+                        elapsed,
+                        fileSizeMB,
+                        ocrText,
+                        error.message ? error.message.substring(0, 100) : error.toString(),
+                        null,
+                        pageUrl
+                    );
 
                     await sendTelegramVideo(caption, screencastFilepath);
                     logInfo('✅ Запись успешно отправлена в Telegram');
@@ -278,4 +434,105 @@ export async function pageEvaluateWithScreencast(page, pageFunction, ...args) {
 
         throw error;
     }
+}
+
+/**
+ * Escape special HTML characters for Telegram HTML parse mode
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/**
+ * Build caption for screencast video with OCR text
+ * @param {string} reason - Reason for screencast (maxDuration, protocolTimeout, error)
+ * @param {number} elapsed - Elapsed time in ms
+ * @param {string} fileSizeMB - File size in MB
+ * @param {string|null} ocrText - OCR recognized text
+ * @param {string|null} errorMessage - Error message (optional)
+ * @param {string|null} accountId - Account ID (optional)
+ * @param {string|null} pageUrl - Current page URL (optional)
+ * @returns {Promise<string>} Formatted caption
+ */
+async function buildScreencastCaption(reason, elapsed, fileSizeMB, ocrText, errorMessage = null, accountId = null, pageUrl = null) {
+    let caption = '';
+
+    // Add header based on reason
+    switch (reason) {
+        case 'maxDuration':
+            caption = '⏱️ page.evaluate() превышает максимальную длительность\n';
+            break;
+        case 'protocolTimeout':
+            caption = '⏱️ Долгая операция page.evaluate()\n';
+            break;
+        case 'error':
+            caption = '❌ Ошибка page.evaluate()\n';
+            break;
+        default:
+            caption = '⏱️ page.evaluate() timeout\n';
+    }
+
+    // Add account info
+    if (accountId) {
+        caption += `👤 Аккаунт: ${accountId}\n`;
+    } else {
+        // Try to get current account
+        try {
+            const tokenObj = await getAvailableToken();
+            if (tokenObj?.id) {
+                caption += `👤 Аккаунт: ${tokenObj.id}\n`;
+            }
+        } catch (error) {
+            logDebug('Не удалось получить информацию об аккаунте:', error);
+        }
+    }
+
+    // Add page URL
+    if (pageUrl) {
+        caption += `🔗 URL: ${pageUrl}\n`;
+    }
+
+    // Add timing and file info
+    if (reason === 'error') {
+        caption += `⏰ Время до ошибки: ${elapsed}ms\n`;
+    } else if (reason === 'maxDuration') {
+        caption += `⏰ Текущее время: ${elapsed}ms (все еще выполняется)\n`;
+    } else {
+        caption += `⏰ Время выполнения: ${elapsed}ms\n`;
+    }
+
+    caption += `📁 Размер файла: ${fileSizeMB} MB\n`;
+    caption += `🔍 Запись началась после: ${SCREENCAST_TIMEOUT}ms\n`;
+
+    // Add reason-specific info
+    if (reason === 'maxDuration') {
+        caption += '⚠️ Достигнут лимит maxDuration';
+    } else if (reason === 'protocolTimeout') {
+        caption += '⚠️ Превышен лимит: protocolTimeout';
+    } else if (reason === 'error' && errorMessage) {
+        caption += `💥 Ошибка: ${errorMessage}`;
+    }
+
+    // Add OCR text if available
+    if (ocrText) {
+
+        // Add super importance icon if verification detected
+        if (isVerificationText(ocrText)) {
+            caption += '\n\n🚨⚠️📝 Распознанный текст:\n';
+        } else {
+            caption += '\n\n📝 Распознанный текст:\n';
+        }
+        // Escape HTML characters and use <code> tag instead of backticks
+        const escapedText = escapeHtml(ocrText);
+        caption += `<code>${escapedText}</code>`;
+    }
+
+    return caption;
 }

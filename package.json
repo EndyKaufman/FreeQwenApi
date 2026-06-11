@@ -84,6 +84,7 @@
         "puppeteer": "^24.31.0",
         "puppeteer-extra": "^3.3.6",
         "puppeteer-extra-plugin-stealth": "^2.11.2",
+        "tesseract.js": "^7.0.0",
         "undici": "^6.21.1",
         "winston": "^3.17.0"
     },

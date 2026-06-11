@@ -32,9 +32,9 @@ export async function simulateHumanMouseMovement(page) {
         logDebug('Симуляция движений мыши отключена (MOUSE_MOVEMENT_DURATION=0)');
         return;
     }
-    
+
     logDebug(`Симуляция движений мыши в течение ${MOUSE_MOVEMENT_DURATION}мс...`);
-    
+
     const viewport = { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT };
     const duration = MOUSE_MOVEMENT_DURATION;
     const interval = 50; // Move every 50ms
@@ -81,7 +81,7 @@ function setupBrowserConsoleLogging(page) {
 }
 
 export async function initBrowser(visibleMode = true, skipManualRestart = false, skipManualAuth = false) {
-    if (browserInstance) {return true;}
+    if (browserInstance) { return true; }
 
     logInfo('Инициализация браузера с Puppeteer Stealth...');
     try {
@@ -90,15 +90,21 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false,
             slowMo: visibleMode ? 30 : 0,
             executablePath: process.env.CHROME_PATH || undefined,
             args: [
-                '--no-sandbox', '--disable-setuid-sandbox',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
                 '--disable-blink-features=AutomationControlled',
-                '--disable-dev-shm-usage', '--disable-web-security',
+                '--disable-dev-shm-usage',
+                '--disable-web-security',
                 '--disable-features=IsolateOrigins,site-per-process',
                 `--window-size=${VIEWPORT_WIDTH},${VIEWPORT_HEIGHT}`,
-                '--start-maximized', '--disable-infobars',
-                '--disable-extensions', '--disable-gpu',
-                '--no-first-run', '--no-default-browser-check',
-                '--ignore-certificate-errors', '--ignore-certificate-errors-spki-list'
+                '--start-maximized',
+                '--disable-infobars',
+                '--disable-extensions',
+                // '--disable-gpu',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--ignore-certificate-errors',
+                '--ignore-certificate-errors-spki-list'
             ],
             defaultViewport: { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT },
             ignoreHTTPSErrors: true,
@@ -200,11 +206,11 @@ async function saveSessionPuppeteer(page) {
     try {
         const cookies = await page.cookies();
         const sessionDir = path.join(process.cwd(), SESSION_DIR, ACCOUNTS_DIR);
-        if (!fs.existsSync(sessionDir)) {fs.mkdirSync(sessionDir, { recursive: true });}
+        if (!fs.existsSync(sessionDir)) { fs.mkdirSync(sessionDir, { recursive: true }); }
 
         const accountId = `acc_${Date.now()}`;
         const accountDir = path.join(sessionDir, accountId);
-        if (!fs.existsSync(accountDir)) {fs.mkdirSync(accountDir, { recursive: true });}
+        if (!fs.existsSync(accountDir)) { fs.mkdirSync(accountDir, { recursive: true }); }
 
         fs.writeFileSync(path.join(accountDir, 'cookies.json'), JSON.stringify(cookies, null, 2));
         logInfo(`Cookies сохранены для аккаунта ${accountId}`);
@@ -234,7 +240,7 @@ async function startManualAuthenticationPuppeteer(page, skipManualRestart) {
         console.log('После успешной авторизации нажмите ENTER для продолжения...');
 
         await new Promise((resolve) => {
-            if (process.stdin.isTTY) {process.stdin.setRawMode(false);}
+            if (process.stdin.isTTY) { process.stdin.setRawMode(false); }
             process.stdin.resume();
             process.stdin.setEncoding('utf8');
             const onData = (key) => {
@@ -271,12 +277,12 @@ async function startManualAuthenticationPuppeteer(page, skipManualRestart) {
         }
 
         const accountId = await saveSessionPuppeteer(page);
-        if (accountId) {logInfo(`Сессия сохранена с ID: ${accountId}`);}
+        if (accountId) { logInfo(`Сессия сохранена с ID: ${accountId}`); }
 
         setAuthenticationStatus(true);
         logInfo('Авторизация завершена успешно');
 
-        if (!skipManualRestart) {await restartBrowserInHeadlessMode();}
+        if (!skipManualRestart) { await restartBrowserInHeadlessMode(); }
     } catch (error) {
         logError('Ошибка при ручной авторизации', error);
         throw error;
@@ -299,7 +305,7 @@ export async function shutdownBrowser() {
         if (browserInstance) {
             try {
                 const pages = await browserInstance.pages();
-                for (const page of pages) {await page.close().catch(() => {});}
+                for (const page of pages) { await page.close().catch(() => { }); }
                 await browserInstance.close();
             } catch (e) { logError('Ошибка при закрытии браузера', e); }
         }

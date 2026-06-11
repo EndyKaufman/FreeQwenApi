@@ -3,10 +3,10 @@ import { checkAuthentication, checkVerification } from '../browser/auth.js';
 import { shutdownBrowser, initBrowser } from '../browser/browser.js';
 import { saveAuthToken } from '../browser/session.js';
 import { getAvailableToken, markRateLimited, removeInvalidToken, checkTokenExpiry, checkAllTokensExpiry, getSafeToken, markInvalid, hasValidTokens } from './tokenManager.js';
-import { sendTelegramNotification, formatTokenExpiryMessage } from '../utils/telegramNotifier.js';
+import { sendTelegramNotification, formatTokenExpiryMessage, sendTelegramPhoto } from '../utils/telegramNotifier.js';
 import { getActiveModel } from '../utils/botSettings.js';
 import { fetchWithQwenProxy } from '../utils/proxy.js';
-import { pageEvaluateWithScreencast } from '../utils/pageEvaluateWrapper.js';
+import { pageEvaluateWithScreencast, takeScreenshotAndOCR, isVerificationText } from '../utils/pageEvaluateWrapper.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -93,6 +93,18 @@ export const pagePool = {
                 }
                 logDebug('🔄 [pagePool.getPage] Проверка страницы из пула...');
                 await pageEvaluateWithScreencast(page, () => document.readyState);
+
+                // Проверяем страницу на CAPTCHA
+                logDebug('🔍 [pagePool.getPage] Проверка на CAPTCHA...');
+                const pageValid = await validatePageForCaptcha(page);
+                if (!pageValid) {
+                    logWarn('⚠️ [pagePool.getPage] Страница содержит CAPTCHA, закрываем');
+                    if (page !== baseContext) {
+                        try { await page.close(); } catch { /* already dead */ }
+                    }
+                    continue;
+                }
+
                 logDebug('✅ [pagePool.getPage] Страница из пула готова');
                 return page;
             } catch (e) {
@@ -108,6 +120,23 @@ export const pagePool = {
         logDebug(`🌐 [pagePool.getPage] Навигация к ${CHAT_PAGE_URL}...`);
         await newPage.goto(CHAT_PAGE_URL, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
         logDebug('✅ [pagePool.getPage] Навигация завершена');
+
+        // Проверяем новую страницу на CAPTCHA
+        logDebug('🔍 [pagePool.getPage] Проверка новой страницы на CAPTCHA...');
+        const newPageValid = await validatePageForCaptcha(newPage);
+        if (!newPageValid) {
+            logWarn('⚠️ [pagePool.getPage] Новая страница содержит CAPTCHA, закрываем и пробуем перезапуск браузера');
+            try { await newPage.close(); } catch { /* ignore */ }
+
+            // Перезапускаем браузер для сброса CAPTCHA
+            logInfo('🔄 [pagePool.getPage] Перезапуск браузера для сброса CAPTCHA...');
+            await shutdownBrowser();
+            await delay(2000);
+            await initBrowser(true, false, false);
+
+            // Рекурсивно получаем страницу после перезапуска
+            return await this.getPage(getBrowserContext());
+        }
 
         if (!authToken) {
             try {
@@ -126,7 +155,7 @@ export const pagePool = {
         return newPage;
     },
 
-    releasePage(page) {
+    releasePage(page, forceClose = false) {
         try {
             if (page.isClosed()) { return; }
         } catch { return; }
@@ -134,6 +163,13 @@ export const pagePool = {
         const baseContext = getBrowserContext();
         if (page === baseContext) {
             // Базовую страницу держим отдельно от пула.
+            return;
+        }
+
+        // Если forceClose = true, закрываем страницу вместо возврата в пул
+        if (forceClose) {
+            logDebug('🗑️ [releasePage] Принудительное закрытие страницы (forceClose=true)');
+            page.close().catch((e) => logError('Ошибка при принудительном закрытии страницы', e));
             return;
         }
 
@@ -1157,6 +1193,24 @@ export async function sendMessage(message, model = null, chatId = null, parentId
         page = await pagePool.getPage(browserContext);
         logDebug('✅ [sendMessage] Страница получена');
 
+        // Проверяем страницу на CAPTCHA
+        logDebug('🔍 [sendMessage] Проверка страницы на CAPTCHA...');
+        const pageValid = await validatePageForCaptcha(page);
+        if (!pageValid) {
+            logWarn('⚠️ [sendMessage] Страница содержит CAPTCHA, закрываем и создаём новую');
+            pagePool.releasePage(page, true); // forceClose = true
+            page = null;
+
+            if (retryCount < MAX_RETRY_COUNT) {
+                logWarn(`⚠️ [sendMessage] Ретрай после CAPTCHA: ${retryCount + 1}/${MAX_RETRY_COUNT}`);
+                await delay(RETRY_DELAY);
+                return await sendMessage(message, model, chatId, parentId, files, tools, toolChoice, systemMessage, chatType, size, waitForCompletion, retryCount + 1, onChunk);
+            } else {
+                return { error: 'CAPTCHA detected, all retries exhausted. Please restart the service.', chatId };
+            }
+        }
+        logDebug('✅ [sendMessage] Страница прошла проверку CAPTCHA');
+
         const verificationNeeded = await checkVerification(page);
         if (verificationNeeded) {
             logDebug('🔄 [sendMessage] Требуется верификация, перезагружаем страницу...');
@@ -1312,6 +1366,176 @@ export function getAuthToken() {
 
 // ─── createChatV2 ────────────────────────────────────────────────────────────
 
+/**
+ * Проверка страницы на наличие CAPTCHA или верификации
+ * @param {import('puppeteer').Page} page - Puppeteer page instance
+ * @returns {Promise<{hasCaptcha: boolean, reason: string|null, screenshot: string|null}>}
+ */
+async function detectCaptcha(page) {
+    try {
+        const url = page.url();
+        logDebug(`🔍 [detectCaptcha] Проверка URL: ${url}`);
+
+        // Проверяем URL на признаки CAPTCHA
+        const captchaUrlPatterns = [
+            'captcha',
+            'verify',
+            'challenge',
+            'security-check',
+            'human-verification',
+            'cf/captcha',
+            'turnstile'
+        ];
+
+        const lowerUrl = url.toLowerCase();
+        for (const pattern of captchaUrlPatterns) {
+            if (lowerUrl.includes(pattern)) {
+                logWarn(`⚠️ [detectCaptcha] Обнаружен CAPTCHA URL: ${pattern}`);
+                return { hasCaptcha: true, reason: `CAPTCHA URL detected: ${pattern}`, screenshot: null };
+            }
+        }
+
+        // Проверяем содержимое страницы на наличие CAPTCHA элементов
+        const captchaElements = await page.evaluate(() => {
+            // Проверяем наличие CAPTCHA iframes и элементов
+            const iframes = Array.from(document.querySelectorAll('iframe'));
+            const captchaIframes = iframes.filter((iframe) => {
+                const src = (iframe.src || '').toLowerCase();
+                const title = (iframe.title || '').toLowerCase();
+                return src.includes('captcha') || src.includes('verify') ||
+                       src.includes('challenge') || src.includes('turnstile') ||
+                       title.includes('captcha') || title.includes('verify');
+            });
+
+            // Проверяем заголовок страницы
+            const pageTitle = document.title?.toLowerCase() || '';
+            const hasCaptchaTitle = pageTitle.includes('verification') ||
+                                   pageTitle.includes('captcha') ||
+                                   pageTitle.includes('challenge');
+
+            return {
+                captchaIframes: captchaIframes.length,
+                hasCaptchaTitle,
+                pageTitle: document.title
+            };
+        });
+
+        if (captchaElements.captchaIframes > 0) {
+            logWarn(`⚠️ [detectCaptcha] Обнаружены CAPTCHA iframes: ${captchaElements.captchaIframes}`);
+            return { hasCaptcha: true, reason: `CAPTCHA iframes found: ${captchaElements.captchaIframes}`, screenshot: null };
+        }
+
+        if (captchaElements.hasCaptchaTitle) {
+            logWarn(`⚠️ [detectCaptcha] Обнаружен CAPTCHA в заголовке: ${captchaElements.pageTitle}`);
+            return { hasCaptcha: true, reason: `CAPTCHA title detected: ${captchaElements.pageTitle}`, screenshot: null };
+        }
+
+        // Используем OCR для распознавания текста CAPTCHA
+        logDebug('🔤 [detectCaptcha] Выполняем OCR для распознавания CAPTCHA текста...');
+        const screencastDir = path.join(process.cwd(), 'logs', 'screenshots');
+        if (!fs.existsSync(screencastDir)) {
+            fs.mkdirSync(screencastDir, { recursive: true });
+        }
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const screenshotPath = path.join(screencastDir, `captcha-check-${timestamp}.png`);
+
+        const ocrText = await takeScreenshotAndOCR(page, screenshotPath);
+
+        if (ocrText && isVerificationText(ocrText)) {
+            logWarn('⚠️ [detectCaptcha] Обнаружен CAPTCHA текст через OCR');
+            logDebug(`🔤 [detectCaptcha] OCR текст (${ocrText.length} chars): ${ocrText.substring(0, 150)}...`);
+
+            // Удаляем временный скриншот (не для отправки в Telegram)
+            try {
+                fs.unlinkSync(screenshotPath);
+            } catch (e) {
+                // Ignore deletion errors
+            }
+
+            return {
+                hasCaptcha: true,
+                reason: 'CAPTCHA text detected via OCR',
+                screenshot: null,
+                ocrText: ocrText.substring(0, 200)
+            };
+        }
+
+        logDebug('✅ [detectCaptcha] CAPTCHA не обнаружена');
+        return { hasCaptcha: false, reason: null, screenshot: null };
+    } catch (error) {
+        logError('❌ [detectCaptcha] Ошибка при проверке CAPTCHA:', error);
+        return { hasCaptcha: false, reason: null, screenshot: null };
+    }
+}
+
+/**
+ * Сделать скриншот и отправить в Telegram при обнаружении CAPTCHA
+ * @param {import('puppeteer').Page} page - Puppeteer page instance
+ * @param {string} reason - Причина обнаружения CAPTCHA
+ * @param {string|null} ocrText - Распознанный OCR текст (опционально)
+ */
+async function handleCaptchaDetected(page, reason, ocrText = null) {
+    try {
+        const screencastDir = path.join(process.cwd(), 'logs', 'screenshots');
+        if (!fs.existsSync(screencastDir)) {
+            fs.mkdirSync(screencastDir, { recursive: true });
+        }
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const screenshotPath = path.join(screencastDir, `captcha-${timestamp}.png`);
+
+        // Делаем скриншот
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        logInfo(`📸 [handleCaptchaDetected] Скриншот CAPTCHA сохранен: ${screenshotPath}`);
+
+        // Формируем caption для фото
+        let caption = '⚠️🛡️ <b>Обнаружена CAPTCHA!</b>\n\n';
+        caption += `📋 <b>Причина:</b> ${reason}\n`;
+        caption += `🔗 <b>URL:</b> ${page.url()}`;
+
+        // Добавляем OCR текст если доступен
+        if (ocrText) {
+            caption += `\n\n🔤 <b>Распознанный текст:</b>\n<code>${ocrText.substring(0, 500)}</code>`;
+        }
+
+        caption += '\n\n💡 <b>Действия:</b>\n';
+        caption += '1. Браузер будет перезапущен автоматически\n';
+        caption += '2. Если CAPTCHA повторяется, проверьте токены\n';
+        caption += `3. Скриншот сохранен: \`${screenshotPath}\``;
+
+        // Отправляем скриншот как фото в Telegram
+        const photoSent = await sendTelegramPhoto(caption, screenshotPath);
+
+        if (photoSent) {
+            logInfo('✅ [handleCaptchaDetected] Скриншот CAPTCHA отправлен в Telegram как фото');
+        } else {
+            logWarn('⚠️ [handleCaptchaDetected] Не удалось отправить фото, пробуем как текстовое уведомление');
+            // Fallback: отправляем как текстовое сообщение
+            await sendTelegramNotification(caption);
+        }
+    } catch (error) {
+        logError('❌ [handleCaptchaDetected] Ошибка при обработке CAPTCHA:', error);
+    }
+}
+
+/**
+ * Проверяет и обновляет пул страниц, удаляя страницы с CAPTCHA
+ * @param {import('puppeteer').Page} page - Puppeteer page instance
+ * @returns {Promise<boolean>} true если страница валидна, false если нужно закрыть
+ */
+async function validatePageForCaptcha(page) {
+    const captchaCheck = await detectCaptcha(page);
+
+    if (captchaCheck.hasCaptcha) {
+        logWarn(`⚠️ [validatePageForCaptcha] Страница содержит CAPTCHA: ${captchaCheck.reason}`);
+        await handleCaptchaDetected(page, captchaCheck.reason, captchaCheck.ocrText || null);
+        return false;
+    }
+
+    return true;
+}
+
 export async function createChatV2(model = getDefaultModel(), title = 'Новый чат', retryCount = 0, chatType = 't2t', tokenObj = null) {
     const startTime = Date.now();
     const browserContext = getBrowserContext();
@@ -1349,6 +1573,25 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
         logDebug('📄 [createChatV2] Запрос страницы из пула...');
         page = await pagePool.getPage(browserContext);
         logDebug('✅ [createChatV2] Страница получена');
+
+        // Проверяем страницу на CAPTCHA перед использованием
+        logDebug('🔍 [createChatV2] Проверка страницы на CAPTCHA...');
+        const pageValid = await validatePageForCaptcha(page);
+        if (!pageValid) {
+            logWarn('⚠️ [createChatV2] Страница содержит CAPTCHA, закрываем и создаём новую');
+            pagePool.releasePage(page, true); // forceClose = true
+            page = null;
+
+            // Рекурсивно вызываем с новым retry
+            if (retryCount < MAX_RETRY_COUNT) {
+                logWarn(`⚠️ [createChatV2] Ретрай после CAPTCHA: ${retryCount + 1}/${MAX_RETRY_COUNT}`);
+                await delay(RETRY_DELAY);
+                return await createChatV2(model, title, retryCount + 1, chatType, tokenObj);
+            } else {
+                return { error: 'CAPTCHA detected, all retries exhausted. Please restart the service.' };
+            }
+        }
+        logDebug('✅ [createChatV2] Страница прошла проверку CAPTCHA');
 
         const payload = { title, models: [model], chat_mode: 'normal', chat_type: chatType, timestamp: Date.now() };
         const requestBody = { apiUrl: CREATE_CHAT_URL, payload, token: authToken };
@@ -1412,9 +1655,23 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
             logError(`⚠️ [createChatV2] Таймаут произошел после ${elapsed}ms`);
             logError('⚠️ [createChatV2] Это обычно происходит когда:');
             logError('   1. Браузер перегружен или завис');
-            logError('   2. page.evaluate() выполняется слишком долго');
+            logError('   2. page.evaluate() выполняется слишком долго (возможно из-за CAPTCHA)');
             logError('   3. Сетевой запрос внутри evaluate() таймаутит');
             logError('   4. Проблемы с памятью или CPU');
+
+            // Проверяем страницу на CAPTCHA перед перезапуском
+            if (page && !page.isClosed()) {
+                try {
+                    const captchaCheck = await detectCaptcha(page);
+                    if (captchaCheck.hasCaptcha) {
+                        logWarn(`🛡️ [createChatV2] Обнаружена CAPTCHA перед перезапуском: ${captchaCheck.reason}`);
+                        await handleCaptchaDetected(page, captchaCheck.reason, captchaCheck.ocrText || null);
+                    }
+                } catch (captchaError) {
+                    logDebug('Не удалось проверить CAPTCHA при таймауте:', captchaError);
+                }
+            }
+
             logError('Завершение работы с кодом 42 для автоматического перезапуска...');
             process.exit(42);
         }

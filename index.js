@@ -15,6 +15,7 @@ import { getProxyInfo } from './src/utils/proxy.js';
 import { checkPermissions } from './src/utils/permissionChecker.js';
 import { checkForUpdates, getVersionInfo, startPeriodicVersionCheck, getCurrentVersion } from './src/utils/versionChecker.js';
 import { ENABLE_VERSION_CHECK } from './src/config.js';
+import { initializeTesseract } from './src/utils/pageEvaluateWrapper.js';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -419,6 +420,9 @@ async function startServer() {
     if (archiveProcessed) {
         logInfo('✅ Ожидющий архив успешно распакован при запуске');
     }
+
+    // Инициализируем Tesseract OCR
+    await initializeTesseract();
 
     // Проверяем .gitignore
     validateGitignore();

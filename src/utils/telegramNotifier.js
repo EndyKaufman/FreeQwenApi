@@ -113,6 +113,51 @@ export async function sendTelegramNotification(message) {
 }
 
 /**
+ * Отправляет фото в Telegram
+ * @param {string} caption - Текст сообщения (подпись к фото)
+ * @param {string} photoPath - Путь к локальному файлу фото
+ * @returns {Promise<boolean>} - Успешность отправки
+ */
+export async function sendTelegramPhoto(caption, photoPath) {
+    const bot = getTelegramBot();
+    if (!bot || TELEGRAM_USER_IDS.length === 0) {
+        logWarn('Telegram уведомления не настроены (отсутствует токен или ID пользователей)');
+        return false;
+    }
+
+    // Проверяем существование файла
+    if (!fs.existsSync(photoPath)) {
+        logError(`❌ Файл фото не найден: ${photoPath}`);
+        return false;
+    }
+
+    const notifications = TELEGRAM_USER_IDS.map(async (userId) => {
+        try {
+            await bot.sendPhoto(userId, photoPath, {
+                caption: caption,
+                parse_mode: 'HTML'
+            });
+            logDebug(`📸 Фото отправлено пользователю ${userId}`);
+            return true;
+        } catch (error) {
+            logError(`❌ Ошибка при отправке фото пользователю ${userId}:`, error);
+            return false;
+        }
+    });
+
+    const results = await Promise.allSettled(notifications);
+    const successCount = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+
+    if (successCount > 0) {
+        logInfo(`✅ Фото отправлено ${successCount}/${TELEGRAM_USER_IDS.length} пользователям`);
+        return true;
+    }
+
+    logError('❌ Не удалось отправить фото ни одному пользователю');
+    return false;
+}
+
+/**
  * Отправляет файл в Telegram (поддержка локальных файлов и URL)
  * @param {string} caption - Текст сообщения (подпись к файлу)
  * @param {string} filePathOrUrl - Путь к локальному файлу ИЛИ URL файла

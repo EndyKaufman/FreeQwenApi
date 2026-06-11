@@ -22,6 +22,25 @@ let tesseractWorker = null;
 let tesseractInitializing = false;
 
 /**
+ * Initialize Tesseract OCR worker at application startup
+ * @returns {Promise<boolean>} True if initialized successfully
+ */
+export async function initializeTesseract() {
+    try {
+        logInfo('🔤 Initializing Tesseract OCR worker...');
+        tesseractWorker = await createWorker('eng', 1, {
+            logger: (m) => logDebug(`Tesseract: ${m.status} (${(m.progress * 100).toFixed(0)}%)`)
+        });
+        logInfo('✅ Tesseract OCR worker initialized successfully');
+        return true;
+    } catch (error) {
+        logError('❌ Failed to initialize Tesseract worker:', error);
+        tesseractWorker = null;
+        return false;
+    }
+}
+
+/**
  * Initialize Tesseract OCR worker (singleton)
  * @returns {Promise<Object>} Tesseract worker instance
  */
@@ -62,7 +81,7 @@ async function getTesseractWorker() {
  * @param {string} screenshotPath - Path to save screenshot
  * @returns {Promise<string|null>} Recognized text or null
  */
-async function takeScreenshotAndOCR(page, screenshotPath) {
+export async function takeScreenshotAndOCR(page, screenshotPath) {
     try {
         // Take screenshot using Puppeteer
         await page.screenshot({ path: screenshotPath, type: 'png' });
@@ -98,11 +117,35 @@ async function takeScreenshotAndOCR(page, screenshotPath) {
  * @param {string} text - Text to check
  * @returns {boolean} True if verification keywords found
  */
-function isVerificationText(text) {
+export function isVerificationText(text) {
     if (!text) { return false; }
 
     const lowerText = text.toLowerCase();
-    return lowerText.includes('verification') || lowerText.includes('real person');
+
+    // Comprehensive list of CAPTCHA/verification phrases
+    const verificationPatterns = [
+        // English
+        'access verification',
+        'please complete the operation',
+        'verify that you are a real person',
+        'you are a real person',
+        'verify you are human',
+        'security check',
+        'complete the challenge',
+        'prove you are human',
+        'anti-robot verification',
+        'human verification',
+        // Russian
+        'пройти проверку',
+        'подтвердите что вы человек',
+        'проверка безопасности',
+        // Chinese (Qwen is Chinese service)
+        '验证码',
+        '请完成操作',
+        '验证您是真人'
+    ];
+
+    return verificationPatterns.some((pattern) => lowerText.includes(pattern));
 }
 
 /**

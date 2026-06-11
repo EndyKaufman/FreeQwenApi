@@ -131,11 +131,19 @@ export function loadTokens() {
         });
 
         // Добавляем expiryTime для каждого токена, если его нет
-        return tokens.map((token) => {
+        const tokensWithExpiry = tokens.map((token) => {
             if (!token.expiryTime && token.token) {
                 token.expiryTime = decodeJwtExpiry(token.token);
             }
             return token;
+        });
+
+        // Сортируем токены по времени создания (самые свежие первые)
+        // ID имеет формат 'acc_<timestamp>', извлекаем timestamp для сортировки
+        return tokensWithExpiry.sort((a, b) => {
+            const timestampA = parseInt(a.id.replace('acc_', ''), 10) || 0;
+            const timestampB = parseInt(b.id.replace('acc_', ''), 10) || 0;
+            return timestampB - timestampA; // По убыванию (новые первые)
         });
     } catch (e) {
         logError('TokenManager: ошибка чтения tokens.json', e);

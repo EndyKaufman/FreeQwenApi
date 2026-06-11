@@ -72,7 +72,7 @@ export const pagePool = {
     maxSize: PAGE_POOL_SIZE,
 
     async getPage(context) {
-        logDebug(`📄 [pagePool.getPage] Запрос страницы...`);
+        logDebug('📄 [pagePool.getPage] Запрос страницы...');
         const baseContext = getBrowserContext();
         while (this.pages.length > 0) {
             const page = this.pages.pop();
@@ -85,9 +85,9 @@ export const pagePool = {
                     logWarn('Страница из пула закрыта, пропускаем');
                     continue;
                 }
-                logDebug(`🔄 [pagePool.getPage] Проверка страницы из пула...`);
+                logDebug('🔄 [pagePool.getPage] Проверка страницы из пула...');
                 await pageEvaluateWithScreencast(page, () => document.readyState);
-                logDebug(`✅ [pagePool.getPage] Страница из пула готова`);
+                logDebug('✅ [pagePool.getPage] Страница из пула готова');
                 return page;
             } catch (e) {
                 logWarn(`Страница из пула протухла (${e.message?.substring(0, 60)}), создаём новую`);
@@ -97,15 +97,15 @@ export const pagePool = {
             }
         }
 
-        logDebug(`🆕 [pagePool.getPage] Создание новой страницы...`);
+        logDebug('🆕 [pagePool.getPage] Создание новой страницы...');
         const newPage = await getPage(context);
         logDebug(`🌐 [pagePool.getPage] Навигация к ${CHAT_PAGE_URL}...`);
         await newPage.goto(CHAT_PAGE_URL, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
-        logDebug(`✅ [pagePool.getPage] Навигация завершена`);
+        logDebug('✅ [pagePool.getPage] Навигация завершена');
 
         if (!authToken) {
             try {
-                logDebug(`🔑 [pagePool.getPage] Извлечение токена из localStorage...`);
+                logDebug('🔑 [pagePool.getPage] Извлечение токена из localStorage...');
                 authToken = await pageEvaluateWithScreencast(newPage, () => localStorage.getItem('token'));
                 logInfo('Токен авторизации получен из браузера');
                 if (authToken) {
@@ -116,7 +116,7 @@ export const pagePool = {
             }
         }
 
-        logDebug(`✅ [pagePool.getPage] Страница готова к использованию`);
+        logDebug('✅ [pagePool.getPage] Страница готова к использованию');
         return newPage;
     },
 
@@ -1100,7 +1100,7 @@ export async function sendMessage(message, model = null, chatId = null, parentId
 
     let chatWasJustCreated = false;
     if (!chatId) {
-        logDebug(`📝 [sendMessage] Чат не указан, создаём новый...`);
+        logDebug('📝 [sendMessage] Чат не указан, создаём новый...');
         const newChatResult = await createChatV2(model);
         if (newChatResult.error) {
             return { error: 'Не удалось создать чат: ' + newChatResult.error };
@@ -1147,13 +1147,13 @@ export async function sendMessage(message, model = null, chatId = null, parentId
 
     let page = null;
     try {
-        logDebug(`📄 [sendMessage] Запрос страницы из пула...`);
+        logDebug('📄 [sendMessage] Запрос страницы из пула...');
         page = await pagePool.getPage(browserContext);
-        logDebug(`✅ [sendMessage] Страница получена`);
+        logDebug('✅ [sendMessage] Страница получена');
 
         const verificationNeeded = await checkVerification(page);
         if (verificationNeeded) {
-            logDebug(`🔄 [sendMessage] Требуется верификация, перезагружаем страницу...`);
+            logDebug('🔄 [sendMessage] Требуется верификация, перезагружаем страницу...');
             await page.reload({ waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
         }
 
@@ -1171,9 +1171,9 @@ export async function sendMessage(message, model = null, chatId = null, parentId
         logDebug(`Отправка сообщения в чат ${chatId} с parent_id: ${parentId || 'null'}`);
 
         const apiUrl = `${CHAT_API_URL}?chat_id=${chatId}`;
-        logDebug(`🌐 [sendMessage] Выполнение API запроса...`);
+        logDebug('🌐 [sendMessage] Выполнение API запроса...');
         const response = await executeApiRequest(page, apiUrl, payload, authToken, onChunk);
-        logDebug(`✅ [sendMessage] API запрос завершён`);
+        logDebug('✅ [sendMessage] API запрос завершён');
 
         const totalElapsed = Date.now() - startTime;
         logDebug(`⏱️ [sendMessage] Общее время выполнения: ${totalElapsed}ms`);
@@ -1313,7 +1313,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
 
     // Используем безопасный токен
     if (!tokenObj) {
-        logDebug(`⏱️ [createChatV2] Получение безопасного токена...`);
+        logDebug('⏱️ [createChatV2] Получение безопасного токена...');
         tokenObj = getSafeToken(TOKEN_EXPIRY_WARNING_MS);
     }
 
@@ -1340,14 +1340,14 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
 
     let page = null;
     try {
-        logDebug(`📄 [createChatV2] Запрос страницы из пула...`);
+        logDebug('📄 [createChatV2] Запрос страницы из пула...');
         page = await pagePool.getPage(browserContext);
-        logDebug(`✅ [createChatV2] Страница получена`);
+        logDebug('✅ [createChatV2] Страница получена');
 
         const payload = { title, models: [model], chat_mode: 'normal', chat_type: chatType, timestamp: Date.now() };
         const requestBody = { apiUrl: CREATE_CHAT_URL, payload, token: authToken };
 
-        logDebug(`🌐 [createChatV2] Выполнение page.evaluate для создания чата...`);
+        logDebug('🌐 [createChatV2] Выполнение page.evaluate для создания чата...');
         logDebug(`🌐 [createChatV2] API URL: ${CREATE_CHAT_URL}`);
         logDebug(`🌐 [createChatV2] Model: ${model}, Chat Type: ${chatType}`);
         logDebug(`🌐 [createChatV2] Payload: ${JSON.stringify(payload).substring(0, 200)}`);
@@ -1366,7 +1366,7 @@ export async function createChatV2(model = getDefaultModel(), title = 'Новы�
             }
         }, requestBody);
 
-        logDebug(`✅ [createChatV2] page.evaluate завершён успешно`);
+        logDebug('✅ [createChatV2] page.evaluate завершён успешно');
         logDebug(`📊 [createChatV2] Результат: ${JSON.stringify(result).substring(0, 300)}`);
 
         pagePool.releasePage(page);

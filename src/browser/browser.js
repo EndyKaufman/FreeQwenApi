@@ -10,7 +10,8 @@ import { logInfo, logError, logWarn, logDebug } from '../logger/index.js';
 import {
     CHAT_PAGE_URL, NAVIGATION_TIMEOUT, RETRY_DELAY,
     VIEWPORT_WIDTH, VIEWPORT_HEIGHT, USER_AGENT,
-    SESSION_DIR, ACCOUNTS_DIR, PUPPETEER_CONSOLE_LOGS
+    SESSION_DIR, ACCOUNTS_DIR, PUPPETEER_CONSOLE_LOGS,
+    PUPPETEER_PROTOCOL_TIMEOUT
 } from '../config.js';
 
 puppeteer.use(StealthPlugin());
@@ -68,7 +69,7 @@ export async function initBrowser(visibleMode = true, skipManualRestart = false)
             ],
             defaultViewport: { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT },
             ignoreHTTPSErrors: true,
-            protocolTimeout: 120000 // 2 minutes (default is 30s)
+            protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT
         });
 
         const pages = await browserInstance.pages();

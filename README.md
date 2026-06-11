@@ -9,6 +9,14 @@
 > **🔧 Форк:** https://github.com/EndyKaufman/FreeQwenApi  
 > **🌐 Оригинал:** https://github.com/y13sint/FreeQwenApi
 
+## ⚠️ ВРЕМЕННО НЕ РАБОТАЕТ
+
+<img src="locked.png" alt="WAF и капча заблокировали доступ" width="100%"/>
+
+🔒 **Временно прокси не работает** - WAF и капча заблокировали бесплатный доступ к Qwen.
+
+⏳ Мы работаем над решением этой проблемы. Следите за обновлениями в репозитории и Telegram боте.
+
 ## 🌟 О этом форке
 
 Это **улучшенная версия** оригинального проекта FreeQwenApi со значительными улучшениями для production использования и лучшего пользовательского опыта.
@@ -313,7 +321,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.21
+  endykaufman/qwen-api-proxy:1.0.22
 
 # 3. Смотрим логи
 docker logs -f qwen-proxy
@@ -322,7 +330,7 @@ docker logs -f qwen-proxy
 ### Доступные теги
 
 - `latest` - последняя стабильная версия
-- `1.0.21` - текущая версия
+- `1.0.22` - текущая версия
 - `1.0.x` - предыдущие версии
 
 > **💡 Важно:** Перед первым запуском добавьте аккаунт через `npm run auth` или загрузите сессию через Telegram бота.
@@ -343,7 +351,7 @@ docker logs -f qwen-proxy
 ```yaml
 services:
   qwen-proxy:
-    image: endykaufman/qwen-api-proxy:1.0.21
+    image: endykaufman/qwen-api-proxy:1.0.22
     container_name: qwen-proxy
     env_file:
       - .env
@@ -398,7 +406,7 @@ docker run -d \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/temp:/app/temp \
-  endykaufman/qwen-api-proxy:1.0.21
+  endykaufman/qwen-api-proxy:1.0.22
 ```
 
 Файл `docker-compose.yml`:
@@ -407,7 +415,7 @@ docker run -d \
 services:
   qwen-proxy:
     build: .
-    image: endykaufman/qwen-api-proxy:1.0.21
+    image: endykaufman/qwen-api-proxy:1.0.22
     container_name: qwen-proxy
     env_file:
       - .env  # Автоматическая загрузка переменных
@@ -2127,15 +2135,15 @@ ENABLE_VERSION_CHECK=false
 
 **Пример вывода в консоли:**
 ```
-🚀 Сервис запущен! v1.0.21 (доступна v1.0.21)
+🚀 Сервис запущен! v1.0.22 (доступна v1.0.22)
 ```
 
 **Пример уведомления в Telegram:**
 ```
 📦 Доступно обновление!
 
-🔹 Текущая версия: 1.0.21
-🔹 Новая версия: 1.0.21
+🔹 Текущая версия: 1.0.22
+🔹 Новая версия: 1.0.22
 📅 Опубликована: 10.06.2026, 14:30
 🕐 2 ч. назад
 

@@ -671,7 +671,21 @@ export async function checkAllSubsystems(botStarted, autoSend = true) {
     // Отправляем всем пользователям (только если autoSend = true)
     if (autoSend && botStarted) {
         try {
-            await notifyAllUsers(report);
+            // Отправляем locked.png вместе с отчетом
+            const lockedImagePath = path.join(process.cwd(), 'locked.png');
+            if (fs.existsSync(lockedImagePath)) {
+                // Отправляем картинку с коротким предупреждением (caption лимит 1024 символа)
+                const shortCaption = '⚠️ <b>Сервис временно не работает</b>\n\n' +
+                    '🔒 WAF и капча заблокировали доступ к Qwen\n' +
+                    '⏳ Мы работаем над решением';
+                await sendTelegramPhoto(shortCaption, lockedImagePath);
+                
+                // Отправляем полный отчет следующим сообщением
+                await notifyAllUsers(report);
+            } else {
+                // Если картинки нет, отправляем обычное сообщение
+                await notifyAllUsers(report);
+            }
             logInfo('📤 Отчет о запуске отправлен в Telegram');
         } catch (e) {
             logError('❌ Не удалось отправить отчет в Telegram', e);
@@ -2376,7 +2390,12 @@ async function gracefulRestart(chatId) {
 async function sendHelpMessage(chatId) {
     const accountsExist = hasAccounts();
 
+    // ⚠️ ПРЕДУПРЕЖДЕНИЕ О БЛОКИРОВКЕ - в самое начало
     let helpText =
+        '⚠️ <b>ВНИМАНИЕ: Сервис временно не работает</b>\n\n' +
+        '🔒 WAF и капча заблокировали бесплатный доступ к Qwen\n' +
+        '⏳ Мы работаем над решением проблемы\n\n' +
+        '━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
         '🤖 <b>FreeQwenApi Bot - Управление</b>\n\n' +
         '📋 <b>Команды управления:</b>\n\n' +
         '/help - Показать это сообщение\n' +
@@ -2837,7 +2856,22 @@ async function sendStatusMessage(chatId, isScheduled = false) {
         reportLines.push('🤖 Используйте /chat для включения LLM режима');
 
         const report = reportLines.join('\n');
-        await sendMessage(chatId, report);
+        
+        // Отправляем locked.png вместе со статусом
+        const lockedImagePath = path.join(process.cwd(), 'locked.png');
+        if (fs.existsSync(lockedImagePath)) {
+            // Отправляем картинку с коротким предупреждением (caption лимит 1024 символа)
+            const shortCaption = '⚠️ <b>Сервис временно не работает</b>\n\n' +
+                '🔒 WAF и капча заблокировали доступ к Qwen\n' +
+                '⏳ Мы работаем над решением';
+            await sendTelegramPhoto(shortCaption, lockedImagePath);
+            
+            // Отправляем полный статус следующим сообщением
+            await sendMessage(chatId, report);
+        } else {
+            // Если картинки нет, отправляем обычное сообщение
+            await sendMessage(chatId, report);
+        }
     } catch (error) {
         logError('Ошибка получения статуса', error);
         // Удаляем временное сообщение при ошибке
